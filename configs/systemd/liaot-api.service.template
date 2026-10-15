@@ -1,0 +1,50 @@
+[Unit]
+Description=LiaoT FastAPI Backend
+After=network.target postgresql.service redis.service
+Requires=postgresql.service
+
+[Service]
+User=liaot
+Group=liaot
+WorkingDirectory=/opt/liaot/api
+EnvironmentFile=/opt/liaot/api/.env
+ExecStart=/opt/liaot/api/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 3 \
+    --log-level info
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+# Allow read-write only to its working directory
+ReadWritePaths=/opt/liaot/api
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=512
+TasksMax=512
+
+[Install]
+WantedBy=multi-user.target

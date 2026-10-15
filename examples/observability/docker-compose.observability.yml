@@ -1,0 +1,18 @@
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ../../configs/prometheus/prometheus.yml.example:/etc/prometheus/prometheus.yml:ro
+      - ../../configs/prometheus/liaot-alerts.yml:/etc/prometheus/rules/liaot-alerts.yml:ro
+    ports:
+      - "9090:9090"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    volumes:
+      - ../../configs/alertmanager/alertmanager.yml.example:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"

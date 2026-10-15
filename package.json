@@ -1,0 +1,14 @@
+{
+  "name": "lyaotalk-monorepo",
+  "description": "Root workspace for Lyao Talk development. Delegates to apps/web for frontend build.",
+  "version": "2.3.5",
+  "private": true,
+  "scripts": {
+    "install:web": "npm --prefix apps/web install",
+    "dev": "npm --prefix apps/web run dev",
+    "build": "npm --prefix apps/web run build",
+    "test": "npm --prefix apps/web run test",
+    "check:buttons": "node scripts/check-buttons.mjs apps/web/src",
+    "check": "npm run check:buttons && npm run build"
+  }
+}

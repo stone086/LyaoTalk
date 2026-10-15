@@ -1,0 +1,19 @@
+/var/log/liaot-backup.log {
+    daily
+    rotate 14
+    compress
+    missingok
+    notifempty
+}
+
+/var/log/nginx/*.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    sharedscripts
+    postrotate
+        [ -s /run/nginx.pid ] && kill -USR1 "$(cat /run/nginx.pid)"
+    endscript
+}
