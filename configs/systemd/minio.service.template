@@ -1,0 +1,18 @@
+[Unit]
+Description=MinIO Object Storage
+After=network.target
+
+[Service]
+User=minio-user
+Group=minio-user
+Environment="MINIO_ROOT_USER=minioadmin"
+Environment="MINIO_ROOT_PASSWORD=change-me"
+Environment="MINIO_VOLUMES=/data/minio"
+ExecStart=/usr/local/bin/minio server /data/minio --console-address "127.0.0.1:9001" --address "127.0.0.1:9000"
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+

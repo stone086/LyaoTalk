@@ -1,0 +1,222 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Dark theme — soft midnight blue, lifted off pitch-black for comfort */
+    /* surface-950 (page bg) deliberately not below #1e2640 — true black causes
+       eye strain and hides depth between layers */
+    --surface-50: 234 240 252;   /* primary text */
+    --surface-100: 200 212 238;  /* secondary text */
+    --surface-200: 152 168 204;  /* tertiary text / muted icons */
+    --surface-800: 56 68 100;    /* raised surfaces (cards, inputs) — clearly above bg */
+    --surface-900: 44 56 86;     /* default surface (sidebar, panels) */
+    --surface-950: 32 44 70;     /* page background — soft midnight, not black */
+
+    --accent: 124 106 247;
+    --accent-soft: 168 156 248;
+    --accent-dim: 74 63 186;
+    --success: 34 197 94;
+    --warn: 245 158 11;
+    --danger: 239 68 68;
+
+    /* Border tokens — visible without being harsh */
+    --border-subtle: 255 255 255 / 0.10;   /* hairline divisions */
+    --border-default: 255 255 255 / 0.16;  /* card edges, inputs */
+    --border-strong: 255 255 255 / 0.24;   /* emphasized panels */
+
+    /* Inset / depressed surfaces (code blocks, blockquotes, mini-cards inside cards).
+       In dark mode, slightly darker than the parent surface; in light mode, slightly
+       darker but tinted, never raw black. */
+    --inset-surface: 14 24 50;             /* darker than surface-950 */
+    --inset-surface-alpha: 0.35;
+    /* Hover overlay — what shows when you hover a sidebar item, button etc.
+       Theme-aware, applied as `bg-[rgb(var(--hover-overlay)/0.08)]` or via .hover-surface */
+    --hover-overlay: 255 255 255;
+    --hover-overlay-strength: 0.06;
+    /* Popover / floating surface (emoji picker, dropdowns, context menus) */
+    --popover-surface: 32 44 70;           /* matches surface-950 in dark */
+    --popover-border: 255 255 255 / 0.18;
+
+    --scrollbar-track: #2c3856;
+    --scrollbar-thumb: #5a6c9c;
+  }
+
+  :root.light {
+    /* Light theme — warm off-white paper tone, easy on the eyes */
+    --surface-50: 28 38 60;      /* primary text — deep navy, not pure black */
+    --surface-100: 60 76 110;    /* secondary text */
+    --surface-200: 110 128 168;  /* tertiary text */
+    --surface-800: 234 238 246;  /* raised surfaces — slightly cooler than bg */
+    --surface-900: 240 244 250;  /* sidebar / panel background */
+    --surface-950: 246 248 252;  /* page background — warm paper, not pure white */
+
+    --accent: 88 80 220;
+    --accent-soft: 102 116 244;
+    --accent-dim: 67 62 178;
+
+    /* Light-mode borders — must be darker (using foreground-with-alpha) */
+    --border-subtle: 28 38 60 / 0.10;
+    --border-default: 28 38 60 / 0.16;
+    --border-strong: 28 38 60 / 0.26;
+
+    /* Light-mode inset: slightly darker tint than the off-white background */
+    --inset-surface: 218 228 244;
+    --inset-surface-alpha: 0.55;
+    /* Light-mode hover: dark overlay since the bg is light */
+    --hover-overlay: 28 38 60;
+    --hover-overlay-strength: 0.05;
+    /* Light-mode popover: match the page background, slight elevation via shadow */
+    --popover-surface: 252 253 255;
+    --popover-border: 28 38 60 / 0.18;
+
+    --scrollbar-track: #d8e0ee;
+    --scrollbar-thumb: #8a9bc2;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    @apply bg-surface-950 text-surface-50 font-sans antialiased;
+    overflow: hidden;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+  ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 999px; }
+  ::-webkit-scrollbar-thumb:hover { filter: brightness(1.15); }
+}
+
+@layer components {
+  .glass {
+    @apply bg-surface-800/60 backdrop-blur-md;
+    border: 1px solid rgb(var(--border-default));
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 bg-accent text-white rounded-lg font-medium
+           hover:bg-accent-dim active:scale-95 transition-all duration-150
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply px-3 py-2 rounded-lg text-surface-200 hover:bg-surface-800
+           active:scale-95 transition-all duration-150;
+  }
+
+  .input-field {
+    @apply w-full bg-surface-900 rounded-lg px-3 py-2
+           text-surface-50 placeholder:text-surface-200/50
+           focus:outline-none focus:ring-2 focus:ring-accent/40
+           transition-all duration-150;
+    border: 1px solid rgb(var(--border-default));
+  }
+  .input-field:focus {
+    border-color: rgb(var(--accent) / 0.6);
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer
+           text-surface-200 hover:bg-surface-800 hover:text-surface-50
+           transition-all duration-150 select-none;
+  }
+
+  .sidebar-item.active {
+    @apply bg-accent/15 text-accent-soft;
+  }
+
+  .avatar {
+    @apply rounded-full object-cover flex-shrink-0 bg-surface-800;
+  }
+
+  .badge {
+    @apply inline-flex items-center justify-center min-w-[18px] h-[18px]
+           px-1 rounded-full text-[10px] font-bold bg-accent text-white;
+  }
+
+  .presence-dot {
+    @apply w-2.5 h-2.5 rounded-full border-2 border-surface-900;
+  }
+
+  .presence-dot.available   { @apply bg-success; }
+  .presence-dot.away        { @apply bg-warn; }
+  .presence-dot.dnd         { @apply bg-danger; }
+  .presence-dot.unavailable { @apply bg-surface-200/40; }
+
+  /* Reusable border utilities — semantic, theme-aware */
+  .border-subtle  { border: 1px solid rgb(var(--border-subtle)); }
+  .border-default { border: 1px solid rgb(var(--border-default)); }
+  .border-strong  { border: 1px solid rgb(var(--border-strong)); }
+  .divide-default > * + * { border-top: 1px solid rgb(var(--border-subtle)); }
+
+  /* Inset / depressed surface — replaces hard-coded bg-black/20 patterns */
+  .inset-surface {
+    background-color: rgb(var(--inset-surface) / var(--inset-surface-alpha));
+  }
+
+  /* Theme-aware hover overlay — replaces hover:bg-white/5 pattern */
+  .hover-surface {
+    transition: background-color 0.15s ease;
+  }
+  .hover-surface:hover {
+    background-color: rgb(var(--hover-overlay) / var(--hover-overlay-strength));
+  }
+
+  /* Floating surfaces: emoji picker, dropdowns, context menus, popovers */
+  .popover-surface {
+    background-color: rgb(var(--popover-surface));
+    border: 1px solid rgb(var(--popover-border));
+    box-shadow: 0 8px 24px -4px rgb(0 0 0 / 0.25), 0 4px 8px -2px rgb(0 0 0 / 0.12);
+  }
+  :root.light .popover-surface {
+    box-shadow: 0 8px 24px -4px rgb(28 38 60 / 0.18), 0 4px 8px -2px rgb(28 38 60 / 0.10);
+  }
+}
+
+/* Message bubbles */
+.msg-bubble-out {
+  @apply bg-accent/20 rounded-2xl rounded-tr-sm px-4 py-2 w-fit max-w-full min-w-[8rem];
+  border: 1px solid rgb(var(--accent) / 0.35);
+}
+.msg-bubble-in {
+  @apply bg-surface-800 rounded-2xl rounded-tl-sm px-4 py-2 w-fit max-w-full min-w-[8rem];
+  border: 1px solid rgb(var(--border-default));
+}
+.msg-bubble-encrypted {
+  background: rgb(var(--success) / 0.15);
+  border-color: rgb(var(--success) / 0.45);
+}
+.chat-composer-input {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.chat-composer-input::-webkit-scrollbar {
+  display: none;
+}
+.chat-desktop-drop-zone {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .chat-desktop-drop-zone {
+    display: block;
+  }
+}
+.msg-bubble-plain {
+  background: rgb(var(--warn) / 0.13);
+  border-color: rgb(var(--warn) / 0.42);
+}
+.msg-bubble-system {
+  @apply text-center text-xs text-surface-200/60 py-2;
+}
+
+:root.density-compact .msg-bubble-in,
+:root.density-compact .msg-bubble-out {
+  @apply px-3 py-1.5 text-[13px];
+}
+
+:root.density-compact .msg-bubble-system {
+  @apply py-1 text-[11px];
+}

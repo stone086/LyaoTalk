@@ -1,0 +1,29 @@
+node_modules/
+dist/
+build/
+.vite/
+.cache/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Tests
+__tests__/
+*.test.ts
+*.test.tsx
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Git
+.git/
+.gitignore

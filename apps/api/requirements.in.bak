@@ -1,0 +1,56 @@
+# ========================================================================
+# LiaoT API requirements — pinned and CVE-checked
+# Last security review: May 2026
+#
+# Each pin justified by either:
+#   - Latest stable that's been quiet for 30+ days (no immediate CVEs)
+#   - A specific CVE patch we need to be at-or-above
+#
+# Re-run pip-audit + safety on every release.
+# ========================================================================
+
+# Core framework
+# starlette CVE-2025-54121 (multipart DoS) fixed in 0.47.2
+# starlette CVE-2025-62727 (StaticFiles Range parsing DoS) fixed in 0.49.1
+# fastapi 0.121.x is the first release that allows starlette >= 0.49.1
+fastapi==0.121.0
+uvicorn[standard]==0.32.0
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+
+# Validation
+pydantic==2.9.2
+pydantic-settings==2.6.0
+
+# Auth & security
+# python-jose 3.4.0+ fixes CVE-2024-33663 (alg confusion) and CVE-2024-33664 (JWE bomb)
+# 3.5.0 has no new CVEs but is the latest stable; pin to known-good 3.4.0.
+python-jose[cryptography]==3.4.0
+passlib[bcrypt,argon2]==1.7.4
+argon2-cffi==23.1.0
+
+# python-multipart 0.0.18+ fixes CVE-2024-24762
+python-multipart==0.0.18
+
+# Storage & caching
+redis==5.2.0
+minio==7.2.10
+
+# Networking & file handling
+httpx==0.27.2
+aiofiles==24.1.0
+# Pillow 11.0.0 is unaffected by CVE-2025-48379 (introduced in 11.2.0).
+# Pin to 11.0.0 for stability; re-evaluate when 12.x has had time to stabilize.
+Pillow==11.0.0
+
+# Background tasks
+celery==5.4.0
+
+# Rate limiting & security utilities
+slowapi==0.1.9
+python-magic==0.4.27
+pywebpush==2.0.0
+ldap3==2.9.1

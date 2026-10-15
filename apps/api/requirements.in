@@ -1,0 +1,50 @@
+# ========================================================================
+# LiaoT API requirements — pinned and CVE-checked
+# Last security review: October 2026
+#
+# Each pin justified by either:
+#   - Latest stable that's been quiet for 30+ days (no immediate CVEs)
+#   - A specific CVE patch we need to be at-or-above
+#
+# Re-run pip-audit + safety on every release.
+# ========================================================================
+
+# Core framework
+fastapi==0.143.0
+starlette==1.6.0
+uvicorn[standard]==0.32.0
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+
+# Validation
+pydantic==2.9.2
+pydantic-settings==2.6.0
+
+# Auth & security
+PyJWT[crypto]==2.15.1
+passlib[bcrypt,argon2]==1.7.4
+argon2-cffi==23.1.0
+
+python-multipart==0.0.31
+
+# Storage & caching
+redis==5.2.0
+minio==7.2.10
+
+# Networking & file handling
+httpx==0.27.2
+aiofiles==24.1.0
+Pillow==12.3.0
+
+# Background tasks
+celery==5.4.0
+
+# Rate limiting & security utilities
+slowapi==0.1.9
+python-magic==0.4.27
+# 2.0.3 provides a wheel, allowing reproducible hash-pinned installs.
+pywebpush==2.0.3
+ldap3==2.9.1

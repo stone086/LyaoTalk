@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+.venv-test/
+venv/
+env/
+
+# Local env files (NEVER ship .env into images)
+.env
+.env.local
+.env.*.local
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# Tests / fixtures (not needed at runtime)
+tests/
+test_*.py
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
