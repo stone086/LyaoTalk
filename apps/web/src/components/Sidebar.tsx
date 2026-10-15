@@ -109,9 +109,8 @@ export default function Sidebar() {
       expanded && "md:w-52"
     )}>
       {/* Logo */}
-      <div className="mb-2 w-9 h-9 rounded-xl bg-accent/20 flex items-center justify-center
-                      border border-accent/30 text-accent font-bold text-sm select-none">
-        W3
+      <div className="mb-2 w-9 h-9 rounded-xl overflow-hidden border border-accent/30 select-none">
+        <img src="/icon-192.png" alt="Lyao Talk" className="w-full h-full object-cover" />
       </div>
 
       {/* Account avatars */}
