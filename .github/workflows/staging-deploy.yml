@@ -1,0 +1,74 @@
+name: Lyao Talk Manual VPS Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "preflight or deploy; deploy requires explicit staging approval"
+        type: choice
+        options: [preflight, deploy]
+        default: preflight
+      confirmation:
+        description: "For deploy, type DEPLOY-ISOLATED-LYAOTALK"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lyaotalk-vps-staging
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deploy prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n install.sh manage.sh
+          test -f .env.example
+          test -f apps/api/requirements.txt
+          test -f apps/web/package-lock.json
+          if [[ "${{ inputs.mode }}" == deploy ]]; then
+            [[ "${{ inputs.confirmation }}" == DEPLOY-ISOLATED-LYAOTALK ]] || { echo "Explicit confirmation missing" >&2; exit 1; }
+          fi
+          echo "Preflight checks passed; no remote changes in this job."
+
+  deploy:
+    needs: validate
+    if: inputs.mode == 'deploy'
+    runs-on: ubuntu-latest
+    environment: lyaotalk-staging
+    steps:
+      - name: Deploy to opt-in isolated staging VPS
+        env:
+          HOST: ${{ secrets.LYAOTALK_STAGING_HOST }}
+          USER: ${{ secrets.LYAOTALK_STAGING_USER }}
+          SSH_KEY: ${{ secrets.LYAOTALK_STAGING_SSH_KEY }}
+          SSH_HOST_KEY: ${{ secrets.LYAOTALK_STAGING_HOST_KEY }}
+          TARGET_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in HOST USER SSH_KEY SSH_HOST_KEY; do [[ -n "${!name:-}" ]] || { echo "Missing ${name}" >&2; exit 1; }; done
+          mkdir -m 700 -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_HOST_KEY" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh -o StrictHostKeyChecking=yes -o BatchMode=yes "$USER@$HOST" "bash -s -- '$TARGET_SHA'" <<'REMOTE'
+          set -euo pipefail
+          sha="$1"
+          [[ -f /etc/lyaotalk/isolated-staging-approved ]] || { echo "Not an opted-in isolated staging host" >&2; exit 1; }
+          [[ -d /opt/liaot-src/.git && -f /opt/liaot-src/manage.sh ]] || { echo "Existing app installation required" >&2; exit 1; }
+          cd /opt/liaot-src
+          [[ "$(git remote get-url origin)" == "https://github.com/stone086/LyaoTalk.git" ]] || { echo "Unexpected remote; refusing to modify" >&2; exit 1; }
+          git fetch --prune origin main
+          [[ "$(git rev-parse origin/main)" == "$sha" ]] || { echo "Branch moved since workflow start; aborting" >&2; exit 1; }
+          [[ "$(git rev-parse --abbrev-ref HEAD)" == main ]] || { echo "Expected main branch" >&2; exit 1; }
+          sudo bash manage.sh update
+          REMOTE
