@@ -257,7 +257,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md px-4">
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-32 h-32 rounded-3xl bg-accent/10 border border-accent/20 mb-4 overflow-hidden">
-            <img src="/app-logo.png" alt="LiaoT" className="w-full h-full object-cover" />
+            <img src="/lyaotalk-original-icon.png" alt="Lyao Talk" className="w-full h-full object-cover" />
           </div>
         </div>
         <div className="glass rounded-2xl p-8 shadow-2xl">
@@ -377,7 +377,7 @@ export default function LoginPage() {
             </div>
           )}
         </div>
-        <p className="text-center text-xs text-surface-200/20 mt-6">LiaoT · Open Source · v{__APP_VERSION__}</p>
+        <p className="text-center text-xs text-surface-200/20 mt-6">Lyao Talk · Open Source · v{__APP_VERSION__}</p>
       </div>
     </div>
   );
