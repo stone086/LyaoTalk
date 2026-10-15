@@ -1,0 +1,128 @@
+name: Lyao Talk CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell syntax
+        run: |
+          bash -n install.sh
+          bash -n manage.sh
+          bash -n uninstall.sh
+          bash -n scripts/stage0_validate.sh
+          bash -n scripts/omemo_runtime_validate.sh
+          bash -n scripts/trusted_build_validate.sh
+          bash -n scripts/generate_sbom.sh
+          bash -n scripts/observability_validate.sh
+          bash -n scripts/performance_validate.sh
+          bash -n scripts/compatibility_chaos_validate.sh
+          bash -n scripts/ops_runbook_validate.sh
+          bash -n scripts/external_audit_validate.sh
+      - name: Stage 0 local validation
+        run: bash scripts/stage0_validate.sh --local
+      - name: Trusted-build validation
+        run: bash scripts/trusted_build_validate.sh --local
+      - name: Observability validation
+        run: bash scripts/observability_validate.sh
+      - name: Performance baseline validation
+        run: bash scripts/performance_validate.sh
+      - name: Compatibility chaos validation
+        run: bash scripts/compatibility_chaos_validate.sh
+      - name: Ops runbook validation
+        run: bash scripts/ops_runbook_validate.sh
+      - name: External audit readiness validation
+        run: bash scripts/external_audit_validate.sh
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Build web
+        run: npm run build
+      - name: Test web
+        run: npm test --if-present
+      - name: Audit production npm dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Generate Node SBOM
+        run: npx --yes @cyclonedx/cyclonedx-npm --output-file ../../sbom-node.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-node
+          path: sbom-node.json
+
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: apps/api/requirements.txt
+      - name: Install API dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r requirements.txt
+      - name: Compile API
+        run: python -m compileall -q app alembic
+      - name: Audit Python dependencies
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --strict
+      - name: Bandit static scan
+        run: |
+          pip install bandit
+          bandit -r app/ -ll -ii
+      - name: Run API unit tests
+        run: |
+          pip install pytest==9.1.1 pytest-asyncio==1.4.0
+          REDIS_URL=redis://127.0.0.1:6399/0 pytest -q tests
+      - name: Generate Python SBOM
+        run: |
+          pip install cyclonedx-bom
+          cyclonedx-py requirements -i requirements.txt -o ../../sbom-python.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-python
+          path: sbom-python.json
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["python", "javascript-typescript"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
