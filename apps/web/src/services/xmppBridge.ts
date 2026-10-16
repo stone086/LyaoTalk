@@ -57,6 +57,32 @@ function normalizePresence(show?: string): "available" | "away" | "dnd" | "xa" |
   return "available";
 }
 
+/** Resolve an archived MUC sender when Prosody omits the occupant's real JID. */
+async function resolveGroupOmemoSender(
+  client: XmppClient,
+  roomJid: string,
+  nickname: string,
+  senderDeviceId: number,
+  preferredJid?: string,
+): Promise<string | null> {
+  const preferred = normalizeValidBareJid(preferredJid ?? "");
+  if (preferred && preferred !== roomJid) return preferred;
+  try {
+    // The room is already checked as members-only and non-anonymous by this
+    // method. Device IDs belong to accounts, not to room nicknames.
+    const { jids } = await client.fetchMucOmemoMembers(roomJid);
+    const matches = (await Promise.all(jids.map(async (jid) => {
+      const devices = await client.fetchOmemoDeviceList(jid).catch((): number[] => []);
+      return devices.includes(senderDeviceId) ? jid : null;
+    }))).filter((jid): jid is string => Boolean(jid));
+    if (matches.length === 1) return matches[0];
+    const nickMatches = matches.filter((jid) => jid.split("@")[0] === nickname.toLowerCase());
+    return nickMatches.length === 1 ? nickMatches[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 export function initXmppBridge(client: XmppClient) {
   const accountId = client.config.accountId;
   const ownBareJid = normalizeBareJid(client.config.jid);
@@ -337,7 +363,7 @@ export function initXmppBridge(client: XmppClient) {
     const roomNickname = isGroupContext ? String(message.from).split("/")[1] ?? "" : "";
     const roomMember = isGroupContext ? (useGroupStore.getState().members[`${accountId}::${from}`] ?? [])
       .find((member) => member.nickname === roomNickname) : undefined;
-    const cryptoSender = isGroupContext
+    let cryptoSender = isGroupContext
       ? normalizeBareJid(message.realSenderJid || roomMember?.jid || "")
       : from;
     if (!isValidBareJid(from) && message.type !== "groupchat") return;
@@ -438,6 +464,11 @@ export function initXmppBridge(client: XmppClient) {
       // decrypt attempt, so even if everything below fails the user never sees
       // "I sent you an OMEMO encrypted message but your client doesn't seem to support that".
       incomingBody = "";
+      if (isGroupContext && (!isValidBareJid(cryptoSender) || cryptoSender.endsWith(`@${from}`))) {
+        cryptoSender = await resolveGroupOmemoSender(
+          client, from, roomNickname, incomingOmemo.sid, cryptoSender,
+        ) ?? "";
+      }
       if (isGroupContext && (!cryptoSender || !isValidBareJid(cryptoSender) || cryptoSender.endsWith(`@${from}`))) {
         incomingBody = "🔒 Encrypted group message — sender's account is unavailable.";
         decryptFailed = true;
@@ -677,9 +708,14 @@ export function initXmppBridge(client: XmppClient) {
     const from = normalizeBareJid(message.from);
     const ownJid = normalizeBareJid(client.config.jid);
     const isGroup = message.type === "groupchat";
-    const senderJid = isGroup ? normalizeBareJid(message.realSenderJid ?? "") : from;
+    let senderJid = isGroup ? normalizeBareJid(message.realSenderJid ?? "") : from;
+    if (isGroup && message.omemo && !isValidBareJid(senderJid)) {
+      senderJid = await resolveGroupOmemoSender(
+        client, from, String(message.from).split("/")[1] ?? "", message.omemo.sid, senderJid,
+      ) ?? "";
+    }
     const isOwn = senderJid === ownJid;
-    const peerJid = isOwn ? normalizeBareJid(message.to) : from;
+    const peerJid = isGroup ? from : isOwn ? normalizeBareJid(message.to) : from;
     if (!isValidBareJid(peerJid) || peerJid === ownJid) return;
     const convId = generateConversationId(accountId, peerJid);
     if (useChatStore.getState().messages[convId]?.some((m) => m.id === message.id)) return;
@@ -1396,4 +1432,5 @@ export async function encryptGroupOmemoMessage(accountId: string, roomJid: strin
   const members = await client.fetchMucOmemoMembers(roomJid);
   return tryLibsignalEncrypt(accountId, members.jids, plaintext);
 }
+
 
