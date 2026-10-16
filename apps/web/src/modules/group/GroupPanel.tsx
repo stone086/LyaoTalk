@@ -257,6 +257,7 @@ export default function GroupPanel() {
     client?.configureRoom(roomJid, {
       isPublic: !isPrivate,
       membersOnly: isPrivate,
+      nonAnonymous: isPrivate,
     }).catch(() => {
       toast.error("Room created, but applying visibility config failed");
     });

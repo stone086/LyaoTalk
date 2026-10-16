@@ -32,8 +32,8 @@ import { encryptForAesgcm, parseAesgcmUrl, toAesgcmUrl } from "@/services/aesgcm
 import { usePrivateFileUrl } from "@/hooks/usePrivateFileUrl";
 import { trustedFileObjectKey } from "@/services/trustedFilesUrl";
 import { encryptOmemoEnvelopeForPeer } from "@/services/e2ee";
-import { tryLibsignalEncrypt } from "@/services/xmppBridge";
-import { getOmemoEnabled } from "@/services/omemoSettings";
+import { encryptGroupOmemoMessage, tryLibsignalEncrypt } from "@/services/xmppBridge";
+import { getGroupOmemoEnabled, getOmemoEnabled } from "@/services/omemoSettings";
 
 function parseAesgcmMediaLink(raw?: string): { href: string; fileName: string; isAudio: boolean } | null {
   if (!raw) return null;
@@ -906,7 +906,18 @@ export default function MessageView({ conversationId }: { conversationId: string
     let sentEncrypted = false;
     try {
       let outboundBody = body;
-      if (body && conversation?.type === "private" && getOmemoEnabled()) {
+      if (body && conversation?.type === "group" && getGroupOmemoEnabled(activeAccountId, peerJid)) {
+        const envelope = await encryptGroupOmemoMessage(activeAccountId, peerJid, body);
+        if (!envelope) throw new Error("Cannot encrypt for every group member");
+        id = client.sendOmemoMessage(
+          peerJid, envelope, "groupchat",
+          editingMessageId
+            ? { replaceId: editingMessageId }
+            : (replyTo ? { replyToId: replyTo.id, replyToJid: replyTo.senderJid } : undefined),
+          body
+        );
+        sentEncrypted = true;
+      } else if (body && conversation?.type === "private" && getOmemoEnabled()) {
         const peerJid = conversation?.peerJid ?? conversationId;
         // Try libsignal-based OMEMO first (XEP-0384, interop with Conversations/Gajim).
         // Fall back to legacy custom-protocol OMEMO if peer hasn't published a bundle.
@@ -960,6 +971,9 @@ export default function MessageView({ conversationId }: { conversationId: string
           bodyType: "text",
           direction: "out",
           status: "failed",
+          encrypted: conversation?.type === "group"
+            ? getGroupOmemoEnabled(activeAccountId, peerJid)
+            : getOmemoEnabled(),
           timestamp: Date.now(),
           replyToId: replyTo?.id,
         };
@@ -1065,7 +1079,7 @@ export default function MessageView({ conversationId }: { conversationId: string
     setForwardTargetId("");
   }, []);
 
-  const handleConfirmForward = useCallback(() => {
+  const handleConfirmForward = useCallback(async () => {
     if (!forwardingMessage || !forwardTargetId || !activeAccountId) return;
     const target = allConversations.find((c) => c.id === forwardTargetId);
     if (!target) return;
@@ -1075,11 +1089,18 @@ export default function MessageView({ conversationId }: { conversationId: string
       return;
     }
     try {
-      client.sendMessage(
-        target.peerJid,
-        `↩ ${forwardingMessage.body}`,
-        target.type === "group" ? "groupchat" : "chat"
-      );
+      const forwardedBody = `↩ ${forwardingMessage.body}`;
+      if (target.type === "group" && getGroupOmemoEnabled(activeAccountId, target.peerJid)) {
+        const envelope = await encryptGroupOmemoMessage(activeAccountId, target.peerJid, forwardedBody);
+        if (!envelope) throw new Error("Cannot encrypt for every group member");
+        client.sendOmemoMessage(target.peerJid, envelope, "groupchat", undefined, forwardedBody);
+      } else if (target.type === "private" && getOmemoEnabled()) {
+        const envelope = await tryLibsignalEncrypt(activeAccountId, target.peerJid, forwardedBody);
+        if (!envelope) throw new Error("Cannot encrypt forwarded message for this recipient");
+        client.sendOmemoMessage(target.peerJid, envelope, "chat", undefined, forwardedBody);
+      } else {
+        client.sendMessage(target.peerJid, forwardedBody, target.type === "group" ? "groupchat" : "chat");
+      }
       toast.success("Forwarded");
       setForwardingMessage(null);
       setForwardTargetId("");
@@ -1144,7 +1165,12 @@ export default function MessageView({ conversationId }: { conversationId: string
             && message.body
         );
         let newId = "";
-        if (isPrivateOmemo) {
+        if (message.encrypted && conversation?.type === "group" && message.body) {
+          const peerJid = conversation.peerJid;
+          const envelope = await encryptGroupOmemoMessage(activeAccountId, peerJid, message.body);
+          if (!envelope) throw new Error("Cannot encrypt for every group member");
+          newId = client.sendOmemoMessage(peerJid, envelope, "groupchat", undefined, message.body);
+        } else if (isPrivateOmemo) {
           const peerJid = conversation?.peerJid ?? conversationId;
           // libsignal-first OMEMO encryption with legacy fallback
           let envelope: any = await tryLibsignalEncrypt(activeAccountId, peerJid, message.body);
@@ -1480,7 +1506,12 @@ export default function MessageView({ conversationId }: { conversationId: string
                   const mediaUrl = await publishFederatedMedia(file, file.name, activeAccountId);
                   let sentEncrypted = false;
                   let sentId: string;
-                  if (!isGroup && getOmemoEnabled()) {
+                  if (isGroup && getGroupOmemoEnabled(activeAccountId, peerJid)) {
+                    const envelope = await encryptGroupOmemoMessage(activeAccountId, peerJid, mediaUrl);
+                    if (!envelope) throw new Error("Cannot encrypt media link for every group member");
+                    sentId = client.sendOmemoMessage(peerJid, envelope, "groupchat", undefined, mediaUrl);
+                    sentEncrypted = true;
+                  } else if (!isGroup && getOmemoEnabled()) {
                     const envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
                     if (envelope) {
                       sentId = client.sendOmemoMessage(peerJid, envelope, "chat");

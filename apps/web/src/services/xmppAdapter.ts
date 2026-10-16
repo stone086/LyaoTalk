@@ -67,6 +67,8 @@ export interface XmppMessage {
   replyTo?: string;
   replaceId?: string;
   omemo?: OmemoEnvelope;
+  /** Real sender exposed by a non-anonymous MUC, never the room nickname. */
+  realSenderJid?: string;
 }
 
 interface SendMessageOptions {
@@ -123,7 +125,13 @@ export interface MucBookmark {
 export interface MucRoomConfig {
   isPublic: boolean;
   membersOnly?: boolean;
+  nonAnonymous?: boolean;
   password?: string;
+}
+
+export interface MucOmemoMembers {
+  roomJid: string;
+  jids: string[];
 }
 
 type EventHandler = (data: unknown) => void;
@@ -1172,6 +1180,11 @@ export class XmppClient {
       .c("field", { var: "muc#roomconfig_membersonly" })
       .c("value").t(config.membersOnly ? "1" : "0").up().up();
 
+    if (config.nonAnonymous !== undefined) {
+      iq.c("field", { var: "muc#roomconfig_whois" })
+        .c("value").t(config.nonAnonymous ? "anyone" : "moderators").up().up();
+    }
+
     if (config.password?.trim()) {
       iq.c("field", { var: "muc#roomconfig_passwordprotectedroom" })
         .c("value").t("1").up().up()
@@ -1185,6 +1198,36 @@ export class XmppClient {
     return new Promise((resolve, reject) => {
       this._connection.sendIQ(iq.tree(), () => resolve(), () => reject(new Error("Room config failed")));
     });
+  }
+
+  /** Query all room affiliations, including offline members, before OMEMO send. */
+  async fetchMucOmemoMembers(roomJid: string): Promise<MucOmemoMembers> {
+    if (!this._connection || !this._connected) throw new Error("Not connected");
+    const room = normalizeValidBareJid(roomJid);
+    if (!room) throw new Error("Invalid group address");
+    const query = (stanza: Element): Promise<Element> => new Promise((resolve, reject) => {
+      this._connection!.sendIQ(stanza, resolve, () => reject(new Error("Cannot inspect group membership")), 10000);
+    });
+    const info = await query(this._$iq({ type: "get", to: room })
+      .c("query", { xmlns: "http://jabber.org/protocol/disco#info" }).tree());
+    const features = new Set(Array.from(info.getElementsByTagName("feature"))
+      .map((feature) => feature.getAttribute("var") ?? ""));
+    if (!features.has("muc_nonanonymous") || !features.has("muc_membersonly")) {
+      throw new Error("Group OMEMO requires a non-anonymous, members-only room");
+    }
+    const jids = new Set<string>();
+    for (const affiliation of ["member", "admin", "owner"]) {
+      const result = await query(this._$iq({ type: "get", to: room })
+        .c("query", { xmlns: "http://jabber.org/protocol/muc#admin" })
+        .c("item", { affiliation }).tree());
+      for (const item of Array.from(result.getElementsByTagName("item"))) {
+        const jid = normalizeValidBareJid(item.getAttribute("jid") ?? "");
+        if (!jid) throw new Error("Group member has no visible account address");
+        jids.add(jid);
+      }
+    }
+    if (jids.size === 0) throw new Error("Cannot verify group members");
+    return { roomJid: room, jids: [...jids] };
   }
 
   fetchVCardAvatar(jid: string): Promise<string | null> {
@@ -1402,6 +1445,7 @@ export class XmppClient {
         stanzaId: result.getAttribute("id") ?? undefined,
         replyTo: msg.querySelector('reply[xmlns="urn:xmpp:reply:0"]')?.getAttribute("id") ?? undefined,
         omemo: omemo ?? undefined,
+        realSenderJid: normalizeValidBareJid(msg.querySelector('x[xmlns="http://jabber.org/protocol/muc#user"] item[jid]')?.getAttribute("jid") ?? "") ?? undefined,
       };
       this.emit("mam.message", { accountId: this.config.accountId, message: xmppMsg, queryId });
       return true;
