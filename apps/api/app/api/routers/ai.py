@@ -19,7 +19,7 @@ from app.core.rate_limit import limiter
 from app.models import Conversation, Message
 from app.utils.security import bearer_scheme, decode_token
 
-logger = logging.getLogger("liaot.ai")
+logger = logging.getLogger("lyaotalk.ai")
 
 router = APIRouter()
 

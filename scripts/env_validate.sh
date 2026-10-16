@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-# shellcheck source=liaot_env_lib.sh
-source "${ROOT_DIR}/scripts/liaot_env_lib.sh"
+# shellcheck source=lyaotalk_env_lib.sh
+source "${ROOT_DIR}/scripts/lyaotalk_env_lib.sh"
 ENV_FILE="${ROOT_DIR}/.env"
 STRICT=0
 WARN_ONLY=0
@@ -11,7 +11,7 @@ usage() {
   cat <<'USAGE'
 Usage: bash scripts/env_validate.sh [--env .env] [--strict] [--warn-only]
 
-Validates LiaoT .env before install or deploy.
+Validates LyaoTalk .env before install or deploy.
 --strict requires generated secrets to be present and strong enough.
 USAGE
 }
@@ -73,7 +73,7 @@ if [[ -f "$ENV_FILE" ]]; then
   fi
 
   if is_truthy "$(get_env_file_value "$ENV_FILE" METRICS_ENABLED true)"; then
-    NGINX_FILE="${ROOT_DIR}/configs/nginx/liaot.conf"
+    NGINX_FILE="${ROOT_DIR}/configs/nginx/lyaotalk.conf"
     if [[ ! -f "$NGINX_FILE" ]]; then
       warn "METRICS_ENABLED=true but nginx config template not found"
     elif ! grep -q "location = /api/metrics" "$NGINX_FILE"; then

@@ -26,7 +26,7 @@ except Exception:  # pragma: no cover
     magic = None
 
 router = APIRouter()
-logger = logging.getLogger("liaot.attachments")
+logger = logging.getLogger("lyaotalk.attachments")
 
 minio_client = Minio(
     settings.MINIO_ENDPOINT,
@@ -59,6 +59,13 @@ ALLOWED_MIME_TYPES = {
     "application/octet-stream",  # encrypted (aesgcm://) blobs
     "text/plain",
 }
+
+
+def base_media_type(value: str | None) -> str:
+    """MIME parameters such as ``codecs=opus`` do not change the media type."""
+    return (value or "application/octet-stream").split(";", 1)[0].strip().lower()
+
+
 MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024
 
 
@@ -286,10 +293,10 @@ async def upload_file(
     if magic is None:
         # libmagic not installed — fall back to client-declared content_type.
         # Less safe but better than silent 500 in environments without libmagic1.
-        detected_mime = (file.content_type or "application/octet-stream").lower()
+        detected_mime = base_media_type(file.content_type)
         logger.warning("libmagic_unavailable_using_client_content_type")
     else:
-        detected_mime = magic.from_buffer(await file.read(8192), mime=True) or "application/octet-stream"
+        detected_mime = base_media_type(magic.from_buffer(await file.read(8192), mime=True))
         await file.seek(0)
 
     if detected_mime not in ALLOWED_MIME_TYPES:

@@ -4,7 +4,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 for f in \
-  scripts/liaot_env_lib.sh \
+  scripts/lyaotalk_env_lib.sh \
   scripts/env_wizard.sh \
   scripts/env_validate.sh \
   scripts/preflight_check.sh \
@@ -12,7 +12,7 @@ for f in \
   [[ -f "$f" ]] || { echo "[ERR] missing $f" >&2; exit 1; }
 done
 
-bash -n scripts/liaot_env_lib.sh
+bash -n scripts/lyaotalk_env_lib.sh
 bash -n scripts/env_wizard.sh
 bash -n scripts/env_validate.sh
 bash -n scripts/preflight_check.sh
@@ -49,9 +49,9 @@ BAD_ENV="$(mktemp)"
 trap 'rm -f "$TMP_ENV" "$BAD_ENV"' EXIT
 cp "$TMP_ENV" "$BAD_ENV"
 sed -i 's|^DOMAIN=.*|DOMAIN=https://staging.52nbc.com|' "$BAD_ENV"
-if bash scripts/env_validate.sh --strict --env "$BAD_ENV" >/tmp/liaot-bad-env.out 2>&1; then
+if bash scripts/env_validate.sh --strict --env "$BAD_ENV" >/tmp/lyaotalk-bad-env.out 2>&1; then
   echo "[ERR] env_validate accepted DOMAIN with https://" >&2
-  cat /tmp/liaot-bad-env.out >&2
+  cat /tmp/lyaotalk-bad-env.out >&2
   exit 1
 fi
 

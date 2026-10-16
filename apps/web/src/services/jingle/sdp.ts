@@ -147,7 +147,7 @@ export function buildSdp(medias: SdpMedia[], type: "offer" | "answer"): string {
       lines.push(`a=candidate:${c}`);
     }
     if (m.ssrc) {
-      lines.push(`a=ssrc:${m.ssrc} cname:${m.ssrcCname || "liaot"}`);
+      lines.push(`a=ssrc:${m.ssrc} cname:${m.ssrcCname || "lyaotalk"}`);
     }
   }
   return lines.join("\r\n") + "\r\n";

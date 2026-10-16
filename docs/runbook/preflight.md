@@ -1,4 +1,4 @@
-# LiaoT 2.3.3 Preflight Hardening
+# LyaoTalk 2.3.3 Preflight Hardening
 
 Run this before any real staging install.
 

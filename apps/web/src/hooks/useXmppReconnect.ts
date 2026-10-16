@@ -197,7 +197,7 @@ export function useXmppReconnect() {
       if (!account?.is_enabled || account.manuallyOffline) return;
       void attemptConnect(accountId).catch(() => {});
     };
-    window.addEventListener("liaot:reconnect-account", onManualReconnect);
+    window.addEventListener("lyaotalk:reconnect-account", onManualReconnect);
 
     // Phase 2: poll supervisor state every 5s -> drive setReconnecting
     // (purely cosmetic so the UI shows "Reconnecting..." correctly)
@@ -213,7 +213,7 @@ export function useXmppReconnect() {
 
     return () => {
       clearInterval(stateTimer);
-      window.removeEventListener("liaot:reconnect-account", onManualReconnect);
+      window.removeEventListener("lyaotalk:reconnect-account", onManualReconnect);
       supervisedIds.forEach((id) => unsuperviseConnection(id));
     };
   }, [accountSignature, setConnected, setReconnecting]);

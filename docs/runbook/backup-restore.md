@@ -1,4 +1,4 @@
-# LiaoT Backup and Restore Runbook
+# LyaoTalk Backup and Restore Runbook
 
 Version: 2.2.0 ops-runbook
 
@@ -17,15 +17,15 @@ A backup is only real after a restore test.
 ## 2. Create backup
 
 ```bash
-cd /opt/liaot-src
+cd /opt/lyaotalk-src
 sudo ./manage.sh backup
 ```
 
 If manual backup is required:
 
 ```bash
-sudo -u postgres pg_dump -Fc liaot > liaot-$(date +%F).dump
-sudo tar -czf liaot-config-$(date +%F).tar.gz /opt/liaot-src/.env /etc/prosody /etc/nginx/sites-enabled
+sudo -u postgres pg_dump -Fc lyaotalk > lyaotalk-$(date +%F).dump
+sudo tar -czf lyaotalk-config-$(date +%F).tar.gz /opt/lyaotalk-src/.env /etc/prosody /etc/nginx/sites-enabled
 ```
 
 ## 3. Verify backup artifact
@@ -43,10 +43,10 @@ Monthly drill:
 
 ```bash
 # On a clean staging VM
-sudo systemctl stop liaot-api prosody nginx minio || true
+sudo systemctl stop lyaotalk-api prosody nginx minio || true
 # restore database dump
-sudo -u postgres createdb liaot_restore || true
-sudo -u postgres pg_restore -d liaot_restore /path/to/liaot.dump
+sudo -u postgres createdb lyaotalk_restore || true
+sudo -u postgres pg_restore -d lyaotalk_restore /path/to/lyaotalk.dump
 # restore config/data according to backup layout
 ```
 

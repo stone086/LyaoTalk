@@ -1,5 +1,5 @@
 const OMEMO_ENABLED_KEY = "liaot-omemo-enabled";
-const OMEMO_EVENT = "liaot:omemo-enabled-change";
+const OMEMO_EVENT = "lyaotalk:omemo-enabled-change";
 
 export function getOmemoEnabled(): boolean {
   return localStorage.getItem(OMEMO_ENABLED_KEY) !== "0";

@@ -1,6 +1,6 @@
 """Exercise federation with an externally owned XMPP account.
 
-Run on the LiaoT host. The external password is read from the terminal and is
+Run on the LyaoTalk host. The external password is read from the terminal and is
 never stored in a file or passed as a command-line argument.
 """
 import asyncio
@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import slixmpp
 
 
-DOMAIN = "liaot.2-yc.com"
+DOMAIN = "lyaot.2-yc.com"
 EXTERNAL_JID = "test1@chat.52nbc.com"
 
 
@@ -50,7 +50,7 @@ async def receive(client: Client, expected: str, seconds: int = 25):
 async def main():
     password = getpass.getpass("External XMPP password: ")
     suffix = secrets.token_hex(4)
-    username = f"liaotfed{suffix}"
+    username = f"lyaotalkfed{suffix}"
     local_jid = f"{username}@{DOMAIN}"
     local_password = secrets.token_urlsafe(24)
     clients = []
@@ -67,12 +67,12 @@ async def main():
         await asyncio.wait_for(asyncio.gather(local.ready.wait(), external.ready.wait()), 20)
         print("PASS: both servers authenticated the test accounts")
 
-        outbound = f"liaot-outbound-{suffix}"
+        outbound = f"lyaotalk-outbound-{suffix}"
         local.send_message(mto=EXTERNAL_JID, mbody=outbound, mtype="chat")
         await receive(external, outbound)
-        print("PASS: LiaoT to external message delivered")
+        print("PASS: LyaoTalk to external message delivered")
 
-        inbound = f"liaot-inbound-{suffix}"
+        inbound = f"lyaotalk-inbound-{suffix}"
         external.send_message(mto=local_jid, mbody=inbound, mtype="chat")
         delivery = asyncio.create_task(receive(local, inbound))
         rejection = asyncio.create_task(external.errors.get())
@@ -81,22 +81,22 @@ async def main():
             if rejection in done:
                 raise RuntimeError(f"Remote server rejected the message: {rejection.result()}")
             if delivery not in done:
-                raise TimeoutError("External to LiaoT message did not arrive within 30 seconds")
+                raise TimeoutError("External to LyaoTalk message did not arrive within 30 seconds")
             await delivery
         finally:
             delivery.cancel()
             rejection.cancel()
-        print("PASS: external to LiaoT message delivered")
+        print("PASS: external to LyaoTalk message delivered")
 
         # Device discovery is needed before an external client can encrypt to
-        # the existing LiaoT user. Do not read or print any private key data.
+        # the existing LyaoTalk user. Do not read or print any private key data.
         for node in (
             "eu.siacs.conversations.axolotl.devicelist",
             "urn:xmpp:omemo:2:devices",
         ):
             try:
                 result = await external.plugin["xep_0060"].get_items(
-                    "shitou@liaot.2-yc.com", node, timeout=10,
+                    "shitou@lyaot.2-yc.com", node, timeout=10,
                 )
                 if result["type"] == "error":
                     print(f"OMEMO device discovery {node}: {result['error']['condition']}")
@@ -110,7 +110,7 @@ async def main():
                     for device_id in sorted(device_ids):
                         bundle_node = node.replace("devicelist", f"bundles:{device_id}").replace("devices", f"bundles:{device_id}")
                         bundle = await external.plugin["xep_0060"].get_items(
-                            "shitou@liaot.2-yc.com", bundle_node, timeout=10,
+                            "shitou@lyaot.2-yc.com", bundle_node, timeout=10,
                         )
                         status = bundle["error"]["condition"] if bundle["type"] == "error" else "available"
                         print(f"OMEMO bundle {node} device {device_id}: {status}")

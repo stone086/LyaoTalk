@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.config import settings
 
-logger = logging.getLogger("liaot.performance")
+logger = logging.getLogger("lyaotalk.performance")
 
 
 @dataclass
@@ -37,7 +37,7 @@ class RequestQueryState:
 
 
 _query_state: contextvars.ContextVar[RequestQueryState | None] = contextvars.ContextVar(
-    "liaot_query_state",
+    "lyaotalk_query_state",
     default=None,
 )
 
@@ -61,19 +61,19 @@ def finish_query_counting(token: Any) -> RequestQueryState | None:
 def attach_sqlalchemy_performance_listeners(engine: AsyncEngine) -> None:
     """Attach query-count and slow-query listeners to the SQLAlchemy engine."""
     sync_engine = engine.sync_engine
-    if getattr(sync_engine, "_liaot_perf_listeners_attached", False):
+    if getattr(sync_engine, "_lyaotalk_perf_listeners_attached", False):
         return
 
     @event.listens_for(sync_engine, "before_cursor_execute")
     def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
-        context._liaot_query_start = time.perf_counter()
+        context._lyaotalk_query_start = time.perf_counter()
         state = _query_state.get()
         if state is not None:
             state.count += 1
 
     @event.listens_for(sync_engine, "after_cursor_execute")
     def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
-        started = getattr(context, "_liaot_query_start", None)
+        started = getattr(context, "_lyaotalk_query_start", None)
         if started is None:
             return
         elapsed_ms = (time.perf_counter() - started) * 1000
@@ -94,7 +94,7 @@ def attach_sqlalchemy_performance_listeners(engine: AsyncEngine) -> None:
                     },
                 )
 
-    setattr(sync_engine, "_liaot_perf_listeners_attached", True)
+    setattr(sync_engine, "_lyaotalk_perf_listeners_attached", True)
 
 
 def _preview_sql(statement: str) -> str:

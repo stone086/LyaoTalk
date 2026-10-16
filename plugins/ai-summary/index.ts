@@ -1,7 +1,7 @@
 /**
  * ai-summary plugin
  * Summarizes conversations using the backend AI service.
- * This is an example of how to build a LiaoT plugin.
+ * This is an example of how to build a LyaoTalk plugin.
  */
 import { Plugin, registerPlugin } from "../../packages/plugin-sdk/src/index";
 
@@ -11,7 +11,7 @@ const aiSummaryPlugin: Plugin = {
     name: "AI Summary",
     version: "1.0.0",
     description: "Summarize conversations with AI. Adds a summary button to the chat toolbar.",
-    author: "LiaoT Team",
+    author: "LyaoTalk Team",
     permissions: ["messages.read", "api.ai"],
     slots: ["chat.toolbar", "conversation.sidebar"],
   },

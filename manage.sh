@@ -1,9 +1,42 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-INSTALL_DIR="/opt/liaot"
-SRC_DIR="/opt/liaot-src"
-SERVICES=("postgresql" "redis-server" "prosody" "minio" "liaot-api" "nginx")
+# The release-based VPS layout keeps PostgreSQL and nginx shared with Matrix.
+# Never use the monolithic installer commands against that host.
+if [[ -f /etc/lyaotalk/api.env && -L /opt/lyaotalk-current ]]; then
+  live_command="${1:-status}"
+  case "$live_command" in
+    status|check)
+      for unit in lyaotalk-api lyaotalk-minio lyaotalk-redis lyaotalk-prosody.socket prosody coturn nginx matrix-synapse mas; do
+        printf '%-28s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)"
+      done
+      curl -fsS https://lyaot.2-yc.com/api/health
+      echo
+      ;;
+    api-health) curl -fsS https://lyaot.2-yc.com/api/health; echo ;;
+    restart-api) systemctl restart lyaotalk-api ;;
+    restart-nginx) nginx -t && systemctl reload nginx ;;
+    logs-api) exec journalctl -u lyaotalk-api -f ;;
+    logs-xmpp) exec journalctl -u prosody -f ;;
+    logs-nginx) exec tail -f /var/log/nginx/access.log ;;
+    logs-nginx-err) exec tail -f /var/log/nginx/error.log ;;
+    backup) exec /usr/local/sbin/lyaotalk-backup ;;
+    update)
+      [[ "$(id -u)" -eq 0 ]] || { echo "Run update as root" >&2; exit 1; }
+      source_dir=/opt/lyaotalk-src
+      [[ -z "$(git -C "$source_dir" status --porcelain)" ]] || { echo "Source checkout has changes" >&2; exit 1; }
+      git -C "$source_dir" fetch origin main
+      git -C "$source_dir" merge --ff-only origin/main
+      exec bash "$source_dir/scripts/deploy-vps-release.sh" "$(git -C "$source_dir" rev-parse HEAD)"
+      ;;
+    *) echo "Command '$live_command' is unavailable on the release-based VPS; use status, backup, update, restart-api, restart-nginx, or logs-*" >&2; exit 2 ;;
+  esac
+  exit 0
+fi
+
+INSTALL_DIR="/opt/lyaotalk"
+SRC_DIR="/opt/lyaotalk-src"
+SERVICES=("postgresql" "redis-server" "prosody" "minio" "lyaotalk-api" "nginx")
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -124,7 +157,7 @@ usage() {
   echo "  env-check       Validate key runtime env values"
   echo "  top-requests    Top nginx requests from access log"
   echo "  mem-usage       Show process memory usage"
-  echo "  watchdog        Run liaot watchdog once"
+  echo "  watchdog        Run lyaotalk watchdog once"
 }
 
 load_env() {
@@ -179,7 +212,7 @@ cmd_stop() {
   nginx -s quit >/dev/null 2>&1 || true
   sleep 2
   echo "Stopping API gracefully..."
-  systemctl stop liaot-api 2>/dev/null || true
+  systemctl stop lyaotalk-api 2>/dev/null || true
   sleep 1
   for svc in minio prosody redis-server postgresql; do
     systemctl stop "$svc" 2>/dev/null || true
@@ -244,16 +277,16 @@ EOF
   fi
   npm run build
   run_root chmod -R a+rX "${INSTALL_DIR}/web/dist" || true
-  if [[ -f "${SRC_DIR}/configs/nginx/liaot.conf" ]]; then
-    run_root cp "${SRC_DIR}/configs/nginx/liaot.conf" /etc/nginx/sites-available/liaot
-    run_root sed -i "s|DOMAIN|${DOMAIN}|g" /etc/nginx/sites-available/liaot
-    run_root sed -i "s|INSTALL_DIR|${INSTALL_DIR}|g" /etc/nginx/sites-available/liaot
+  if [[ -f "${SRC_DIR}/configs/nginx/lyaotalk.conf" ]]; then
+    run_root cp "${SRC_DIR}/configs/nginx/lyaotalk.conf" /etc/nginx/sites-available/lyaotalk
+    run_root sed -i "s|DOMAIN|${DOMAIN}|g" /etc/nginx/sites-available/lyaotalk
+    run_root sed -i "s|INSTALL_DIR|${INSTALL_DIR}|g" /etc/nginx/sites-available/lyaotalk
     if [[ -n "${PROMETHEUS_ALLOW_CIDR:-}" ]]; then
-      run_root sed -i "/location = \/api\/metrics {/,/deny all;/ s|deny all;|allow ${PROMETHEUS_ALLOW_CIDR};\n        deny all;|" /etc/nginx/sites-available/liaot
+      run_root sed -i "/location = \/api\/metrics {/,/deny all;/ s|deny all;|allow ${PROMETHEUS_ALLOW_CIDR};\n        deny all;|" /etc/nginx/sites-available/lyaotalk
     fi
   fi
-  if [[ -f "${SRC_DIR}/configs/nginx/liaot-rate-limit.conf" ]]; then
-    run_root cp "${SRC_DIR}/configs/nginx/liaot-rate-limit.conf" /etc/nginx/conf.d/liaot-rate-limit.conf
+  if [[ -f "${SRC_DIR}/configs/nginx/lyaotalk-rate-limit.conf" ]]; then
+    run_root cp "${SRC_DIR}/configs/nginx/lyaotalk-rate-limit.conf" /etc/nginx/conf.d/lyaotalk-rate-limit.conf
   fi
   # Test nginx config before reloading — `nginx -t` catches syntax errors
   # without taking the service down. Without this, a bad nginx.conf would
@@ -295,7 +328,7 @@ cmd_update_api() {
     fi
   fi
   .venv/bin/alembic upgrade head
-  run_root systemctl restart liaot-api
+  run_root systemctl restart lyaotalk-api
   echo -e "${GREEN}API updated${NC}"
 }
 
@@ -305,7 +338,7 @@ cmd_update_api() {
 
 # Directory holding rollback snapshots. Each entry is a timestamped folder
 # containing { git_sha, alembic_revision, web_dist.tar.gz }.
-SNAPSHOT_DIR="/var/lib/liaot/snapshots"
+SNAPSHOT_DIR="/var/lib/lyaotalk/snapshots"
 
 # Pre-flight syntax/import smoke check on the *source* tree.
 # Runs BEFORE we touch the install dir, so a broken commit never reaches prod.
@@ -467,8 +500,8 @@ cmd_create_snapshot() {
   # Encrypted with the same backup key when available; falls back to plaintext
   # in the snapshot dir (which is root-only).
   load_env 2>/dev/null || true
-  local db_name="${APP_USER:-liaot}"
-  local key_file="${BACKUP_ENCRYPTION_KEY_FILE:-/root/.liaot-backup.key}"
+  local db_name="${APP_USER:-lyaotalk}"
+  local key_file="${BACKUP_ENCRYPTION_KEY_FILE:-/root/.lyaotalk-backup.key}"
 
   # Pick AES-GCM (AEAD = built-in tamper detection) when openssl supports
   # it; fall back to CBC + sidecar SHA-256 for older systems. Match the
@@ -669,8 +702,8 @@ cmd_rollback_to() {
   if [[ ${restore_db} -eq 1 ]]; then
     echo -e "${YELLOW}  --restore-db requested: this will REPLACE the current database${NC}"
     load_env 2>/dev/null || true
-    local db_name="${APP_USER:-liaot}"
-    local key_file="${BACKUP_ENCRYPTION_KEY_FILE:-/root/.liaot-backup.key}"
+    local db_name="${APP_USER:-lyaotalk}"
+    local key_file="${BACKUP_ENCRYPTION_KEY_FILE:-/root/.lyaotalk-backup.key}"
     local dump_enc="${target}/db_dump.sql.gz.enc"
     local dump_plain="${target}/db_dump.sql.gz"
     local tmp_sql
@@ -710,7 +743,7 @@ cmd_rollback_to() {
     fi
 
     echo "  stopping API to drain connections"
-    run_root systemctl stop liaot-api
+    run_root systemctl stop lyaotalk-api
     echo "  dropping and recreating database ${db_name}"
     run_root sudo -u postgres dropdb --if-exists "${db_name}"
     run_root sudo -u postgres createdb -O "${db_name}" "${db_name}"
@@ -721,7 +754,7 @@ cmd_rollback_to() {
 
   # 5. Restart services
   echo "  restarting services"
-  run_root systemctl restart liaot-api
+  run_root systemctl restart lyaotalk-api
   if run_root nginx -t 2>/dev/null; then
     run_root systemctl reload nginx
   else
@@ -734,7 +767,7 @@ cmd_rollback_to() {
     return 0
   else
     echo -e "${RED}[rollback] FAILED — health check still failing after rollback${NC}"
-    echo -e "${RED}           Manual intervention required. Check: journalctl -u liaot-api${NC}"
+    echo -e "${RED}           Manual intervention required. Check: journalctl -u lyaotalk-api${NC}"
     return 1
   fi
 }
@@ -859,7 +892,7 @@ cmd_update_all() {
       fi
     else
       echo -e "${RED}No snapshot available — manual intervention required.${NC}"
-      echo -e "${RED}Check: journalctl -u liaot-api --since '5 min ago'${NC}"
+      echo -e "${RED}Check: journalctl -u lyaotalk-api --since '5 min ago'${NC}"
     fi
     return 1
   fi
@@ -879,7 +912,7 @@ cmd_ssl_renew() {
 
 cmd_db_shell() {
   load_env
-  db_name="${APP_USER:-liaot}"
+  db_name="${APP_USER:-lyaotalk}"
   sudo -u postgres psql "${db_name}"
 }
 
@@ -895,13 +928,13 @@ cmd_db_rollback() {
   read -rp "Rollback target (revision or -1): " target
   [[ -n "${target:-}" ]] || { echo "No target provided"; exit 1; }
   .venv/bin/alembic downgrade "$target"
-  systemctl restart liaot-api
+  systemctl restart lyaotalk-api
 }
 
 cmd_check() {
   load_env
-  if [[ -x /usr/local/bin/liaot-check ]]; then
-    /usr/local/bin/liaot-check "${DOMAIN:-localhost}"
+  if [[ -x /usr/local/bin/lyaotalk-check ]]; then
+    /usr/local/bin/lyaotalk-check "${DOMAIN:-localhost}"
   else
     cmd_status
   fi
@@ -939,7 +972,7 @@ cmd_disk_usage() {
   du -sh /data/minio 2>/dev/null || true
   echo ""
   echo "=== Logs ==="
-  du -sh /var/log/nginx /var/log/prosody /var/log/liaot-backup.log 2>/dev/null || true
+  du -sh /var/log/nginx /var/log/prosody /var/log/lyaotalk-backup.log 2>/dev/null || true
 }
 
 cmd_top_requests() {
@@ -959,7 +992,7 @@ cmd_ports() {
 
 cmd_backup_verify() {
   local latest
-  local key_file="${BACKUP_ENCRYPTION_KEY_FILE:-/root/.liaot-backup.key}"
+  local key_file="${BACKUP_ENCRYPTION_KEY_FILE:-/root/.lyaotalk-backup.key}"
   latest="$(ls -1t /root/backups/db_*.sql.gz.enc 2>/dev/null | head -n1 || true)"
   if [[ -z "${latest}" ]]; then
     # Fall back to legacy non-encrypted format
@@ -1017,7 +1050,7 @@ cmd_backup_verify() {
 
 cmd_backup_restore() {
   local backup_file="${2:-}"
-  local key_file="${BACKUP_ENCRYPTION_KEY_FILE:-/root/.liaot-backup.key}"
+  local key_file="${BACKUP_ENCRYPTION_KEY_FILE:-/root/.lyaotalk-backup.key}"
 
   if [[ -z "${backup_file}" ]]; then
     echo "Usage: $0 backup-restore <path-to-backup-file>"
@@ -1032,7 +1065,7 @@ cmd_backup_restore() {
   fi
 
   load_env
-  local DB_NAME="${APP_USER:-liaot}"
+  local DB_NAME="${APP_USER:-lyaotalk}"
 
   echo "WARNING: This will REPLACE the current database '${DB_NAME}'."
   echo "All current data will be lost."
@@ -1043,7 +1076,7 @@ cmd_backup_restore() {
   fi
 
   # Stop API to prevent writes during restore
-  systemctl stop liaot-api
+  systemctl stop lyaotalk-api
 
   local tmp_sql
   tmp_sql=$(mktemp --suffix=.sql)
@@ -1053,7 +1086,7 @@ cmd_backup_restore() {
   if [[ "${backup_file}" == *.enc ]]; then
     if [[ ! -f "${key_file}" ]]; then
       echo "Encryption key not found: ${key_file}"
-      systemctl start liaot-api
+      systemctl start lyaotalk-api
       exit 1
     fi
 
@@ -1065,7 +1098,7 @@ cmd_backup_restore() {
     if [[ -f "${backup_file}.sha256" ]]; then
       if ! sha256sum -c "${backup_file}.sha256" >/dev/null 2>&1; then
         echo "ABORT: SHA-256 sidecar mismatch — backup file appears tampered or corrupted"
-        systemctl start liaot-api
+        systemctl start lyaotalk-api
         exit 1
       fi
     fi
@@ -1083,13 +1116,13 @@ cmd_backup_restore() {
                      -pass file:"${key_file}" \
                      -in "${backup_file}" | gunzip > "${tmp_sql}"; then
       echo "Decrypt failed (cipher=${cipher} iter=${iter})"
-      systemctl start liaot-api
+      systemctl start lyaotalk-api
       exit 1
     fi
   else
     if ! gunzip -c "${backup_file}" > "${tmp_sql}"; then
       echo "Decompress failed"
-      systemctl start liaot-api
+      systemctl start lyaotalk-api
       exit 1
     fi
   fi
@@ -1104,11 +1137,11 @@ cmd_backup_restore() {
     echo "Restore complete"
   else
     echo "Restore failed — database may be in inconsistent state!"
-    systemctl start liaot-api
+    systemctl start lyaotalk-api
     exit 1
   fi
 
-  systemctl start liaot-api
+  systemctl start lyaotalk-api
   echo "API restarted"
 }
 
@@ -1128,11 +1161,11 @@ cmd_env_check() {
 }
 
 cmd_watchdog() {
-  if [[ -x /usr/local/bin/liaot-alert.sh ]]; then
-    /usr/local/bin/liaot-alert.sh
+  if [[ -x /usr/local/bin/lyaotalk-alert.sh ]]; then
+    /usr/local/bin/lyaotalk-alert.sh
     echo "watchdog executed"
   else
-    echo "watchdog script not found: /usr/local/bin/liaot-alert.sh"
+    echo "watchdog script not found: /usr/local/bin/lyaotalk-alert.sh"
     exit 1
   fi
 }
@@ -1142,9 +1175,9 @@ case "${1:-}" in
   start)           cmd_start ;;
   stop)            cmd_stop ;;
   restart)         cmd_restart ;;
-  restart-api)     systemctl restart liaot-api ;;
+  restart-api)     systemctl restart lyaotalk-api ;;
   restart-nginx)   systemctl reload nginx ;;
-  logs-api)        journalctl -u liaot-api -f ;;
+  logs-api)        journalctl -u lyaotalk-api -f ;;
   logs-xmpp)       tail -f /var/log/prosody/prosody.log ;;
   logs-nginx)      tail -f /var/log/nginx/access.log ;;
   logs-nginx-err)  tail -f /var/log/nginx/error.log ;;
@@ -1152,7 +1185,7 @@ case "${1:-}" in
   del-user)        cmd_del_user ;;
   list-users)      cmd_list_users ;;
   change-pass)     cmd_change_pass ;;
-  backup)          /usr/local/bin/liaot-backup.sh ;;
+  backup)          /usr/local/bin/lyaotalk-backup.sh ;;
   backup-restore)  cmd_backup_restore "$@" ;;
   update)          shift; cmd_update_all "$@" ;;
   update-front)    cmd_update_front ;;

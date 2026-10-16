@@ -159,7 +159,7 @@ export function jingleXmlToSdp(jingleEl: Element): string {
       const ssrc = s.getAttribute("ssrc");
       const cname = elementsByName(s, "parameter")
         .find((p) => p.getAttribute("name") === "cname")
-        ?.getAttribute("value") ?? "liaot";
+        ?.getAttribute("value") ?? "lyaotalk";
       if (ssrc) lines.push(`a=ssrc:${ssrc} cname:${cname}`);
     });
   });
@@ -236,7 +236,7 @@ function buildDescription(m: SdpMedia): string {
 
   const ssrc = m.ssrc ?
     `<source xmlns="${NS_SSMA}" ssrc="${m.ssrc}">` +
-    `<parameter name="cname" value="${escape(m.ssrcCname ?? "liaot")}"/>` +
+    `<parameter name="cname" value="${escape(m.ssrcCname ?? "lyaotalk")}"/>` +
     `</source>` : "";
 
   return `<description xmlns="${NS_RTP}" media="${m.type}">` +

@@ -5,7 +5,7 @@ import { XmppClient } from "../xmppAdapter";
 describe("XEP-0215 ICE discovery", () => {
   it("advertises direct audio/video Jingle with a matching caps disco node", () => {
     const client = new XmppClient({
-      jid: "alice@liaot.example", password: "", wsUrl: "wss://liaot.example/xmpp-websocket", accountId: "alice",
+      jid: "alice@lyaotalk.example", password: "", wsUrl: "wss://lyaotalk.example/xmpp-websocket", accountId: "alice",
     });
     let handleDisco: ((iq: Element) => boolean) | undefined;
     const elements: Array<{ name: string; attrs: Record<string, string> }> = [];
@@ -21,11 +21,11 @@ describe("XEP-0215 ICE discovery", () => {
     };
     internal._setupDiscoHandler();
     const iq = new DOMParser().parseFromString(
-      '<iq from="bob@remote.example/phone" id="disco-1"><query xmlns="http://jabber.org/protocol/disco#info" node="https://liaot.dev/caps#hash"/></iq>',
+      '<iq from="bob@remote.example/phone" id="disco-1"><query xmlns="http://jabber.org/protocol/disco#info" node="https://lyaotalk.dev/caps#hash"/></iq>',
       "text/xml",
     ).documentElement;
     expect(handleDisco?.(iq)).toBe(true);
-    expect(elements.find(({ name }) => name === "query")?.attrs.node).toBe("https://liaot.dev/caps#hash");
+    expect(elements.find(({ name }) => name === "query")?.attrs.node).toBe("https://lyaotalk.dev/caps#hash");
     const features = elements.filter(({ name }) => name === "feature").map(({ attrs }) => attrs.var);
     expect(features).toEqual(expect.arrayContaining([
       "urn:xmpp:jingle:1",
@@ -35,13 +35,13 @@ describe("XEP-0215 ICE discovery", () => {
       "urn:xmpp:jingle:apps:dtls:0",
       "urn:xmpp:jingle:transports:ice-udp:1",
     ]));
-    // LiaoT currently accepts direct Jingle IQs, not XEP-0353 proposals.
+    // LyaoTalk currently accepts direct Jingle IQs, not XEP-0353 proposals.
     expect(features).not.toContain("urn:xmpp:jingle-message:0");
   });
 
   it("uses time-limited TURN credentials returned by the account's own server", async () => {
     const client = new XmppClient({
-      jid: "alice@liaot.example", password: "", wsUrl: "wss://liaot.example/xmpp-websocket", accountId: "alice",
+      jid: "alice@lyaotalk.example", password: "", wsUrl: "wss://lyaotalk.example/xmpp-websocket", accountId: "alice",
     });
     const sentTo: string[] = [];
     const internal = client as unknown as {
@@ -57,21 +57,21 @@ describe("XEP-0215 ICE discovery", () => {
     internal._connection = {
       sendIQ: (_iq, ok) => ok(new DOMParser().parseFromString(
         `<iq><services xmlns="urn:xmpp:extdisco:2">
-          <service type="stun" host="turn.liaot.example" port="3478" transport="udp"/>
-          <service type="turn" host="turn.liaot.example" port="3478" transport="tcp" username="temporary" password="secret"/>
+          <service type="stun" host="turn.lyaotalk.example" port="3478" transport="udp"/>
+          <service type="turn" host="turn.lyaotalk.example" port="3478" transport="tcp" username="temporary" password="secret"/>
           <service type="turn" host="127.0.0.1" port="3478" username="bad"/>
         </services></iq>`, "text/xml",
       ).documentElement),
     };
     const servers = await client.fetchIceServers();
-    expect(sentTo).toEqual(["liaot.example"]);
-    expect(servers).toContainEqual({ urls: "turn:turn.liaot.example:3478?transport=tcp", username: "temporary", credential: "secret" });
-    expect(servers).toContainEqual({ urls: "stun:turn.liaot.example:3478" });
+    expect(sentTo).toEqual(["lyaotalk.example"]);
+    expect(servers).toContainEqual({ urls: "turn:turn.lyaotalk.example:3478?transport=tcp", username: "temporary", credential: "secret" });
+    expect(servers).toContainEqual({ urls: "stun:turn.lyaotalk.example:3478" });
   });
 
   it("routes Jingle to the currently known full resource", () => {
     const client = new XmppClient({
-      jid: "alice@liaot.example", password: "", wsUrl: "wss://liaot.example/xmpp-websocket", accountId: "alice",
+      jid: "alice@lyaotalk.example", password: "", wsUrl: "wss://lyaotalk.example/xmpp-websocket", accountId: "alice",
     });
     const destinations: string[] = [];
     const iqIds: string[] = [];
@@ -91,11 +91,11 @@ describe("XEP-0215 ICE discovery", () => {
       iqIds.push(attrs.id);
       return { cnode: (node: Element) => { jingleNodes.push(node); return {}; }, tree: () => document.createElement("iq") };
     };
-    internal._connection = { jid: "alice@liaot.example/browser", send: vi.fn(), sendIQ: vi.fn() };
+    internal._connection = { jid: "alice@lyaotalk.example/browser", send: vi.fn(), sendIQ: vi.fn() };
     client.sendJingle("bob@remote.example", "test-session", '<jingle xmlns="urn:xmpp:jingle:1" action="session-initiate" sid="test-session"/>');
     expect(destinations).toEqual(["bob@remote.example/current-resource"]);
     expect(iqIds[0]).toMatch(/^[0-9a-f-]{36}$/);
-    expect(jingleNodes[0].getAttribute("initiator")).toBe("alice@liaot.example/browser");
+    expect(jingleNodes[0].getAttribute("initiator")).toBe("alice@lyaotalk.example/browser");
     expect(jingleNodes[0].hasAttribute("responder")).toBe(false);
     internal._recentMessageFullJidByBare.set("bob@remote.example", "bob@remote.example/recent-message");
     client.sendJingle("bob@remote.example", "second-session", '<jingle xmlns="urn:xmpp:jingle:1" action="session-initiate" sid="second-session"/>');
@@ -104,7 +104,7 @@ describe("XEP-0215 ICE discovery", () => {
     expect(destinations[2]).toBe("bob@remote.example/stale-resource");
     client.sendJingle("bob@remote.example/original-initiator", "fourth-session", '<jingle xmlns="urn:xmpp:jingle:1" action="session-accept" sid="fourth-session"/>');
     expect(destinations[3]).toBe("bob@remote.example/original-initiator");
-    expect(jingleNodes[3].getAttribute("responder")).toBe("alice@liaot.example/browser");
+    expect(jingleNodes[3].getAttribute("responder")).toBe("alice@lyaotalk.example/browser");
     expect(jingleNodes[3].hasAttribute("initiator")).toBe(false);
     internal._availableFullJidsByBare.set("bob@remote.example", new Set(["bob@remote.example/live-phone"]));
     client.sendJingle("bob@remote.example", "fifth-session", '<jingle xmlns="urn:xmpp:jingle:1" action="session-initiate" sid="fifth-session"/>');
@@ -113,7 +113,7 @@ describe("XEP-0215 ICE discovery", () => {
 
   it("discovers a call-capable resource instead of a stale chat resource", async () => {
     const client = new XmppClient({
-      jid: "alice@liaot.example", password: "", wsUrl: "wss://liaot.example/xmpp-websocket", accountId: "alice",
+      jid: "alice@lyaotalk.example", password: "", wsUrl: "wss://lyaotalk.example/xmpp-websocket", accountId: "alice",
     });
     const internal = client as any;
     internal._connected = true;
@@ -140,7 +140,7 @@ describe("XEP-0215 ICE discovery", () => {
 
   it("uses a bare-JID call proposal when presence does not reveal a device", async () => {
     const client = new XmppClient({
-      jid: "alice@liaot.example", password: "", wsUrl: "wss://liaot.example/xmpp-websocket", accountId: "alice",
+      jid: "alice@lyaotalk.example", password: "", wsUrl: "wss://lyaotalk.example/xmpp-websocket", accountId: "alice",
     });
     const internal = client as any;
     internal._connected = true;
@@ -183,7 +183,7 @@ describe("XEP-0215 ICE discovery", () => {
 
   it("reports an unsupported call instead of leaving it connecting", () => {
     const client = new XmppClient({
-      jid: "alice@liaot.example", password: "", wsUrl: "wss://liaot.example/xmpp-websocket", accountId: "alice",
+      jid: "alice@lyaotalk.example", password: "", wsUrl: "wss://lyaotalk.example/xmpp-websocket", accountId: "alice",
     });
     const errors: unknown[] = [];
     client.on("jingle.error", (error) => errors.push(error));

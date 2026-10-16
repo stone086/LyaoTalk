@@ -6,12 +6,12 @@ import secrets
 import subprocess
 
 
-DOMAIN = "liaot.2-yc.com"
-HELPER = Path(os.environ.get("LIAOT_HELPER_PATH", str(Path(__file__).resolve().parents[1] / "configs/prosody/liaot_registration_helper.py")))
+DOMAIN = "lyaot.2-yc.com"
+HELPER = Path(os.environ.get("LYAOTALK_HELPER_PATH", str(Path(__file__).resolve().parents[1] / "configs/prosody/lyaotalk_registration_helper.py")))
 
 
 def main() -> None:
-    spec = importlib.util.spec_from_file_location("liaot_registration_helper", HELPER)
+    spec = importlib.util.spec_from_file_location("lyaotalk_registration_helper", HELPER)
     helper = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helper)
     helper.DOMAIN = DOMAIN

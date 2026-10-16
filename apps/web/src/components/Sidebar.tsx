@@ -77,7 +77,7 @@ export default function Sidebar() {
       return;
     }
     setManuallyOffline(activeId, false);
-    window.dispatchEvent(new CustomEvent("liaot:reconnect-account", { detail: activeId }));
+    window.dispatchEvent(new CustomEvent("lyaotalk:reconnect-account", { detail: activeId }));
   };
   const handleLogout = async () => {
     if (!activeId || loggingOut) return;

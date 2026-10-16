@@ -50,7 +50,7 @@ export function parseAesgcmUrl(raw: string): AesgcmParts | null {
   if (!text.startsWith("aesgcm://")) return null;
   const rest = text.slice("aesgcm://".length);
   const hashIdx = rest.indexOf("#");
-  // Early LiaoT senders appended the 88 hex characters without the '#'.
+  // Early LyaoTalk senders appended the 88 hex characters without the '#'.
   // Recover those already-delivered messages without changing the wire format.
   const legacy = hashIdx < 0 ? rest.match(/^(https?:\/\/)?(.+?)([0-9a-fA-F]{88})$/) : null;
   if (hashIdx < 0 && !legacy) return null;
@@ -134,7 +134,7 @@ export async function fetchAndDecryptAesgcm(
     const parts = parseAesgcmUrl(rawUrl);
     if (!parts) throw new Error("Invalid aesgcm:// URL");
 
-    // 1. Download ciphertext. Private LiaoT files use the authenticated API;
+    // 1. Download ciphertext. Private LyaoTalk files use the authenticated API;
     // no bearer token is placed in an image URL, link, or request query string.
     const { isTrustedFilesUrl } = await import("./trustedFilesUrl");
     let ciphertext: ArrayBuffer;

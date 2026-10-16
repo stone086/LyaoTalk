@@ -1,4 +1,4 @@
-/var/log/liaot-backup.log {
+/var/log/lyaotalk-backup.log {
     daily
     rotate 14
     compress

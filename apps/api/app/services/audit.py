@@ -40,7 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AuditLog
 
-logger = logging.getLogger("liaot.audit")
+logger = logging.getLogger("lyaotalk.audit")
 
 
 # Keys that should never appear in audit detail. Match case-insensitively;
@@ -174,7 +174,7 @@ def get_client_ip(request) -> Optional[str]:
     """
     if not request:
         return None
-    # X-Real-IP is set by nginx to $remote_addr (line 119 of liaot.conf
+    # X-Real-IP is set by nginx to $remote_addr (line 119 of lyaotalk.conf
     # and equivalent in /api/ block). nginx does NOT pass through any
     # client-supplied X-Real-IP — the proxy_set_header fully replaces.
     real_ip = request.headers.get("x-real-ip", "").strip()

@@ -248,7 +248,7 @@ async function verifyBundleSignature(bundle: OmemoBundle): Promise<boolean> {
   }
 
   try {
-    // Legacy compatibility: older LiaoT builds stored a SHA-256 digest string instead of a true signature.
+    // Legacy compatibility: older LyaoTalk builds stored a SHA-256 digest string instead of a true signature.
     const legacyMaterial = new TextEncoder().encode(
       `${bundle.identityKey}.${bundle.signedPreKeyPublic}.${bundle.deviceId}`
     );

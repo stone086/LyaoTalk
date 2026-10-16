@@ -1,7 +1,7 @@
 """
 webhooks.py - Inbound webhook endpoints.
 
-External services can POST messages into a LiaoT conversation:
+External services can POST messages into a LyaoTalk conversation:
   POST /webhooks/{webhook_id}
   {
     "message": "Build #1234 succeeded on main",
@@ -22,7 +22,7 @@ import logging
 
 from app.core.rate_limit import limiter
 
-logger = logging.getLogger("liaot.webhooks")
+logger = logging.getLogger("lyaotalk.webhooks")
 from sqlalchemy import select
 from typing import Optional
 import secrets

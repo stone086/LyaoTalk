@@ -2,7 +2,7 @@
 
 ## Repository status
 
-The new repository has a fresh Git history. The `liaot` names in service paths, database schemas and systemd service names remain for runtime compatibility; branding does not imply that service names were migrated. No automatic production deploy is configured.
+The new repository has a fresh Git history. The `lyaotalk` names in service paths, database schemas and systemd service names remain for runtime compatibility; branding does not imply that service names were migrated. No automatic production deploy is configured.
 
 ## CI on every push / PR
 
@@ -10,7 +10,7 @@ The new repository has a fresh Git history. The `liaot` names in service paths, 
 
 ## Fresh install — isolated VPS only
 
-Prerequisites: new Ubuntu/Debian machine reserved for Lyao Talk, DNS and HTTPS domain, backups, operator access. **Do not** run the installer on the shared LiaoT/Matrix production host: the installer provisions or configures system services, firewall, Prosody, database, Redis, MinIO and nginx.
+Prerequisites: new Ubuntu/Debian machine reserved for Lyao Talk, DNS and HTTPS domain, backups, operator access. **Do not** run the installer on the shared LyaoTalk/Matrix production host: the installer provisions or configures system services, firewall, Prosody, database, Redis, MinIO and nginx.
 
 ```bash
 git clone https://github.com/stone086/LyaoTalk.git /opt/lyaotalk-bootstrap
@@ -21,7 +21,7 @@ bash -n install.sh
 sudo bash install.sh --repo https://github.com/stone086/LyaoTalk.git --domain chat.example.com --email you@example.com
 ```
 
-The installer still uses `/opt/liaot` and `/opt/liaot-src` internally. It is not safe to run next to an existing installation without auditing and refactoring those paths first.
+The installer still uses `/opt/lyaotalk` and `/opt/lyaotalk-src` internally. It is not safe to run next to an existing installation without auditing and refactoring those paths first.
 
 ## Manual staging deploy (never automatic)
 
@@ -32,7 +32,7 @@ The installer still uses `/opt/liaot` and `/opt/liaot-src` internally. It is not
 - `LYAOTALK_STAGING_SSH_KEY`: private SSH key stored only in GitHub secrets.
 - `LYAOTALK_STAGING_HOST_KEY`: exact known_hosts line from independently verified host key, not an unchecked ssh-keyscan result.
 
-On the isolated VPS, the operator must explicitly create `/etc/lyaotalk/isolated-staging-approved` after confirming the server is dedicated to this application. The remote repository must be `https://github.com/stone086/LyaoTalk.git`, checked out to `main` under `/opt/liaot-src`.
+On the isolated VPS, the operator must explicitly create `/etc/lyaotalk/isolated-staging-approved` after confirming the server is dedicated to this application. The remote repository must be `https://github.com/stone086/LyaoTalk.git`, checked out to `main` under `/opt/lyaotalk-src`.
 
 The deploy workflow pins the initiating commit SHA, refuses a changed `origin/main`, and invokes `sudo bash manage.sh update`. That existing command does smoke checks, captures a snapshot, and attempts automatic application rollback; do not use the `--skip-snapshot` or `--no-rollback` bypass options. **A database restore and total service rollback are not guaranteed by an application snapshot**. Test them in isolation.
 
@@ -45,4 +45,4 @@ The deploy workflow pins the initiating commit SHA, refuses a changed `origin/ma
 5. PostgreSQL/Redis/Prosody/MinIO backups and isolated restore, version rollback rehearsal.
 6. Only then plan a separately approved production change window with Matrix impact review.
 
-The original LiaoT repository and running VPS were not changed by adding these workflows.
+The original LyaoTalk repository and running VPS were not changed by adding these workflows.

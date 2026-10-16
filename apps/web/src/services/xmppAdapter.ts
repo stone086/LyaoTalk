@@ -1,5 +1,5 @@
 /**
- * Full XMPP client wrapper for LiaoT.
+ * Full XMPP client wrapper for LyaoTalk.
  * Wraps Strophe.js with a clean event-driven API.
  */
 import { normalizeBareJid, normalizeValidBareJid } from "@/utils/helpers";
@@ -113,6 +113,13 @@ export interface MucDiscoveryItem {
   name?: string;
 }
 
+export interface MucBookmark {
+  jid: string;
+  name: string;
+  nickname: string;
+  autojoin: boolean;
+}
+
 export interface MucRoomConfig {
   isPublic: boolean;
   membersOnly?: boolean;
@@ -158,6 +165,36 @@ const OMEMO_NAMESPACE_LEGACY = "eu.siacs.conversations.axolotl";
 const OMEMO_NAMESPACE_MODERN = "urn:xmpp:omemo:2";
 const OMEMO_NAMESPACES = [OMEMO_NAMESPACE_MODERN, OMEMO_NAMESPACE_LEGACY] as const;
 const PUBSUB_NS = "http://jabber.org/protocol/pubsub";
+const BOOKMARKS_NS = "urn:xmpp:bookmarks:1";
+
+export function parseMucBookmarks(stanza: Element): MucBookmark[] {
+  const bookmarks: MucBookmark[] = [];
+  const items = Array.from(stanza.getElementsByTagName("item"));
+  for (const item of items) {
+    const conference = Array.from(item.getElementsByTagName("conference"))
+      .find((node) => node.namespaceURI === BOOKMARKS_NS || node.getAttribute("xmlns") === BOOKMARKS_NS);
+    if (!conference) continue;
+    const jid = (item.getAttribute("id") ?? "").trim().toLowerCase();
+    if (!jid.includes("@") || jid.includes("/")) continue;
+    const name = conference.getAttribute("name")?.trim() || jid.split("@")[0];
+    const nickname = Array.from(conference.getElementsByTagName("nick"))
+      .find((node) => node.namespaceURI === BOOKMARKS_NS || node.getAttribute("xmlns") === BOOKMARKS_NS)
+      ?.textContent?.trim() || "";
+    bookmarks.push({ jid, name, nickname, autojoin: /^(?:1|true)$/i.test(conference.getAttribute("autojoin") ?? "") });
+  }
+  for (const conference of Array.from(stanza.getElementsByTagName("conference"))) {
+    if (conference.namespaceURI !== "storage:bookmarks" && conference.getAttribute("xmlns") !== "storage:bookmarks") continue;
+    const jid = (conference.getAttribute("jid") ?? "").trim().toLowerCase();
+    if (!jid.includes("@") || jid.includes("/") || bookmarks.some((item) => item.jid === jid)) continue;
+    bookmarks.push({
+      jid,
+      name: conference.getAttribute("name")?.trim() || jid.split("@")[0],
+      nickname: conference.getElementsByTagName("nick")[0]?.textContent?.trim() || "",
+      autojoin: /^(?:1|true)$/i.test(conference.getAttribute("autojoin") ?? ""),
+    });
+  }
+  return bookmarks;
+}
 function omemoDeviceListNode(namespace: string): string {
   return namespace === OMEMO_NAMESPACE_MODERN
     ? `${namespace}:devices`
@@ -726,7 +763,7 @@ export class XmppClient {
       pres.c("c", {
         xmlns: "http://jabber.org/protocol/caps",
         hash: "sha-1",
-        node: "https://liaot.dev/caps",
+        node: "https://lyaotalk.dev/caps",
         ver: hash,
       }).up();
     }
@@ -947,6 +984,52 @@ export class XmppClient {
    * should never set "joined" state from a synchronous return value of
    * this method — wait for the promise to resolve.
    */
+  fetchMucBookmarks(): Promise<MucBookmark[]> {
+    if (!this._connection || !this._connected) return Promise.reject(new Error("Not connected"));
+    const query = (stanza: Element) => new Promise<MucBookmark[]>((resolve) => {
+      this._connection.sendIQ(stanza, (result: Element) => resolve(parseMucBookmarks(result)), () => resolve([]), 10000);
+    });
+    const modern = this._$iq({ type: "get" }).c("pubsub", { xmlns: PUBSUB_NS }).c("items", { node: BOOKMARKS_NS });
+    const legacyPep = this._$iq({ type: "get" }).c("pubsub", { xmlns: PUBSUB_NS }).c("items", { node: "storage:bookmarks" });
+    const legacyPrivate = this._$iq({ type: "get" }).c("query", { xmlns: "jabber:iq:private" }).c("storage", { xmlns: "storage:bookmarks" });
+    return Promise.all([query(modern.tree()), query(legacyPep.tree()), query(legacyPrivate.tree())]).then((sources) => {
+      const byJid = new Map<string, MucBookmark>();
+      for (const source of sources) for (const bookmark of source) if (!byJid.has(bookmark.jid)) byJid.set(bookmark.jid, bookmark);
+      return [...byJid.values()];
+    });
+  }
+
+  publishMucBookmark(bookmark: MucBookmark): Promise<void> {
+    if (!this._connection || !this._connected) return Promise.reject(new Error("Not connected"));
+    const iq = this._$iq({ type: "set" })
+      .c("pubsub", { xmlns: PUBSUB_NS })
+      .c("publish", { node: BOOKMARKS_NS })
+      .c("item", { id: bookmark.jid })
+      .c("conference", { xmlns: BOOKMARKS_NS, name: bookmark.name, autojoin: bookmark.autojoin ? "true" : "false" })
+      .c("nick").t(bookmark.nickname).up().up().up().up()
+      .c("publish-options")
+      .c("x", { xmlns: "jabber:x:data", type: "submit" })
+      .c("field", { var: "FORM_TYPE", type: "hidden" }).c("value").t("http://jabber.org/protocol/pubsub#publish-options").up().up()
+      .c("field", { var: "pubsub#persist_items" }).c("value").t("true").up().up()
+      .c("field", { var: "pubsub#max_items" }).c("value").t("max").up().up()
+      .c("field", { var: "pubsub#send_last_published_item" }).c("value").t("never").up().up()
+      .c("field", { var: "pubsub#access_model" }).c("value").t("whitelist");
+    return new Promise((resolve, reject) => {
+      this._connection.sendIQ(iq.tree(), () => resolve(), reject, 10000);
+    });
+  }
+
+  retractMucBookmark(jid: string): Promise<void> {
+    if (!this._connection || !this._connected) return Promise.reject(new Error("Not connected"));
+    const iq = this._$iq({ type: "set" })
+      .c("pubsub", { xmlns: PUBSUB_NS })
+      .c("retract", { node: BOOKMARKS_NS, notify: "true" })
+      .c("item", { id: jid });
+    return new Promise((resolve, reject) => {
+      this._connection.sendIQ(iq.tree(), () => resolve(), reject, 10000);
+    });
+  }
+
   joinRoom(roomJid: string, nickname: string, password?: string): Promise<void> {
     if (!this._connection || !this._connected) {
       return Promise.reject(new Error("Not connected"));

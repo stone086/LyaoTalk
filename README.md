@@ -23,4 +23,4 @@ Run `npm --prefix apps/web ci`, `npm --prefix apps/web run build`, and `npm --pr
 
 ## Deployment
 
-See [VPS deployment and rollback instructions](docs/DEPLOYMENT.md). CI validation does not imply that the production VPS has been updated. The original LiaoT server is unchanged until a separately approved cutover.
+See [VPS deployment and rollback instructions](docs/DEPLOYMENT.md). CI validation does not imply that the production VPS has been updated. The original LyaoTalk server is unchanged until a separately approved cutover.

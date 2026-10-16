@@ -39,7 +39,7 @@ DISK_GB="$(df -BG "$ROOT_DIR" | awk 'NR==2{gsub(/G/,"",$4); print $4}')"
 
 if [[ -f "$ENV_FILE" ]]; then
   bash "${ROOT_DIR}/scripts/env_validate.sh" ${STRICT:+--strict} --env "$ENV_FILE"
-  DOMAIN="$(bash -c "source '${ROOT_DIR}/scripts/liaot_env_lib.sh'; get_env_file_value '${ENV_FILE}' DOMAIN ''")"
+  DOMAIN="$(bash -c "source '${ROOT_DIR}/scripts/lyaotalk_env_lib.sh'; get_env_file_value '${ENV_FILE}' DOMAIN ''")"
   if [[ -n "$DOMAIN" ]]; then
     if command -v getent >/dev/null && getent ahosts "$DOMAIN" >/dev/null; then
       ok "DNS resolves: $DOMAIN"
@@ -53,7 +53,7 @@ fi
 
 for port in 80 443 5222 5281 3478; do
   if ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq ":${port}$"; then
-    warn "TCP port ${port} is already listening; installer may conflict unless it is an existing LiaoT service"
+    warn "TCP port ${port} is already listening; installer may conflict unless it is an existing LyaoTalk service"
   else
     ok "TCP port ${port} appears free"
   fi

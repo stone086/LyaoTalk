@@ -20,18 +20,18 @@ describe("federated AES-GCM media link", () => {
 
   it("reads old delivered links missing the separator without including the key in the download URL", () => {
     const hex = "a".repeat(88);
-    const parsed = parseAesgcmUrl(`aesgcm://upload.liaot.2-yc.com/file.png${hex}`);
-    expect(parsed?.ciphertextUrl).toBe("https://upload.liaot.2-yc.com/file.png");
+    const parsed = parseAesgcmUrl(`aesgcm://upload.lyaot.2-yc.com/file.png${hex}`);
+    expect(parsed?.ciphertextUrl).toBe("https://upload.lyaot.2-yc.com/file.png");
     expect(parsed?.fileName).toBe("file.png");
     expect(parsed?.key).toHaveLength(32);
   });
 
   it("keeps signed URL parameters separate from the key fragment", () => {
     const fragment = `#${"a".repeat(88)}`;
-    const link = toAesgcmUrl("https://liaot.example/media/image.png?expires=123&sig=abc", fragment);
-    expect(link).toBe(`aesgcm://liaot.example/media/image.png?expires=123&sig=abc${fragment}`);
-    expect(parseAesgcmUrl(link)?.ciphertextUrl).toBe("https://liaot.example/media/image.png?expires=123&sig=abc");
-    expect(() => toAesgcmUrl("http://liaot.example/file", fragment)).toThrow();
-    expect(() => toAesgcmUrl("https://liaot.example/file", "a".repeat(88))).toThrow();
+    const link = toAesgcmUrl("https://lyaotalk.example/media/image.png?expires=123&sig=abc", fragment);
+    expect(link).toBe(`aesgcm://lyaotalk.example/media/image.png?expires=123&sig=abc${fragment}`);
+    expect(parseAesgcmUrl(link)?.ciphertextUrl).toBe("https://lyaotalk.example/media/image.png?expires=123&sig=abc");
+    expect(() => toAesgcmUrl("http://lyaotalk.example/file", fragment)).toThrow();
+    expect(() => toAesgcmUrl("https://lyaotalk.example/file", "a".repeat(88))).toThrow();
   });
 });

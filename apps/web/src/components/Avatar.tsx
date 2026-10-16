@@ -51,7 +51,7 @@ function getInitials(name: string): string {
  * across all XMPP clients that implement this XEP.
  *
  * This synchronous approximation uses FNV-1a-like rolling hash, which is
- * sufficient for visual consistency within LiaoT. For strict cross-client
+ * sufficient for visual consistency within LyaoTalk. For strict cross-client
  * compliance the SHA-1 variant is recommended (async).
  */
 function colorFromName(name: string): string {

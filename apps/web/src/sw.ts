@@ -67,7 +67,7 @@ self.addEventListener("push", (event: PushEvent) => {
   // there could mangle log files. Strip them and bound length.
   const stripCtrl = (s: string) =>
     s.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 200);
-  const sanitizedTag = data.tag ? stripCtrl(data.tag) : "liaot-msg";
+  const sanitizedTag = data.tag ? stripCtrl(data.tag) : "lyaotalk-msg";
 
   // conversationId goes into the URL via encodeURIComponent below, but we
   // also reject obvious junk (slashes, control chars) here so the URL we

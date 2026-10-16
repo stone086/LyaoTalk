@@ -12,7 +12,7 @@ done
 mkdir -p "$OUT_DIR"
 log(){ echo "[$(date -u +%FT%TZ)] $*" | tee -a "$OUT_DIR/summary.log"; }
 run(){ local name="$1"; shift; log "RUN $name: $*"; if "$@" >"$OUT_DIR/$name.out" 2>"$OUT_DIR/$name.err"; then log "OK $name"; else log "FAIL $name"; return 1; fi; }
-log "LiaoT staging evidence collection"
+log "LyaoTalk staging evidence collection"
 run version cat VERSION || true
 run stage0 bash scripts/stage0_validate.sh --local || true
 run trusted_build bash scripts/trusted_build_validate.sh --local || true

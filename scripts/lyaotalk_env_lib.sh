@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared .env helpers for LiaoT installer/preflight scripts.
+# Shared .env helpers for LyaoTalk installer/preflight scripts.
 set -euo pipefail
 
 is_truthy() {

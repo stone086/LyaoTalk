@@ -1,4 +1,4 @@
-# LiaoT Secrets Rotation Runbook
+# LyaoTalk Secrets Rotation Runbook
 
 Version: 2.2.0 ops-runbook
 
@@ -17,11 +17,11 @@ Version: 2.2.0 ops-runbook
 ## JWT secret rotation
 
 ```bash
-openssl rand -hex 32 | sudo tee /tmp/liaot-secret-new
-sudo cp /opt/liaot-src/.env /opt/liaot-src/.env.$(date +%F-%H%M%S).bak
-sudo sed -i "s/^SECRET_KEY=.*/SECRET_KEY=$(cat /tmp/liaot-secret-new)/" /opt/liaot-src/.env
-sudo -u postgres psql liaot -c "DELETE FROM refresh_tokens;"
-sudo systemctl restart liaot-api
+openssl rand -hex 32 | sudo tee /tmp/lyaotalk-secret-new
+sudo cp /opt/lyaotalk-src/.env /opt/lyaotalk-src/.env.$(date +%F-%H%M%S).bak
+sudo sed -i "s/^SECRET_KEY=.*/SECRET_KEY=$(cat /tmp/lyaotalk-secret-new)/" /opt/lyaotalk-src/.env
+sudo -u postgres psql lyaotalk -c "DELETE FROM refresh_tokens;"
+sudo systemctl restart lyaotalk-api
 ```
 
 Validate:

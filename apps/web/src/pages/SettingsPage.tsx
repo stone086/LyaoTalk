@@ -131,13 +131,13 @@ function AccountCard({ account }: { account: XmppAccount }) {
   const accountDomain = bareJid.split("@")[1] ?? account.domain;
   const inviteUrl = useMemo(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const url = new URL("/login", origin || "https://liaot.local");
+    const url = new URL("/login", origin || "https://lyaotalk.local");
     url.searchParams.set("invite_domain", accountDomain);
     return url.toString();
   }, [accountDomain]);
   const contactUrl = useMemo(() => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const url = new URL("/", origin || "https://liaot.local");
+    const url = new URL("/", origin || "https://lyaotalk.local");
     url.searchParams.set("add_contact", bareJid);
     return url.toString();
   }, [bareJid]);

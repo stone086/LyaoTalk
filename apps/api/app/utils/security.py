@@ -36,7 +36,7 @@ from app.core.database import get_db
 from app.models import Account
 
 bearer_scheme = HTTPBearer(auto_error=False)
-logger = logging.getLogger("liaot.security")
+logger = logging.getLogger("lyaotalk.security")
 UTC = timezone.utc
 
 # Redis client created lazily so missing redis (e.g. tests) doesn't crash import

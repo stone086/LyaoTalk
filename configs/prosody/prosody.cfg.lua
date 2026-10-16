@@ -1,5 +1,5 @@
 -- =============================================================================
--- LiaoT Prosody config template
+-- LyaoTalk Prosody config template
 -- Placeholder XMPP_DOMAIN will be replaced by install.sh
 -- Placeholder XMPP_FRONTEND_ORIGIN is the https://hostname of the web client
 -- =============================================================================
@@ -19,7 +19,7 @@ modules_enabled = {
   "private";
   "bookmarks";
   "blocklist";
-  -- File uploads are handled by LiaoT API + MinIO. Prosody mod_http_upload
+  -- File uploads are handled by LyaoTalk API + MinIO. Prosody mod_http_upload
   -- is not installed on all supported distros, so do not load it here.
   "vcard4";
   "vcard_legacy";
@@ -80,7 +80,7 @@ archive_expires_after = "3d"
 default_archive_policy = true
 max_archive_query_results = 100
 
--- HTTP CORS: scope to the LiaoT frontend origin only. Wildcard "*" lets
+-- HTTP CORS: scope to the LyaoTalk frontend origin only. Wildcard "*" lets
 -- any third-party website call Prosody's HTTP endpoints (BOSH, file upload
 -- metadata) using credentials in the browser; that's a recipe for CSRF +
 -- credential abuse. install.sh substitutes XMPP_FRONTEND_ORIGIN with the
@@ -124,7 +124,7 @@ turncredentials_secret = "TURN_SECRET_PLACEHOLDER"
 turncredentials_ttl = 86400
 
 -- Push notification relay configuration
--- mod_cloud_notify forwards push notifications to the LiaoT FastAPI backend,
+-- mod_cloud_notify forwards push notifications to the LyaoTalk FastAPI backend,
 -- which then dispatches them as Web Push to subscribed PWA clients.
 push_notification_with_body = false  -- privacy: don't include message body in push
 push_notification_with_sender = false  -- ditto for sender JID
@@ -136,7 +136,7 @@ VirtualHost "XMPP_DOMAIN"
   authentication = "internal_hashed"
 
 Component "conference.XMPP_DOMAIN" "muc"
-  name = "LiaoT Conference"
+  name = "LyaoTalk Conference"
   modules_enabled = {
     "muc_mam";
   }
@@ -145,15 +145,16 @@ Component "conference.XMPP_DOMAIN" "muc"
   -- which is a spam / abuse / disk-fill vector. "local" allows our own
   -- accounts; admins can still create rooms regardless.
   restrict_room_creation = "local"
+  muc_room_default_persistent = true
   max_history_messages = 100
   muc_log_by_default = false  -- per-room MAM, not all rooms by default
 
 
 -- =====================================================
--- Push notification appserver Component (LiaoT custom relay)
--- See configs/prosody/mod_liaot_push.lua
+-- Push notification appserver Component (LyaoTalk custom relay)
+-- See configs/prosody/mod_lyaotalk_push.lua
 -- =====================================================
 Component "push.XMPP_DOMAIN"
-  modules_enabled = { "liaot_push" }
-  liaot_push_url = "http://127.0.0.1:8000/push/notify"
-  liaot_push_secret = "PUSH_SHARED_SECRET_PLACEHOLDER"
+  modules_enabled = { "lyaotalk_push" }
+  lyaotalk_push_url = "http://127.0.0.1:8000/push/notify"
+  lyaotalk_push_secret = "PUSH_SHARED_SECRET_PLACEHOLDER"

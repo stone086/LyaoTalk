@@ -21,8 +21,8 @@ grep -q 'minio.unavailable_during_upload' apps/web/src/services/browserCompatibi
 grep -q 'Token expires during upload' docs/compatibility/COMPATIBILITY_CHAOS.md || fail "token expiry recovery doc missing"
 
 if [[ -d apps/web/node_modules ]]; then
-  (cd apps/web && npx tsc --noEmit --pretty false >/tmp/liaot-compat-tsc.log 2>&1) || {
-    cat /tmp/liaot-compat-tsc.log >&2
+  (cd apps/web && npx tsc --noEmit --pretty false >/tmp/lyaotalk-compat-tsc.log 2>&1) || {
+    cat /tmp/lyaotalk-compat-tsc.log >&2
     fail "TypeScript check failed"
   }
   ok "TypeScript compatibility check passed"
