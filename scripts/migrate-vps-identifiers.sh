@@ -90,6 +90,14 @@ systemctl enable --now lyaotalk-prosody.socket
 systemctl start lyaotalk-redis lyaotalk-minio lyaotalk-api
 systemctl restart prosody
 systemctl reload nginx
-curl -fsS --max-time 15 https://lyaot.2-yc.com/api/health >/dev/null
+healthy=false
+for attempt in {1..15}; do
+  if curl -fsS --max-time 5 https://lyaot.2-yc.com/api/health >/dev/null 2>&1; then
+    healthy=true
+    break
+  fi
+  sleep 2
+done
+[[ "$healthy" == true ]] || { echo "API health check failed after startup grace period" >&2; exit 1; }
 systemctl is-active --quiet matrix-synapse mas nginx lyaotalk-api lyaotalk-minio lyaotalk-redis prosody
 echo "LyaoTalk service user, helper socket, MUC persistence, and active configs migrated"

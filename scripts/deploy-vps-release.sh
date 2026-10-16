@@ -57,7 +57,15 @@ systemctl restart lyaotalk-api
 systemctl restart lyaotalk-prosody.socket
 nginx -t
 systemctl reload nginx
-curl --fail --silent --show-error --max-time 15 https://lyaot.2-yc.com/api/health >/dev/null
+healthy=false
+for attempt in {1..15}; do
+  if curl --fail --silent --max-time 5 https://lyaot.2-yc.com/api/health >/dev/null; then
+    healthy=true
+    break
+  fi
+  sleep 2
+done
+[[ "$healthy" == true ]] || { echo "API health check failed after startup grace period" >&2; exit 1; }
 systemctl is-active --quiet lyaotalk-api prosody lyaotalk-minio lyaotalk-redis matrix-synapse mas
 trap - ERR
 printf 'Deployed LyaoTalk %s; Matrix healthy\n' "$sha"
