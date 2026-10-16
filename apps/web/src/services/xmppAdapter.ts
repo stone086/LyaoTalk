@@ -1011,7 +1011,7 @@ export class XmppClient {
       .c("x", { xmlns: "jabber:x:data", type: "submit" })
       .c("field", { var: "FORM_TYPE", type: "hidden" }).c("value").t("http://jabber.org/protocol/pubsub#publish-options").up().up()
       .c("field", { var: "pubsub#persist_items" }).c("value").t("true").up().up()
-      .c("field", { var: "pubsub#max_items" }).c("value").t("max").up().up()
+      .c("field", { var: "pubsub#max_items" }).c("value").t("256").up().up()
       .c("field", { var: "pubsub#send_last_published_item" }).c("value").t("never").up().up()
       .c("field", { var: "pubsub#access_model" }).c("value").t("whitelist");
     return new Promise((resolve, reject) => {
