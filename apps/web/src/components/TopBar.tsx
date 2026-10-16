@@ -82,7 +82,11 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
   const toggleOmemo = () => {
     const next = !omemoEnabled;
     setOmemoEnabled(next);
-    if (next) toast(t("omemo.enabledNotice"), { duration: 5000 });
+    if (next) toast(t("omemo.enabledNotice"), {
+      duration: 2200,
+      position: "top-right",
+      style: { marginTop: "68px", maxWidth: "min(20rem, calc(100vw - 2rem))" },
+    });
     setShowChatMenu(false);
   };
 

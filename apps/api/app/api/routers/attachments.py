@@ -99,9 +99,7 @@ def _public_media_signature(attachment_id: str, expires: int) -> str:
     return hmac.new(settings.SECRET_KEY.encode(), message, hashlib.sha256).hexdigest()
 
 
-# Media links are stored in chat history. A three-day capability made voice
-# messages permanently unavailable to other XMPP clients after that window.
-ENCRYPTED_MEDIA_LIFETIME_SECONDS = 365 * 24 * 3600
+ENCRYPTED_MEDIA_LIFETIME_SECONDS = 3 * 24 * 3600
 
 
 @router.post("/{attachment_id}/publish-encrypted", summary="Publish a temporary encrypted media link")
