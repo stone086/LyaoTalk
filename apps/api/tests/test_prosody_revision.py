@@ -14,7 +14,7 @@ def test_internal_account_file_revision_changes_on_direct_rewrite(tmp_path, monk
     spec.loader.exec_module(helper)
     monkeypatch.setattr(helper, "DOMAIN", "lyaot.2-yc.com")
     monkeypatch.setattr(helper, "DATA_ROOT", str(tmp_path))
-    account_dir = tmp_path / "lyaotalk%2e2%2dyc%2ecom" / "accounts"
+    account_dir = tmp_path / "lyaot%2e2%2dyc%2ecom" / "accounts"
     account_dir.mkdir(parents=True)
     account_file = account_dir / "alice.dat"
     account_file.write_text("old prosody credential")
