@@ -20,7 +20,7 @@ import type { ChatToolbarAction } from "@/plugins/sdk";
 import { format, isSameDay } from "date-fns";
 import { formatMsgTime, formatMsgTimeFull } from "@/utils/helpers";
 import { clsx } from "clsx";
-import { Send, Plus, X, ChevronDown, CornerUpLeft, Loader, Smile, MoreVertical, Star, Pencil, Forward, Trash2, Lock, LockOpen, Check, CheckCheck, Clock, Video, UserPlus, Mic, Image as ImageIcon, FileText, MapPin, UserRound, Camera } from "lucide-react";
+import { Send, Plus, X, ChevronDown, CornerUpLeft, Loader, Smile, MoreVertical, Star, Pencil, Forward, Trash2, Lock, LockOpen, Check, CheckCheck, Clock, UserPlus, Mic, Image as ImageIcon, FileText, MapPin, UserRound, Camera, ClipboardPaste } from "lucide-react";
 import { processSlashCommand } from "@/services/slashCommands";
 import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
 import MediaCapture from "./MediaCapture";
@@ -482,7 +482,7 @@ export default function MessageView({ conversationId }: { conversationId: string
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [locationDialogOpen, setLocationDialogOpen] = useState(false);
-  const [captureMode, setCaptureMode] = useState<"photo" | "video" | null>(null);
+  const [captureOpen, setCaptureOpen] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   // Track the resolved theme so the third-party emoji picker can follow it.
   // We watch the .light / .dark class on <html> via MutationObserver.
@@ -517,7 +517,6 @@ export default function MessageView({ conversationId }: { conversationId: string
   const composerRef = useRef<HTMLDivElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const loadedDraftConversationRef = useRef<string | null>(null);
 
@@ -609,9 +608,39 @@ export default function MessageView({ conversationId }: { conversationId: string
     setLocationDialogOpen(true);
   };
 
-  const openCapture = (mode: "photo" | "video") => {
+  const openCapture = () => {
     setAttachmentMenuOpen(false);
-    setCaptureMode(mode);
+    setCaptureOpen(true);
+  };
+
+  const pasteFromClipboard = async () => {
+    setAttachmentMenuOpen(false);
+    if (!navigator.clipboard) {
+      toast.error(t("chat.clipboardUnavailable"));
+      return;
+    }
+    try {
+      if (navigator.clipboard.read) {
+        const items = await navigator.clipboard.read();
+        const files: File[] = [];
+        for (const item of items) {
+          for (const mimeType of item.types.filter((type) => type.startsWith("image/"))) {
+            const blob = await item.getType(mimeType);
+            files.push(new File([blob], `clipboard-${Date.now()}.${mimeType.split("/")[1] || "png"}`, { type: mimeType }));
+            break;
+          }
+        }
+        if (files.length) {
+          await uploadSelectedFiles(files);
+          return;
+        }
+      }
+      const text = await navigator.clipboard.readText();
+      if (text) appendToComposer(text);
+      else toast.error(t("chat.clipboardEmpty"));
+    } catch {
+      toast.error(t("chat.clipboardUnavailable"));
+    }
   };
 
   const shareContact = async () => {
@@ -1507,7 +1536,6 @@ export default function MessageView({ conversationId }: { conversationId: string
         </div>
         <input ref={galleryInputRef} type="file" accept="image/*" multiple className="hidden" aria-hidden="true" onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; setAttachmentMenuOpen(false); void uploadSelectedFiles(files); }} />
         <input ref={fileInputRef} type="file" multiple className="hidden" aria-hidden="true" onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; setAttachmentMenuOpen(false); void uploadSelectedFiles(files); }} />
-        <input ref={videoInputRef} type="file" accept="video/*" className="hidden" aria-hidden="true" onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; setAttachmentMenuOpen(false); void uploadSelectedFiles(files); }} />
         {uploadingCount > 0 && <p className="mt-2 text-xs text-surface-200/70" role="status">{t("chat.uploadingAttachments")}</p>}
         {attachmentMenuOpen && (
           <div
@@ -1525,8 +1553,8 @@ export default function MessageView({ conversationId }: { conversationId: string
               { key: "chat.files", icon: FileText, action: () => fileInputRef.current?.click() },
               { key: "chat.location", icon: MapPin, action: shareLocation },
               { key: "chat.contact", icon: UserRound, action: () => void shareContact() },
-              { key: "chat.camera", icon: Camera, action: () => openCapture("photo") },
-              { key: "chat.video", icon: Video, action: () => openCapture("video") },
+              { key: "chat.camera", icon: Camera, action: openCapture },
+              { key: "chat.paste", icon: ClipboardPaste, action: () => void pasteFromClipboard() },
             ] as const).map(({ key, icon: Icon, action }) => (
               <button key={key} type="button" onClick={action} className="flex min-w-0 flex-col items-center gap-1.5 text-surface-100 hover:text-surface-50" aria-label={t(key)}>
                 <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-800 hover:bg-surface-700 transition-colors"><Icon size={24} strokeWidth={2.2} /></span>
@@ -1610,12 +1638,11 @@ export default function MessageView({ conversationId }: { conversationId: string
           onClose={() => setLocationDialogOpen(false)}
         />
       )}
-      {captureMode && (
+      {captureOpen && (
         <MediaCapture
-          mode={captureMode}
           onCaptured={(file) => { void uploadSelectedFiles([file]); }}
-          onFallback={() => (captureMode === "photo" ? galleryInputRef : videoInputRef).current?.click()}
-          onClose={() => setCaptureMode(null)}
+          onFallback={() => fileInputRef.current?.click()}
+          onClose={() => setCaptureOpen(false)}
         />
       )}
       {lightbox && (
