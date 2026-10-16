@@ -76,7 +76,7 @@ self.addEventListener("push", (event: PushEvent) => {
     .replace(/[\u0000-\u001f\u007f\\/]/g, "")
     .slice(0, 128);
 
-  const title = stripCtrl(data.title || "LiaoT").slice(0, 100);
+  const title = stripCtrl(data.title || "Lyao Talk").slice(0, 100);
   const options: NotificationOptions = {
     body: stripCtrl(data.body || "").slice(0, 500),
     icon: "/icon-192.png",

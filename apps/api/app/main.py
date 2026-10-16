@@ -61,9 +61,9 @@ async def lifespan(app: FastAPI):
 APP_VERSION = get_app_version()
 
 app = FastAPI(
-    title="LiaoT API",
+    title="Lyao Talk API",
     version=APP_VERSION,
-    description="Backend API for the LiaoT web XMPP client platform.",
+    description="Backend API for the Lyao Talk web XMPP client platform.",
     openapi_tags=[
         {"name": "auth", "description": "Authentication endpoints. Public."},
         {"name": "accounts", "description": "XMPP account management. Users can access their own account; admins can access all."},

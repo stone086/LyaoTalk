@@ -1,4 +1,4 @@
-// PWA utilities for LiaoT
+// PWA utilities for Lyao Talk
 
 /**
  * Check if app is running in standalone (installed PWA) mode
@@ -35,7 +35,7 @@ export function canInstall(): boolean {
 /**
  * Update document title with unread count
  */
-export function updateTabTitle(unreadCount: number, baseTitle = "LiaoT") {
+export function updateTabTitle(unreadCount: number, baseTitle = "Lyao Talk") {
   document.title = unreadCount > 0 ? `(${unreadCount}) ${baseTitle}` : baseTitle;
 }
 

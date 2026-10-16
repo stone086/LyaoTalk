@@ -80,7 +80,7 @@ Usage:
   bash install.sh --repo <github_repo_url> --domain <your_domain> --email <your_email> [options]
 
 Required:
-  --repo      Git repository URL, for example: https://github.com/stone086/LiaoT.git
+  --repo      Git repository URL, for example: https://github.com/stone086/LyaoTalk.git
   --domain    Public domain, for example: chat.example.com
   --email     Email for Let's Encrypt certificate notices
 
@@ -602,7 +602,7 @@ install_prosody() {
   sed -i "s|XMPP_DOMAIN|${XMPP_DOMAIN}|g" /etc/prosody/prosody.cfg.lua
 
   # Restrict CORS to the actual frontend origin instead of "*". DOMAIN here is
-  # the public hostname of the web app; if you front-end LiaoT on a
+  # the public hostname of the web app; if you front-end Lyao Talk on a
   # different host, set LIAOT_FRONTEND_ORIGIN before running install.sh.
   XMPP_FRONTEND_ORIGIN="${LIAOT_FRONTEND_ORIGIN:-https://${DOMAIN}}"
   sed -i "s|XMPP_FRONTEND_ORIGIN|${XMPP_FRONTEND_ORIGIN}|g" /etc/prosody/prosody.cfg.lua
@@ -648,7 +648,7 @@ install_prosody() {
     sed -i "s|TURN_SECRET_PLACEHOLDER|${TURN_SECRET}|g" /etc/prosody/prosody.cfg.lua
   fi
 
-  # Install LiaoT push relay module
+  # Install Lyao Talk push relay module
   mkdir -p /usr/lib/prosody-modules/mod_liaot_push
   cp configs/prosody/mod_liaot_push.lua /usr/lib/prosody-modules/mod_liaot_push/mod_liaot_push.lua
 
@@ -668,7 +668,7 @@ install_prosody() {
   install -m 644 configs/prosody/liaot_registration_helper.py /usr/local/lib/liaot/liaot_registration_helper.py
   cat > /etc/systemd/system/liaot-prosody.socket <<EOF
 [Unit]
-Description=LiaoT Prosody registration socket
+Description=Lyao Talk Prosody registration socket
 [Socket]
 ListenStream=/run/liaot-prosody.sock
 SocketUser=prosody
@@ -680,7 +680,7 @@ WantedBy=sockets.target
 EOF
   cat > /etc/systemd/system/liaot-prosody.service <<EOF
 [Unit]
-Description=LiaoT Prosody registration helper
+Description=Lyao Talk Prosody registration helper
 Requires=liaot-prosody.socket
 After=prosody.service
 [Service]
@@ -724,7 +724,7 @@ install_coturn() {
   PROMETHEUS_ALLOW_CIDR="${PROMETHEUS_ALLOW_CIDR:-}"
 
   cat > /etc/turnserver.conf <<EOF
-# LiaoT coturn config (auto-generated)
+# Lyao Talk coturn config (auto-generated)
 listening-port=3478
 tls-listening-port=5349
 
@@ -991,7 +991,7 @@ EOF
   (( UVICORN_WORKERS < 2 )) && UVICORN_WORKERS=2
   cat > /etc/systemd/system/liaot-api.service << EOF
 [Unit]
-Description=LiaoT FastAPI Backend
+Description=Lyao Talk FastAPI Backend
 After=network.target postgresql.service redis.service
 Requires=postgresql.service
 
@@ -1188,7 +1188,7 @@ setup_ssl() {
     sed -i "/location = \/api\/metrics {/,/deny all;/ s|deny all;|allow ${PROMETHEUS_ALLOW_CIDR};\n        deny all;|" /etc/nginx/sites-available/liaot
   fi
   cat > /etc/nginx/conf.d/liaot-rate-limit.conf << 'EOF'
-# LiaoT rate-limit and connection-limit zones.
+# Lyao Talk rate-limit and connection-limit zones.
 # Referenced by /etc/nginx/sites-available/liaot. If you change zone
 # names here, update the conf to match.
 #
@@ -1531,7 +1531,7 @@ alert() {
   local msg="\$1"
   echo "[BACKUP ERROR] \$msg" >&2
   if [ -n "\$ALERT_EMAIL" ] && command -v mail >/dev/null 2>&1; then
-    echo "\$msg" | mail -s "LiaoT backup failure on \$(hostname)" "\$ALERT_EMAIL" || true
+    echo "\$msg" | mail -s "Lyao Talk backup failure on \$(hostname)" "\$ALERT_EMAIL" || true
   fi
 }
 
@@ -1677,7 +1677,7 @@ for svc in "${services[@]}"; do
     echo "$msg" >> /var/log/liaot-alert.log
     systemctl restart "$svc" || true
     if [[ -n "$ALERT_EMAIL" ]] && command -v mail >/dev/null 2>&1; then
-      echo "$msg" | mail -s "LiaoT service alert" "$ALERT_EMAIL" || true
+      echo "$msg" | mail -s "Lyao Talk service alert" "$ALERT_EMAIL" || true
     fi
   fi
 done
@@ -1691,7 +1691,7 @@ for mount in / /data; do
     msg="$(date '+%F %T') WARN disk usage high: $mount ${use_pct}%"
     echo "$msg" >> /var/log/liaot-alert.log
     if [[ -n "$ALERT_EMAIL" ]] && command -v mail >/dev/null 2>&1; then
-      echo "$msg" | mail -s "LiaoT disk alert" "$ALERT_EMAIL" || true
+      echo "$msg" | mail -s "Lyao Talk disk alert" "$ALERT_EMAIL" || true
     fi
   fi
 done
@@ -1706,7 +1706,7 @@ setup_quick_check() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "=== LiaoT 30s Check ==="
+echo "=== Lyao Talk 30s Check ==="
 for svc in postgresql redis-server prosody minio liaot-api nginx; do
   state=$(systemctl is-active "$svc" 2>/dev/null || true)
   printf "%-16s %s\n" "$svc" "${state:-unknown}"
@@ -1723,7 +1723,7 @@ CHECK
 write_secrets_file() {
   local secrets_file="/root/liaot-secrets.txt"
   cat > "${secrets_file}" <<EOF
-LiaoT Secrets
+Lyao Talk Secrets
 Generated: $(date '+%F %T')
 Domain: ${DOMAIN}
 
@@ -1743,7 +1743,7 @@ EOF
 print_summary() {
   echo ""
   echo -e "${GREEN}============================================================${NC}"
-  echo -e "${GREEN}                  LiaoT Install Completed                ${NC}"
+  echo -e "${GREEN}                  Lyao Talk Install Completed                ${NC}"
   echo -e "${GREEN}============================================================${NC}"
   echo ""
   echo -e "  ${CYAN}Web URL:${NC}        https://${DOMAIN}"
@@ -1792,7 +1792,7 @@ main() {
   [[ -d "${SRC_DIR}/apps/web" ]] || error "Missing source directory: ${SRC_DIR}/apps/web"
 
   echo -e "${CYAN}"
-  echo -e "${CYAN}LiaoT Installer${NC}"
+  echo -e "${CYAN}Lyao Talk Installer${NC}"
   echo ""
 
 
