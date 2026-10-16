@@ -118,7 +118,9 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
         </button>}
         {!compact && !conversation && <div className="hidden flex-1 sm:block" />}
         {!compact && <>
-        {conversation && <button type="button" onClick={() => setShowSearch(true)} className="btn-ghost hidden p-2 min-[380px]:inline-flex" title={t("topbar.searchPlaceholder")} aria-label={t("topbar.searchPlaceholder")}><Search size={16} /></button>}
+        {conversation && <button type="button" onClick={() => setShowSearch(true)} className="btn-ghost p-2" title={t("topbar.searchPlaceholder")} aria-label={t("topbar.searchPlaceholder")}><Search size={16} /></button>}
+        {conversation && <button type="button" onClick={toggleOmemo} className={`btn-ghost p-2 ${omemoEnabled ? "text-success" : "text-warn"}`} title={omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-label={omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-pressed={omemoEnabled}>{omemoEnabled ? <Lock size={16} /> : <Unlock size={16} />}</button>}
+        {conversation && <button type="button" onClick={toggleTheme} className="btn-ghost p-2" title={t("topbar.theme")} aria-label={t("topbar.theme")}>{dark ? <Sun size={16} /> : <Moon size={16} />}</button>}
         {conversation?.type === "private" && <div ref={callMenuRef} className="relative">
           <button type="button" onClick={() => { setShowCallMenu((value) => !value); setShowChatMenu(false); }} className="btn-ghost p-2" title={t("chat.callOptions")} aria-label={t("chat.callOptions")} aria-expanded={showCallMenu} aria-haspopup="menu"><Phone size={16} /></button>
           {showCallMenu && <div role="menu" aria-label={t("chat.callOptions")} className="popover-surface absolute right-0 top-full z-30 mt-1 w-40 rounded-xl p-1 text-sm">
@@ -153,10 +155,7 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
         )}
         </>}
         {showChatMenu && conversation && <div className="popover-surface absolute right-2 top-full z-30 mt-1 w-48 rounded-xl p-1 text-sm">
-          <button type="button" onClick={() => { setShowSearch(true); setShowChatMenu(false); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover-surface min-[380px]:hidden"><Search size={15} />{t("topbar.searchPlaceholder")}</button>
           <button type="button" onClick={() => { onToggleRight?.(); setShowChatMenu(false); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover-surface"><PanelRight size={15} />{t("topbar.toggleInfo")}</button>
-          <button type="button" onClick={toggleOmemo} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover-surface">{omemoEnabled ? <Lock size={15} /> : <Unlock size={15} />}{omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")}</button>
-          <button type="button" onClick={toggleTheme} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover-surface">{dark ? <Sun size={15} /> : <Moon size={15} />}{t("topbar.theme")}</button>
         </div>}
       </header>
       {showSearch && <GlobalSearch onClose={() => setShowSearch(false)} />}

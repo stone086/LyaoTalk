@@ -1,61 +1,84 @@
 import { useEffect, useRef, useState } from "react";
+import { Camera, SwitchCamera, Video, X } from "lucide-react";
 import { useLanguage } from "@/utils/i18n";
 
-type CaptureMode = "photo" | "video";
-
 interface MediaCaptureProps {
-  mode: CaptureMode;
   onCaptured: (file: File) => void;
   onFallback: () => void;
   onClose: () => void;
 }
 
-export default function MediaCapture({ mode, onCaptured, onFallback, onClose }: MediaCaptureProps) {
+const HOLD_TO_RECORD_MS = 450;
+const MAX_VIDEO_MS = 60_000;
+
+export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaCaptureProps) {
   const { t } = useLanguage();
   const previewRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const microphoneRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRef = useRef(false);
+  const recordingRef = useRef(false);
+  const startingRef = useRef(false);
+  const releasePendingRef = useRef(false);
   const [error, setError] = useState(false);
   const [ready, setReady] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [seconds, setSeconds] = useState(0);
+  const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
 
   useEffect(() => {
-    let cancelled = false;
+    let disposed = false;
     cancelledRef.current = false;
-    setError(false);
     setReady(false);
-    if (!navigator.mediaDevices?.getUserMedia || (mode === "video" && typeof MediaRecorder === "undefined")) {
+    setError(false);
+    if (!navigator.mediaDevices?.getUserMedia) {
       setError(true);
       return;
     }
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: mode === "video" })
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facingMode } }, audio: false })
       .then((stream) => {
-        if (cancelled) {
+        if (disposed) {
           stream.getTracks().forEach((track) => track.stop());
           return;
         }
         streamRef.current = stream;
         if (previewRef.current) {
           previewRef.current.srcObject = stream;
-          void previewRef.current.play();
+          void previewRef.current.play().catch(() => {});
         }
         setReady(true);
       })
-      .catch(() => { if (!cancelled) setError(true); });
+      .catch(() => { if (!disposed) setError(true); });
     return () => {
-      cancelled = true;
-      cancelledRef.current = true;
-      if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+      disposed = true;
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     };
-  }, [mode]);
+  }, [facingMode]);
+
+  useEffect(() => {
+    if (!recording) return;
+    const started = Date.now();
+    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 250);
+    return () => clearInterval(timer);
+  }, [recording]);
+
+  useEffect(() => () => {
+    cancelledRef.current = true;
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    microphoneRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
   const takePhoto = () => {
     const preview = previewRef.current;
-    if (!preview?.videoWidth || !preview.videoHeight) return;
+    if (!preview?.videoWidth || !preview.videoHeight || recordingRef.current) return;
     const canvas = document.createElement("canvas");
     canvas.width = preview.videoWidth;
     canvas.height = preview.videoHeight;
@@ -67,27 +90,67 @@ export default function MediaCapture({ mode, onCaptured, onFallback, onClose }: 
     }, "image/jpeg", 0.9);
   };
 
-  const startRecording = () => {
-    const stream = streamRef.current;
-    if (!stream) return;
+  const stopRecording = () => {
+    if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+  };
+
+  const startRecording = async () => {
+    if (!streamRef.current || recordingRef.current || startingRef.current || typeof MediaRecorder === "undefined") {
+      if (typeof MediaRecorder === "undefined") setError(true);
+      return;
+    }
+    startingRef.current = true;
     try {
+      // A denied microphone must not prevent photos or silent video.
+      try {
+        microphoneRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch {
+        microphoneRef.current = null;
+      }
+      if (cancelledRef.current || !streamRef.current) return;
+      const tracks = [...streamRef.current.getVideoTracks(), ...(microphoneRef.current?.getAudioTracks() ?? [])];
+      const stream = new MediaStream(tracks);
       const preferred = ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]
         .find((mimeType) => MediaRecorder.isTypeSupported(mimeType));
       const recorder = new MediaRecorder(stream, preferred ? { mimeType: preferred } : undefined);
       chunksRef.current = [];
       recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
       recorder.onstop = () => {
+        recordingRef.current = false;
+        setRecording(false);
+        microphoneRef.current?.getTracks().forEach((track) => track.stop());
+        microphoneRef.current = null;
         if (cancelledRef.current || !chunksRef.current.length) return;
         const mimeType = recorder.mimeType.startsWith("video/mp4") ? "video/mp4" : "video/webm";
-        const extension = mimeType === "video/mp4" ? "mp4" : "webm";
-        onCaptured(new File(chunksRef.current, `video-${Date.now()}.${extension}`, { type: mimeType }));
+        onCaptured(new File(chunksRef.current, `video-${Date.now()}.${mimeType === "video/mp4" ? "mp4" : "webm"}`, { type: mimeType }));
         onClose();
       };
+      recorder.onerror = () => setError(true);
       recorderRef.current = recorder;
-      recorder.start();
+      recorder.start(250);
+      recordingRef.current = true;
       setRecording(true);
+      setSeconds(0);
+      maxTimerRef.current = setTimeout(stopRecording, MAX_VIDEO_MS);
+      if (releasePendingRef.current) setTimeout(stopRecording, 500);
     } catch {
+      microphoneRef.current?.getTracks().forEach((track) => track.stop());
       setError(true);
+    } finally {
+      startingRef.current = false;
+    }
+  };
+
+  const releaseShutter = (cancel = false) => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+      if (!cancel) takePhoto();
+    } else if (startingRef.current) {
+      releasePendingRef.current = true;
+    } else if (recordingRef.current) {
+      stopRecording();
     }
   };
 
@@ -97,32 +160,47 @@ export default function MediaCapture({ mode, onCaptured, onFallback, onClose }: 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-label={t(mode === "photo" ? "chat.camera" : "chat.video")}>
-      <div className="popover-surface w-full max-w-xl space-y-3 rounded-2xl p-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">{t(mode === "photo" ? "chat.camera" : "chat.video")}</h2>
-          <button type="button" className="btn-ghost" onClick={close}>{t("common.cancel")}</button>
-        </div>
-        {error ? (
-          <div className="space-y-3 text-sm">
-            <p>{t("chat.cameraUnavailable")}</p>
-            <button type="button" className="btn-primary" onClick={() => { onFallback(); close(); }}>{t("chat.chooseExistingFile")}</button>
-          </div>
-        ) : (
-          <>
-            <video ref={previewRef} autoPlay muted playsInline className="aspect-video w-full rounded-xl bg-black object-contain" />
-            <div className="flex justify-center">
-              {mode === "photo" ? (
-                <button type="button" className="btn-primary" disabled={!ready} onClick={takePhoto}>{t("chat.takePhoto")}</button>
-              ) : recording ? (
-                <button type="button" className="btn-primary" onClick={() => recorderRef.current?.stop()}>{t("chat.stopVideo")}</button>
-              ) : (
-                <button type="button" className="btn-primary" disabled={!ready} onClick={startRecording}>{t("chat.recordVideo")}</button>
-              )}
-            </div>
-          </>
-        )}
+    <div className="fixed inset-0 z-[80] flex h-[100dvh] flex-col bg-black text-white" role="dialog" aria-modal="true" aria-label={t("chat.camera")}>
+      <div className="flex items-center justify-between px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-3">
+        <button type="button" className="rounded-full p-2" onClick={close} aria-label={t("common.cancel")}><X size={26} /></button>
+        <span className="text-sm">{recording ? `${t("chat.recordVideo")} · ${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}` : t("chat.camera")}</span>
+        <button type="button" className="rounded-full p-2 disabled:opacity-30" onClick={() => setFacingMode((value) => value === "environment" ? "user" : "environment")} disabled={!ready || recording} aria-label={t("chat.switchCamera")}><SwitchCamera size={24} /></button>
       </div>
+      {error ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+          <p>{t("chat.cameraUnavailable")}</p>
+          <button type="button" className="btn-primary" onClick={() => { onFallback(); close(); }}>{t("chat.chooseExistingFile")}</button>
+        </div>
+      ) : (
+        <>
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black">
+            <video ref={previewRef} autoPlay muted playsInline className="h-full w-full object-contain" />
+          </div>
+          <div className="flex flex-col items-center gap-5 px-4 pt-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
+            <p className="text-sm text-white/70">{t("chat.captureHint")}</p>
+            <div className="grid w-full max-w-md grid-cols-3 items-center justify-items-center">
+              <button type="button" className="flex flex-col items-center gap-1 text-xs text-white/80" onClick={() => { onFallback(); close(); }} aria-label={t("chat.chooseExistingFile")}><Camera size={24} />{t("chat.gallery")}</button>
+              <button
+                type="button"
+                disabled={!ready}
+                className={`h-20 w-20 rounded-full border-4 border-white p-1 touch-none disabled:opacity-40 ${recording ? "scale-90" : ""}`}
+                aria-label={recording ? t("chat.stopVideo") : t("chat.captureHint")}
+                onContextMenu={(event) => event.preventDefault()}
+                onPointerDown={(event) => {
+                  if (!ready || event.button !== 0 || recordingRef.current) return;
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                  releasePendingRef.current = false;
+                  holdTimerRef.current = setTimeout(() => { holdTimerRef.current = null; void startRecording(); }, HOLD_TO_RECORD_MS);
+                }}
+                onPointerUp={() => releaseShutter()}
+                onPointerCancel={() => releaseShutter(true)}
+                onClick={(event) => { if (event.detail === 0 && !recordingRef.current) takePhoto(); }}
+              ><span className={`block h-full w-full rounded-full ${recording ? "bg-red-500" : "bg-white"}`} /></button>
+              <button type="button" disabled={!ready} className="flex flex-col items-center gap-1 text-xs text-white/80 disabled:opacity-40" onClick={() => recordingRef.current ? stopRecording() : void startRecording()} aria-label={recording ? t("chat.stopVideo") : t("chat.recordVideo")}><Video size={24} />{recording ? t("chat.stopVideo") : t("chat.recordVideo")}</button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
