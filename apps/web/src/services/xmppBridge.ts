@@ -334,6 +334,12 @@ export function initXmppBridge(client: XmppClient) {
     const fromDomain = (from.split("@")[1] ?? "").toLowerCase();
     const isConferenceJid = fromDomain.startsWith("conference.") || fromDomain.includes(".conference.");
     const isGroupContext = message.type === "groupchat" || isConferenceJid;
+    const roomNickname = isGroupContext ? String(message.from).split("/")[1] ?? "" : "";
+    const roomMember = isGroupContext ? (useGroupStore.getState().members[`${accountId}::${from}`] ?? [])
+      .find((member) => member.nickname === roomNickname) : undefined;
+    const cryptoSender = isGroupContext
+      ? normalizeBareJid(message.realSenderJid || roomMember?.jid || "")
+      : from;
     if (!isValidBareJid(from) && message.type !== "groupchat") return;
 
     // XEP-0280 Carbon: this is a copy of a message we sent from another device
@@ -397,6 +403,7 @@ export function initXmppBridge(client: XmppClient) {
 
     // Find or create conversation
     const convId = generateConversationId(accountId, from);
+    if (isGroupContext && useChatStore.getState().messages[convId]?.some((m) => m.id === message.id)) return;
     const existingConv = useChatStore.getState().conversations[convId];
 
     if (!existingConv) {
@@ -431,16 +438,20 @@ export function initXmppBridge(client: XmppClient) {
       // decrypt attempt, so even if everything below fails the user never sees
       // "I sent you an OMEMO encrypted message but your client doesn't seem to support that".
       incomingBody = "";
+      if (isGroupContext && (!cryptoSender || !isValidBareJid(cryptoSender) || cryptoSender.endsWith(`@${from}`))) {
+        incomingBody = "🔒 Encrypted group message — sender's account is unavailable.";
+        decryptFailed = true;
+      } else {
 
       // BTBV: detect new peer device and notify user
       try {
         const senderDevId = incomingOmemo.sid;
-        const trustKey = `liaot-omemo-trust:${accountId}:${from}:${senderDevId}`;
+        const trustKey = `liaot-omemo-trust:${accountId}:${cryptoSender}:${senderDevId}`;
         if (senderDevId && !localStorage.getItem(trustKey)) {
           // First time seeing this device - flag as auto-trusted (BTBV)
           localStorage.setItem(trustKey, "trusted");
           // If peer already has other devices, this is a NEW device - warn
-          const otherDevicePattern = `liaot-omemo-trust:${accountId}:${from}:`;
+          const otherDevicePattern = `liaot-omemo-trust:${accountId}:${cryptoSender}:`;
           let otherCount = 0;
           for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i);
@@ -451,7 +462,7 @@ export function initXmppBridge(client: XmppClient) {
               id: crypto.randomUUID(),
               conversationId: generateConversationId(accountId, from),
               senderJid: "system",
-              body: `⚠ ${from.split("@")[0]} added a new device (#${senderDevId}). Verify their fingerprint in the trust panel.`,
+              body: `⚠ ${cryptoSender.split("@")[0]} added a new device (#${senderDevId}). Verify their fingerprint in the trust panel.`,
               bodyType: "text" as const,
               direction: "system" as const,
               status: "delivered" as const,
@@ -489,7 +500,7 @@ export function initXmppBridge(client: XmppClient) {
                 body: base64ToArrayBuffer(k.value),
               })),
             };
-            decrypted = await decryptEnvelope(accountId, localDeviceId, from, newEnvelope);
+            decrypted = await decryptEnvelope(accountId, localDeviceId, cryptoSender, newEnvelope);
           }
         }
       } catch (e) {
@@ -498,7 +509,7 @@ export function initXmppBridge(client: XmppClient) {
       // Fall back to legacy custom-protocol decryption
       if (decrypted == null) {
         try {
-          decrypted = await decryptOmemoEnvelopeFromPeer(accountId, from, incomingOmemo);
+          decrypted = await decryptOmemoEnvelopeFromPeer(accountId, cryptoSender, incomingOmemo);
         } catch (e) {
           // Both paths failed — record both error reasons for diagnostics
           if (!decryptFailReason) {
@@ -510,7 +521,7 @@ export function initXmppBridge(client: XmppClient) {
         // Structured log so admins can grep "omemo-decrypt-fail" and see why
         // eslint-disable-next-line no-console
         console.warn("[OMEMO] omemo-decrypt-fail", {
-          from,
+          from: cryptoSender,
           accountId,
           senderDevId: incomingOmemo.sid,
           namespace: incomingOmemo.namespace,
@@ -529,6 +540,7 @@ export function initXmppBridge(client: XmppClient) {
       } else {
         incomingBody = decrypted;
       }
+      }
     } else if (incomingEncrypted) {
       const decrypted = await decryptBodyFromPeer(accountId, from, incomingBody);
       if (decrypted == null) {
@@ -542,7 +554,8 @@ export function initXmppBridge(client: XmppClient) {
     const chatMsg = {
       id: message.id,
       conversationId: convId,
-      senderJid: from,
+      senderJid: isGroupContext && isValidBareJid(cryptoSender) && !cryptoSender.endsWith(`@${from}`)
+        ? cryptoSender : from,
       body: incomingBody,
       bodyType: "text" as const,
       direction: "in" as const,
@@ -557,13 +570,13 @@ export function initXmppBridge(client: XmppClient) {
 
     if (message.replaceId) {
       useChatStore.getState().updateMessage(convId, message.replaceId, {
-        body: message.body,
+        body: incomingBody,
         editedAt: message.timestamp,
       });
       cacheMessages([
         {
           ...(useChatStore.getState().messages[convId]?.find((m) => m.id === message.replaceId) ?? chatMsg),
-          body: message.body,
+          body: incomingBody,
           editedAt: message.timestamp,
         },
       ]).catch(() => {});
@@ -663,10 +676,13 @@ export function initXmppBridge(client: XmppClient) {
     const { message } = data;
     const from = normalizeBareJid(message.from);
     const ownJid = normalizeBareJid(client.config.jid);
-    const isOwn = from === ownJid;
+    const isGroup = message.type === "groupchat";
+    const senderJid = isGroup ? normalizeBareJid(message.realSenderJid ?? "") : from;
+    const isOwn = senderJid === ownJid;
     const peerJid = isOwn ? normalizeBareJid(message.to) : from;
     if (!isValidBareJid(peerJid) || peerJid === ownJid) return;
     const convId = generateConversationId(accountId, peerJid);
+    if (useChatStore.getState().messages[convId]?.some((m) => m.id === message.id)) return;
     if (!isMessageWithinRetention(message.timestamp)) return;
     // Deleting a conversation must not be undone by an old server archive page.
     if (message.timestamp <= (useChatStore.getState().clearedBefore?.[convId] ?? 0)) return;
@@ -683,7 +699,26 @@ export function initXmppBridge(client: XmppClient) {
     const encrypted = Boolean(incomingOmemo) || (typeof body === "string" && isEncryptedPayload(body));
     let decryptFailed = false;
     if (incomingOmemo) {
-      const decrypted = await decryptOmemoEnvelopeFromPeer(accountId, peerJid, incomingOmemo);
+      let decrypted: string | null = null;
+      if (senderJid && isValidBareJid(senderJid) && incomingOmemo.namespace?.includes("axolotl")) {
+        try {
+          const store = new OmemoStore(accountId);
+          const localDeviceId = await store.getLocalRegistrationId();
+          if (localDeviceId) decrypted = await decryptEnvelope(accountId, localDeviceId, senderJid, {
+            sid: incomingOmemo.sid,
+            iv: base64ToArrayBuffer(incomingOmemo.iv),
+            payload: base64ToArrayBuffer(incomingOmemo.payload),
+            keys: incomingOmemo.keys.map((key: any) => ({
+              rid: key.rid,
+              isPreKey: key.prekey === true,
+              body: base64ToArrayBuffer(key.value),
+            })),
+          });
+        } catch { /* Fall through to the earlier OMEMO format. */ }
+      }
+      if (decrypted == null && senderJid && isValidBareJid(senderJid)) {
+        decrypted = await decryptOmemoEnvelopeFromPeer(accountId, senderJid, incomingOmemo);
+      }
       if (decrypted == null) {
         body = "[Encrypted message - unable to decrypt]";
         decryptFailed = true;
@@ -703,7 +738,7 @@ export function initXmppBridge(client: XmppClient) {
     const chatMsg = {
       id: message.id,
       conversationId: convId,
-      senderJid: from,
+      senderJid: isGroup && senderJid ? senderJid : from,
       body,
       bodyType: "text" as const,
       direction: isOwn ? ("out" as const) : ("in" as const),
@@ -1192,38 +1227,46 @@ function arrayBufferToBase64(buf: ArrayBuffer): string {
  */
 export async function tryLibsignalEncrypt(
   accountId: string,
-  peerJid: string,
+  peerJid: string | string[],
   plaintext: string
 ): Promise<any | null> {
+  const strictGroup = Array.isArray(peerJid);
+  const peerJids = Array.isArray(peerJid) ? peerJid : [peerJid];
   try {
     const store = new OmemoStore(accountId);
     const ownDeviceId = await store.getLocalRegistrationId();
-    if (!ownDeviceId) return null;
+    if (!ownDeviceId) throw new Error("OMEMO keys are not ready on this device");
 
     const client = getClient(accountId);
-    if (!client) return null;
+    if (!client) throw new Error("XMPP is not connected");
 
     // 1. Discover peer's devices via PEP devicelist
     const NS_DEVICELIST = "eu.siacs.conversations.axolotl.devicelist";
     const NS_BUNDLES = "eu.siacs.conversations.axolotl.bundles";
 
-    const deviceListEl = await client.fetchPepNode(peerJid, NS_DEVICELIST);
-    if (!deviceListEl) return null;
+    const ownJid = client.config?.jid?.split("/")[0]?.toLowerCase() ?? "";
+    const allDevices: { peerJid: string; deviceId: number }[] = [];
+    for (const recipientJid of peerJids) {
+      if (recipientJid.toLowerCase() === ownJid) continue;
+      const deviceListEl = await client.fetchPepNode(recipientJid, NS_DEVICELIST);
+      if (!deviceListEl) throw new Error(`No OMEMO devices for ${recipientJid}`);
 
-    const deviceIds: number[] = [];
-    deviceListEl.querySelectorAll("device").forEach((dev: Element) => {
-      const id = parseInt(dev.getAttribute("id") ?? "", 10);
-      if (Number.isFinite(id)) deviceIds.push(id);
-    });
-    if (deviceIds.length === 0) return null;
+      const deviceIds: number[] = [];
+      deviceListEl.querySelectorAll("device").forEach((dev: Element) => {
+        const id = parseInt(dev.getAttribute("id") ?? "", 10);
+        if (Number.isFinite(id) && id > 0) deviceIds.push(id);
+      });
+      if (deviceIds.length === 0) throw new Error(`No OMEMO devices for ${recipientJid}`);
 
-    // 2. For each device, fetch its bundle and ensure session
-    for (const deviceId of deviceIds) {
-      const sessionExists = await store.loadSession(`${peerJid}.${deviceId}`);
-      if (sessionExists) continue;
-
-      const bundleEl = await client.fetchPepNode(peerJid, `${NS_BUNDLES}:${deviceId}`);
-      if (!bundleEl) continue;
+      // Do not silently omit a member or one of their advertised devices.
+      for (const deviceId of deviceIds) {
+        const sessionExists = await store.loadSession(`${recipientJid}.${deviceId}`);
+        if (sessionExists) {
+          allDevices.push({ peerJid: recipientJid, deviceId });
+          continue;
+        }
+        const bundleEl = await client.fetchPepNode(recipientJid, `${NS_BUNDLES}:${deviceId}`);
+        if (!bundleEl) throw new Error(`OMEMO bundle unavailable for ${recipientJid}`);
 
       const identityKey = base64ToArrayBuffer(
         bundleEl.querySelector("identityKey")?.textContent?.trim() ?? ""
@@ -1246,7 +1289,7 @@ export async function tryLibsignalEncrypt(
       }
 
       try {
-        await establishSession(accountId, peerJid, {
+        await establishSession(accountId, recipientJid, {
           deviceId,
           identityKey,
           signedPreKeyId,
@@ -1255,7 +1298,9 @@ export async function tryLibsignalEncrypt(
           preKey,
         });
       } catch {
-        // Skip this device if session establishment fails
+        throw new Error(`Cannot establish OMEMO session with ${recipientJid}`);
+      }
+        allDevices.push({ peerJid: recipientJid, deviceId });
       }
     }
 
@@ -1263,18 +1308,13 @@ export async function tryLibsignalEncrypt(
     //    XEP-0384 §4.2: a sender MUST encrypt the message key for every device
     //    of the recipient AND for every other device of the sender, otherwise
     //    the sender's other clients can't show the sent message.
-    const ownJid = client.config?.jid?.split("/")[0]?.toLowerCase() ?? "";
-    const allDevices: { peerJid: string; deviceId: number }[] = [];
-
-    // Add peer devices
-    for (const id of deviceIds) {
-      allDevices.push({ peerJid, deviceId: id });
-    }
-
     // Add own other devices (skip our own current device)
-    if (ownJid && ownJid !== peerJid.toLowerCase()) {
+    if (ownJid) {
       try {
         const ownDeviceListEl = await client.fetchPepNode(ownJid, NS_DEVICELIST);
+        if (!ownDeviceListEl && strictGroup) {
+          throw new Error("Your OMEMO device list is unavailable");
+        }
         if (ownDeviceListEl) {
           const ownDeviceIds: number[] = [];
           ownDeviceListEl.querySelectorAll("device").forEach((dev: Element) => {
@@ -1286,7 +1326,10 @@ export async function tryLibsignalEncrypt(
             const sessExists = await store.loadSession(`${ownJid}.${otherId}`);
             if (!sessExists) {
               const ownBundleEl = await client.fetchPepNode(ownJid, `${NS_BUNDLES}:${otherId}`);
-              if (!ownBundleEl) continue;
+              if (!ownBundleEl) {
+                if (strictGroup) throw new Error("An OMEMO bundle is unavailable for your other device");
+                continue;
+              }
               try {
                 const identityKey = base64ToArrayBuffer(
                   ownBundleEl.querySelector("identityKey")?.textContent?.trim() ?? ""
@@ -1311,19 +1354,22 @@ export async function tryLibsignalEncrypt(
                   identityKey, signedPreKeyId, signedPreKey, signedPreKeySignature, preKey,
                 });
               } catch {
+                if (strictGroup) throw new Error("Cannot establish OMEMO session with your other device");
                 continue;
               }
             }
             allDevices.push({ peerJid: ownJid, deviceId: otherId });
           }
         }
-      } catch {
+      } catch (error) {
+        if (strictGroup) throw error;
         // Own devicelist fetch failed — continue with peer-only encryption
         // (own other devices won't see this message, but peer will)
       }
     }
 
     // 4. Encrypt for all devices (peer + own other)
+    if (allDevices.length === 0) throw new Error("No OMEMO recipients are available");
     const newEnvelope = await encryptForDevices(accountId, ownDeviceId, plaintext, allDevices);
 
     // 4. Convert new envelope shape to legacy shape (so existing sendOmemoMessage works)
@@ -1338,8 +1384,16 @@ export async function tryLibsignalEncrypt(
         prekey: k.isPreKey,
       })),
     };
-  } catch {
+  } catch (error) {
+    if (strictGroup) throw error;
     return null;
   }
+}
+
+export async function encryptGroupOmemoMessage(accountId: string, roomJid: string, plaintext: string) {
+  const client = getClient(accountId);
+  if (!client?.connected) throw new Error("XMPP is not connected");
+  const members = await client.fetchMucOmemoMembers(roomJid);
+  return tryLibsignalEncrypt(accountId, members.jids, plaintext);
 }
 

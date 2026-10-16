@@ -5,12 +5,13 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import GlobalSearch from "@/modules/search/GlobalSearch";
 import { applyTheme, getStoredTheme } from "@/utils/theme";
 import { useLanguage } from "@/utils/i18n";
-import { getOmemoEnabled, onOmemoEnabledChange, setOmemoEnabled } from "@/services/omemoSettings";
+import { getGroupOmemoEnabled, getOmemoEnabled, onOmemoEnabledChange, setGroupOmemoEnabled, setOmemoEnabled } from "@/services/omemoSettings";
 import { useReconnectStore } from "@/stores/reconnectStore";
 import toast from "react-hot-toast";
 import { useChatStore } from "@/stores/chatStore";
 import { callManager } from "@/services/jingle";
 import Avatar from "@/components/Avatar";
+import { getClient } from "@/services/xmppAdapter";
 
 interface TopBarProps {
   onToggleRight?: () => void;
@@ -26,6 +27,8 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showCallMenu, setShowCallMenu] = useState(false);
   const [omemoEnabled, setOmemoEnabledState] = useState(getOmemoEnabled());
+  const [groupOmemoReady, setGroupOmemoReady] = useState(false);
+  const [groupOmemoEnabled, setGroupOmemoEnabledState] = useState(false);
   const dark = useMemo(() => {
     if (theme === "system") return !window.matchMedia("(prefers-color-scheme: light)").matches;
     return theme === "dark";
@@ -37,6 +40,20 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
   const callMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => onOmemoEnabledChange(setOmemoEnabledState), []);
+  useEffect(() => {
+    setGroupOmemoEnabledState(conversation?.type === "group" && account
+      ? getGroupOmemoEnabled(account.id, conversation.peerJid)
+      : false);
+  }, [account?.id, conversation?.peerJid, conversation?.type]);
+  useEffect(() => {
+    setGroupOmemoReady(false);
+    if (conversation?.type !== "group" || !account?.connected) return;
+    let active = true;
+    getClient(account.id)?.fetchMucOmemoMembers(conversation.peerJid)
+      .then(() => { if (active) setGroupOmemoReady(true); })
+      .catch(() => { if (active) setGroupOmemoReady(false); });
+    return () => { active = false; };
+  }, [account?.id, account?.connected, conversation?.peerJid, conversation?.type]);
 
   useKeyboardShortcuts({
     "ctrl+k": () => setShowSearch(true),
@@ -80,11 +97,22 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
   };
 
   const toggleOmemo = () => {
-    if (conversation?.type === "group") {
+    if (conversation?.type === "group" && !groupOmemoReady) {
       toast(t("omemo.groupUnavailable"), {
         duration: 3500,
         position: "top-right",
         style: { marginTop: "68px", maxWidth: "min(22rem, calc(100vw - 2rem))" },
+      });
+      return;
+    }
+    if (conversation?.type === "group" && account) {
+      const next = !groupOmemoEnabled;
+      setGroupOmemoEnabled(account.id, conversation.peerJid, next);
+      setGroupOmemoEnabledState(next);
+      if (next) toast(t("omemo.enabledNotice"), {
+        duration: 2200,
+        position: "top-right",
+        style: { marginTop: "68px", maxWidth: "min(20rem, calc(100vw - 2rem))" },
       });
       return;
     }
@@ -131,7 +159,7 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
         {!compact && !conversation && <div className="hidden flex-1 sm:block" />}
         {!compact && <>
         {conversation && <button type="button" onClick={() => setShowSearch(true)} className="btn-ghost p-2" title={t("topbar.searchPlaceholder")} aria-label={t("topbar.searchPlaceholder")}><Search size={16} /></button>}
-        {conversation && <button type="button" onClick={toggleOmemo} className={`btn-ghost p-2 ${conversation.type === "group" || !omemoEnabled ? "text-warn" : "text-success"}`} title={conversation.type === "group" ? t("omemo.groupUnavailable") : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-label={conversation.type === "group" ? t("omemo.groupUnavailable") : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-pressed={conversation.type === "group" ? false : omemoEnabled}>{conversation.type === "group" || !omemoEnabled ? <Unlock size={16} /> : <Lock size={16} />}</button>}
+        {conversation && <button type="button" onClick={toggleOmemo} className={`btn-ghost p-2 ${conversation.type === "group" ? (groupOmemoReady && groupOmemoEnabled ? "text-success" : "text-warn") : (omemoEnabled ? "text-success" : "text-warn")}`} title={conversation.type === "group" && !groupOmemoReady ? t("omemo.groupUnavailable") : conversation.type === "group" ? (groupOmemoEnabled ? t("omemo.enabled") : t("omemo.disabled")) : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-label={conversation.type === "group" && !groupOmemoReady ? t("omemo.groupUnavailable") : conversation.type === "group" ? (groupOmemoEnabled ? t("omemo.enabled") : t("omemo.disabled")) : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-pressed={conversation.type === "group" ? groupOmemoReady && groupOmemoEnabled : omemoEnabled}>{conversation.type === "group" ? (groupOmemoReady && groupOmemoEnabled ? <Lock size={16} /> : <Unlock size={16} />) : (omemoEnabled ? <Lock size={16} /> : <Unlock size={16} />)}</button>}
         {conversation && <button type="button" onClick={toggleTheme} className="btn-ghost p-2" title={t("topbar.theme")} aria-label={t("topbar.theme")}>{dark ? <Sun size={16} /> : <Moon size={16} />}</button>}
         {conversation?.type === "private" && <div ref={callMenuRef} className="relative">
           <button type="button" onClick={() => { setShowCallMenu((value) => !value); setShowChatMenu(false); }} className="btn-ghost p-2" title={t("chat.callOptions")} aria-label={t("chat.callOptions")} aria-expanded={showCallMenu} aria-haspopup="menu"><Phone size={16} /></button>

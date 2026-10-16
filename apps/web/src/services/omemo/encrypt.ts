@@ -211,38 +211,31 @@ export async function decryptEnvelope(
   envelope: EncryptedEnvelope,
 ): Promise<string | null> {
   const store = new OmemoStore(accountId);
-  const ourKey = envelope.keys.find((k) => k.rid === ownDeviceId);
-  if (!ourKey) return null;
-
-  // Decrypt the wrapped AES key + GCM tag
+  // Legacy OMEMO keys are identified only by device ID, so two members can
+  // advertise the same ID. Try every matching key with the sender's session.
+  const candidates = envelope.keys.filter((key) => key.rid === ownDeviceId);
+  if (!candidates.length) return null;
   const address = new SignalProtocolAddress(senderJid, envelope.sid);
-  const cipher = new SessionCipher(store as any, address);
-  let keyAndTag: ArrayBuffer;
-  if (ourKey.isPreKey) {
-    keyAndTag = await cipher.decryptPreKeyWhisperMessage(
-      arrayBufferToString(ourKey.body),
-      "binary",
-    );
-  } else {
-    keyAndTag = await cipher.decryptWhisperMessage(
-      arrayBufferToString(ourKey.body),
-      "binary",
-    );
+  let lastError: unknown;
+  for (const ourKey of candidates) {
+    try {
+      const cipher = new SessionCipher(store as any, address);
+      const keyAndTag = ourKey.isPreKey
+        ? await cipher.decryptPreKeyWhisperMessage(arrayBufferToString(ourKey.body), "binary")
+        : await cipher.decryptWhisperMessage(arrayBufferToString(ourKey.body), "binary");
+      const ktBytes = new Uint8Array(keyAndTag);
+      const aesKeyRaw = ktBytes.slice(0, 16);
+      const tag = ktBytes.slice(16, 32);
+      const payloadBytes = new Uint8Array(envelope.payload);
+      const ctWithTag = new Uint8Array(payloadBytes.byteLength + tag.byteLength);
+      ctWithTag.set(payloadBytes, 0);
+      ctWithTag.set(tag, payloadBytes.byteLength);
+      const aesKey = await importAesKey(toOwned(aesKeyRaw));
+      const decrypted = await decryptAesGcm(aesKey, envelope.iv, toOwned(ctWithTag));
+      return new TextDecoder().decode(decrypted);
+    } catch (error) {
+      lastError = error;
+    }
   }
-
-  // Split into AES key (16 bytes) + tag (16 bytes)
-  const ktBytes = new Uint8Array(keyAndTag);
-  const aesKeyRaw = ktBytes.slice(0, 16);
-  const tag = ktBytes.slice(16, 32);
-
-  // Reconstruct ciphertext + tag for AES-GCM decrypt
-  const payloadBytes = new Uint8Array(envelope.payload);
-  const ctWithTag = new Uint8Array(payloadBytes.byteLength + tag.byteLength);
-  ctWithTag.set(payloadBytes, 0);
-  ctWithTag.set(tag, payloadBytes.byteLength);
-
-  const aesKey = await importAesKey(toOwned(aesKeyRaw));
-  const decrypted = await decryptAesGcm(aesKey, envelope.iv, toOwned(ctWithTag));
-
-  return new TextDecoder().decode(decrypted);
+  throw lastError;
 }

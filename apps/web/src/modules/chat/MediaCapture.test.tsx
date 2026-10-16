@@ -46,7 +46,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("combined camera shutter", () => {
+describe("camera controls", () => {
   async function mount(onCaptured: (file: File) => void) {
     const element = document.createElement("div");
     document.body.appendChild(element);
@@ -57,13 +57,11 @@ describe("combined camera shutter", () => {
     return { element, root, shutter };
   }
 
-  it("captures a photo on a short press", async () => {
+  it("captures a photo when the shutter is tapped", async () => {
     const captured = vi.fn();
     const { element, root, shutter } = await mount(captured);
     await act(async () => {
-      shutter.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
-      vi.advanceTimersByTime(100);
-      shutter.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
+      shutter.click();
     });
     expect(captured).toHaveBeenCalledWith(expect.objectContaining({ type: "image/jpeg" }));
     expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: false }));
@@ -71,16 +69,17 @@ describe("combined camera shutter", () => {
     element.remove();
   });
 
-  it("records video on a long press and stops on release", async () => {
+  it("records video only through the separate video button", async () => {
     const captured = vi.fn();
     const { element, root, shutter } = await mount(captured);
+    const videoButton = element.querySelector('button[aria-label="chat.recordVideo"]') as HTMLButtonElement;
     await act(async () => {
-      shutter.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
-      vi.advanceTimersByTime(500);
+      videoButton.click();
       await Promise.resolve();
       await Promise.resolve();
     });
-    await act(async () => shutter.dispatchEvent(new MouseEvent("pointerup", { bubbles: true })));
+    expect(shutter.getAttribute("aria-label")).toBe("chat.captureHint");
+    await act(async () => (element.querySelector('button[aria-label="chat.stopVideo"]') as HTMLButtonElement).click());
     expect(captured).toHaveBeenCalledWith(expect.objectContaining({ type: "video/webm" }));
     expect(getUserMedia).toHaveBeenCalledWith({ audio: true });
     await act(async () => root.unmount());

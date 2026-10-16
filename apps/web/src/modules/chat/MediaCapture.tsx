@@ -8,7 +8,6 @@ interface MediaCaptureProps {
   onClose: () => void;
 }
 
-const HOLD_TO_RECORD_MS = 450;
 const MAX_VIDEO_MS = 60_000;
 
 export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaCaptureProps) {
@@ -18,12 +17,10 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
   const microphoneRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelledRef = useRef(false);
   const recordingRef = useRef(false);
   const startingRef = useRef(false);
-  const releasePendingRef = useRef(false);
   const [error, setError] = useState(false);
   const [ready, setReady] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -69,7 +66,6 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
 
   useEffect(() => () => {
     cancelledRef.current = true;
-    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
     if (maxTimerRef.current) clearTimeout(maxTimerRef.current);
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
     microphoneRef.current?.getTracks().forEach((track) => track.stop());
@@ -133,24 +129,11 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
       setRecording(true);
       setSeconds(0);
       maxTimerRef.current = setTimeout(stopRecording, MAX_VIDEO_MS);
-      if (releasePendingRef.current) setTimeout(stopRecording, 500);
     } catch {
       microphoneRef.current?.getTracks().forEach((track) => track.stop());
       setError(true);
     } finally {
       startingRef.current = false;
-    }
-  };
-
-  const releaseShutter = (cancel = false) => {
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-      if (!cancel) takePhoto();
-    } else if (startingRef.current) {
-      releasePendingRef.current = true;
-    } else if (recordingRef.current) {
-      stopRecording();
     }
   };
 
@@ -184,17 +167,8 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
                 type="button"
                 disabled={!ready}
                 className={`h-20 w-20 rounded-full border-4 border-white p-1 touch-none disabled:opacity-40 ${recording ? "scale-90" : ""}`}
-                aria-label={recording ? t("chat.stopVideo") : t("chat.captureHint")}
-                onContextMenu={(event) => event.preventDefault()}
-                onPointerDown={(event) => {
-                  if (!ready || event.button !== 0 || recordingRef.current) return;
-                  event.currentTarget.setPointerCapture(event.pointerId);
-                  releasePendingRef.current = false;
-                  holdTimerRef.current = setTimeout(() => { holdTimerRef.current = null; void startRecording(); }, HOLD_TO_RECORD_MS);
-                }}
-                onPointerUp={() => releaseShutter()}
-                onPointerCancel={() => releaseShutter(true)}
-                onClick={(event) => { if (event.detail === 0 && !recordingRef.current) takePhoto(); }}
+                aria-label={t("chat.captureHint")}
+                onClick={takePhoto}
               ><span className={`block h-full w-full rounded-full ${recording ? "bg-red-500" : "bg-white"}`} /></button>
               <button type="button" disabled={!ready} className="flex flex-col items-center gap-1 text-xs text-white/80 disabled:opacity-40" onClick={() => recordingRef.current ? stopRecording() : void startRecording()} aria-label={recording ? t("chat.stopVideo") : t("chat.recordVideo")}><Video size={24} />{recording ? t("chat.stopVideo") : t("chat.recordVideo")}</button>
             </div>
