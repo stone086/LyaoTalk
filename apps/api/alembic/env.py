@@ -6,6 +6,11 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 config = context.config
+from app.core.config import settings
+
+# Release directories do not contain secrets or a rewritten alembic.ini.
+# Use the service's root-owned EnvironmentFile for every migration.
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 

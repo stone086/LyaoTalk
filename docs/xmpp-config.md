@@ -1,6 +1,6 @@
 # XMPP Configuration Notes
 
-LiaoT uses Prosody as the XMPP backend.
+LyaoTalk uses Prosody as the XMPP backend.
 
 ## Main file
 - `/etc/prosody/prosody.cfg.lua`

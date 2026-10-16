@@ -961,9 +961,8 @@ export function initXmppBridge(client: XmppClient) {
     if (data.status !== "connected") return;
     const groupStore = useGroupStore.getState();
     const joinedRooms = groupStore.getJoinedRooms(accountId);
-    if (joinedRooms.length === 0) return;
     // eslint-disable-next-line no-console
-    console.info(`[XMPP MUC] auto-rejoining ${joinedRooms.length} room(s) for ${accountId}`);
+    if (joinedRooms.length) console.info(`[XMPP MUC] auto-rejoining ${joinedRooms.length} room(s) for ${accountId}`);
     for (const room of joinedRooms) {
       // Mark as "joining" so UI shows pending state until server confirms
       groupStore.setJoinState(accountId, room.jid, "joining");
@@ -973,6 +972,38 @@ export function initXmppBridge(client: XmppClient) {
         console.warn(`[XMPP MUC] auto-rejoin failed room=${room.jid}`, err);
       });
     }
+    // Local browser storage cannot reveal groups created in another client.
+    // Reconcile the account's server-side XEP-0402 bookmarks on every login.
+    void client.fetchMucBookmarks().then((bookmarks) => {
+      for (const bookmark of bookmarks) {
+        const existing = groupStore.getRoom(accountId, bookmark.jid);
+        const nickname = bookmark.nickname || client.config.jid.split("@")[0];
+        groupStore.upsertRoom({
+          accountId,
+          jid: bookmark.jid,
+          name: bookmark.name,
+          nickname,
+          isPublic: existing?.isPublic ?? false,
+          joinState: existing?.joinState ?? "idle",
+        });
+        const conversationId = generateConversationId(accountId, bookmark.jid);
+        useChatStore.getState().upsertConversation({
+          id: conversationId,
+          accountId,
+          type: "group",
+          peerJid: bookmark.jid,
+          title: bookmark.name,
+          unreadCount: 0,
+          pinned: false,
+        });
+        if (bookmark.autojoin && existing?.joinState !== "joined" && existing?.joinState !== "joining") {
+          groupStore.setJoinState(accountId, bookmark.jid, "joining");
+          void client.joinRoom(bookmark.jid, nickname).catch((error) => {
+            console.warn(`[XMPP MUC] bookmarked room join failed room=${bookmark.jid}`, error);
+          });
+        }
+      }
+    }).catch((error) => console.warn("[XMPP MUC] bookmarks unavailable", error));
   });
 
   // KILLER-04: Push local mutations to PEP cross-device sync (debounced)

@@ -1,5 +1,5 @@
 {
-  "name": "liaot-web",
+  "name": "lyaotalk-web",
   "version": "2.3.5",
   "type": "module",
   "private": true,
@@ -50,7 +50,7 @@
     "vite-plugin-pwa": "^0.20.5",
     "vitest": "^3.2.2"
   },
-  "liaot_security_notes": {
+  "lyaotalk_security_notes": {
     "last_audit": "2026-10-13",
     "axios_pin_reason": "CVE-2025-62718 proxy SSRF (fixed 1.15.0); March 2026 npm supply chain compromise of 1.14.1/0.30.4 — exact-pin defends against future registry attacks",
     "lockfile_policy": "Always commit package-lock.json; CI uses 'npm ci' not 'npm install'",

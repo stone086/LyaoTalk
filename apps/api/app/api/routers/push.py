@@ -24,7 +24,7 @@ from app.core.rate_limit import limiter
 from app.models import PushSubscription
 from app.utils.security import get_current_user
 
-logger = logging.getLogger("liaot.push")
+logger = logging.getLogger("lyaotalk.push")
 
 router = APIRouter()
 
@@ -189,7 +189,7 @@ async def notify(
         "title": payload.title,
         "body": payload.body,
         "badge": payload.badge,
-        "tag": "liaot-msg",
+        "tag": "lyaotalk-msg",
     })
 
     sent = 0

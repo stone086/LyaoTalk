@@ -1,4 +1,4 @@
-# LiaoT Disaster Recovery Runbook
+# LyaoTalk Disaster Recovery Runbook
 
 Version: 2.2.0 ops-runbook
 
@@ -23,16 +23,16 @@ Use this when the original server is lost or cannot be trusted.
 ## 2. Restore software
 
 ```bash
-unzip liaot-2.2.0-ops-runbook.zip
-cd liaot-2.2.0-ops-runbook
+unzip lyaotalk-2.2.0-ops-runbook.zip
+cd lyaotalk-2.2.0-ops-runbook
 bash scripts/stage0_validate.sh --local
-sudo LIAOT_DOMAIN=chat.example.com bash install.sh
+sudo LYAOTALK_DOMAIN=chat.example.com bash install.sh
 ```
 
 Stop services before restoring data:
 
 ```bash
-sudo systemctl stop liaot-api prosody nginx minio
+sudo systemctl stop lyaotalk-api prosody nginx minio
 ```
 
 ## 3. Restore data
@@ -45,8 +45,8 @@ sudo systemctl stop liaot-api prosody nginx minio
 ## 4. Start services
 
 ```bash
-sudo systemctl start minio prosody liaot-api nginx
-sudo systemctl status minio prosody liaot-api nginx --no-pager
+sudo systemctl start minio prosody lyaotalk-api nginx
+sudo systemctl status minio prosody lyaotalk-api nginx --no-pager
 ```
 
 ## 5. Validate

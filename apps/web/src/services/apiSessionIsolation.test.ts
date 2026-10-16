@@ -56,7 +56,7 @@ describe("API account session isolation", () => {
       return { data: { ok: true }, status: 200, statusText: "OK", headers: {}, config };
     };
     const result = await api.get("/accounts/bob/preferences", {
-      headers: { "X-LiaoT-Account-Id": "bob" }, adapter,
+      headers: { "X-LyaoTalk-Account-Id": "bob" }, adapter,
     });
     expect(result.data.ok).toBe(true);
     expect(seen).toEqual(["Bearer bob-access", "Bearer bob-new"]);
@@ -110,7 +110,7 @@ describe("API account session isolation", () => {
       return { data: { ok: true }, status: 200, statusText: "OK", headers: {}, config };
     };
     const result = await api.post("/attachments/remote-encrypted", {}, {
-      headers: { "X-LiaoT-Account-Id": "bob" }, adapter,
+      headers: { "X-LyaoTalk-Account-Id": "bob" }, adapter,
     });
     expect(result.data.ok).toBe(true);
     expect(seen).toEqual(["Bearer bob-access", "Bearer bob-recovered"]);

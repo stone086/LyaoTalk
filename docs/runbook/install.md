@@ -1,4 +1,4 @@
-# LiaoT Install Runbook
+# LyaoTalk Install Runbook
 
 Version: 2.2.0 ops-runbook
 
@@ -26,10 +26,10 @@ Confirm DNS resolves to this VM before running the installer.
 ## 3. Install
 
 ```bash
-unzip liaot-2.2.0-ops-runbook.zip
-cd liaot-2.2.0-ops-runbook
+unzip lyaotalk-2.2.0-ops-runbook.zip
+cd lyaotalk-2.2.0-ops-runbook
 bash scripts/stage0_validate.sh --local
-sudo LIAOT_DOMAIN=chat.example.com bash install.sh
+sudo LYAOTALK_DOMAIN=chat.example.com bash install.sh
 ```
 
 Record the one-time admin password printed by the installer and store it in a password manager.
@@ -39,7 +39,7 @@ Record the one-time admin password printed by the installer and store it in a pa
 ```bash
 sudo nginx -t
 sudo prosodyctl check config
-sudo systemctl status liaot-api prosody nginx minio --no-pager
+sudo systemctl status lyaotalk-api prosody nginx minio --no-pager
 curl -fsS http://127.0.0.1:8000/health
 curl -fsS https://chat.example.com/api/health
 ```

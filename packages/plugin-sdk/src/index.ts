@@ -1,5 +1,5 @@
 /**
- * LiaoT Plugin SDK
+ * LyaoTalk Plugin SDK
  * Use this to build plugins that extend the client.
  */
 

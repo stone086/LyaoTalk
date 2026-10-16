@@ -1,4 +1,4 @@
-# LiaoT staging validation runbook
+# LyaoTalk staging validation runbook
 
 Release: **1.6.3 stage0-validation**
 
@@ -26,7 +26,7 @@ This checks shell syntax, Python syntax, version consistency, unsafe `.env` sour
 ## 3. Install on staging
 
 ```bash
-sudo LIAOT_DOMAIN=staging.example.com bash install.sh
+sudo LYAOTALK_DOMAIN=staging.example.com bash install.sh
 ```
 
 Save the full terminal output. If installation fails, do not continue to production. Fix and publish a new patch version.
@@ -41,9 +41,9 @@ The server mode checks:
 
 - nginx config syntax
 - Prosody config syntax
-- service status for `liaot-api`, `prosody`, `nginx`, `minio`
+- service status for `lyaotalk-api`, `prosody`, `nginx`, `minio`
 - local and public health endpoints when available
-- Alembic current/head/upgrade if `/opt/liaot/api/.venv/bin/alembic` exists
+- Alembic current/head/upgrade if `/opt/lyaotalk/api/.venv/bin/alembic` exists
 - recent API journal output
 
 ## 5. Manual browser validation

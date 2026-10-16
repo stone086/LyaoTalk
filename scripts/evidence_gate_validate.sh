@@ -35,11 +35,11 @@ if [[ -z "$CURRENT_VERSION" ]]; then
 else
   echo "[OK] VERSION=$CURRENT_VERSION"
 fi
-if grep -R -E "^[[:space:]]*source[[:space:]]+[^#]*(\.env|/\.env)" -n "$ROOT" --exclude-dir=.git --exclude='*.md' --exclude='*.txt' >/tmp/liaot_source_env.$$ 2>/dev/null; then
+if grep -R -E "^[[:space:]]*source[[:space:]]+[^#]*(\.env|/\.env)" -n "$ROOT" --exclude-dir=.git --exclude='*.md' --exclude='*.txt' >/tmp/lyaotalk_source_env.$$ 2>/dev/null; then
   echo "[FAIL] unsafe env source pattern found:" >&2
-  cat /tmp/liaot_source_env.$$ >&2
+  cat /tmp/lyaotalk_source_env.$$ >&2
   fail=1
 fi
-rm -f /tmp/liaot_source_env.$$
+rm -f /tmp/lyaotalk_source_env.$$
 if [[ $fail -ne 0 ]]; then exit 1; fi
 echo "[OK] evidence gate files present"

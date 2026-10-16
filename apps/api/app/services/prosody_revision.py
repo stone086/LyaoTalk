@@ -9,7 +9,7 @@ import socket
 
 from fastapi import HTTPException
 
-SOCKET_PATH = "/run/liaot-prosody.sock"
+SOCKET_PATH = "/run/lyaotalk-prosody.sock"
 
 
 def get_credential_revision(jid: str) -> str:

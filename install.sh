@@ -27,8 +27,8 @@ is_placeholder_email() {
   esac
 }
 
-INSTALL_DIR="/opt/liaot"
-APP_USER="liaot"
+INSTALL_DIR="/opt/lyaotalk"
+APP_USER="lyaotalk"
 MINIO_USER="minio-user"
 DOMAIN=""
 EMAIL=""
@@ -37,7 +37,7 @@ RUN_LOCAL=0
 REPO_URL=""
 BRANCH="main"
 PROJECT_PATH=""
-TARGET_DIR="/opt/liaot-src"
+TARGET_DIR="/opt/lyaotalk-src"
 SSH_PORT="${SSH_PORT:-}"
 XMPP_ADMIN_USER="admin"
 XMPP_ADMIN_PASS="${XMPP_ADMIN_PASS:-}"
@@ -87,7 +87,7 @@ Required:
 Optional:
   --branch    Git branch to install from (default: main)
   --path      Project path inside repo; auto-detected if omitted
-  --target    Clone target directory (default: /opt/liaot-src)
+  --target    Clone target directory (default: /opt/lyaotalk-src)
   --ssh-port  SSH port(s) to keep open in UFW, supports comma/space list (default: auto-detect)
   --upgrade-system
               Run apt-get upgrade before installing dependencies (default: skip)
@@ -603,8 +603,8 @@ install_prosody() {
 
   # Restrict CORS to the actual frontend origin instead of "*". DOMAIN here is
   # the public hostname of the web app; if you front-end Lyao Talk on a
-  # different host, set LIAOT_FRONTEND_ORIGIN before running install.sh.
-  XMPP_FRONTEND_ORIGIN="${LIAOT_FRONTEND_ORIGIN:-https://${DOMAIN}}"
+  # different host, set LYAOTALK_FRONTEND_ORIGIN before running install.sh.
+  XMPP_FRONTEND_ORIGIN="${LYAOTALK_FRONTEND_ORIGIN:-https://${DOMAIN}}"
   sed -i "s|XMPP_FRONTEND_ORIGIN|${XMPP_FRONTEND_ORIGIN}|g" /etc/prosody/prosody.cfg.lua
 
   # Generate DH params for TLS forward secrecy. 2048-bit takes ~10s, only
@@ -649,8 +649,8 @@ install_prosody() {
   fi
 
   # Install Lyao Talk push relay module
-  mkdir -p /usr/lib/prosody-modules/mod_liaot_push
-  cp configs/prosody/mod_liaot_push.lua /usr/lib/prosody-modules/mod_liaot_push/mod_liaot_push.lua
+  mkdir -p /usr/lib/prosody-modules/mod_lyaotalk_push
+  cp configs/prosody/mod_lyaotalk_push.lua /usr/lib/prosody-modules/mod_lyaotalk_push/mod_lyaotalk_push.lua
 
   # Inject PUSH_SHARED_SECRET into prosody config
   if [ -n "${PUSH_SHARED_SECRET:-}" ]; then
@@ -664,13 +664,13 @@ install_prosody() {
 
   prosodyctl check config 2>/dev/null || true
 
-  install -d -m 755 /usr/local/lib/liaot
-  install -m 644 configs/prosody/liaot_registration_helper.py /usr/local/lib/liaot/liaot_registration_helper.py
-  cat > /etc/systemd/system/liaot-prosody.socket <<EOF
+  install -d -m 755 /usr/local/lib/lyaotalk
+  install -m 644 configs/prosody/lyaotalk_registration_helper.py /usr/local/lib/lyaotalk/lyaotalk_registration_helper.py
+  cat > /etc/systemd/system/lyaotalk-prosody.socket <<EOF
 [Unit]
 Description=Lyao Talk Prosody registration socket
 [Socket]
-ListenStream=/run/liaot-prosody.sock
+ListenStream=/run/lyaotalk-prosody.sock
 SocketUser=prosody
 SocketGroup=${APP_USER}
 SocketMode=0660
@@ -678,37 +678,37 @@ RemoveOnStop=yes
 [Install]
 WantedBy=sockets.target
 EOF
-  cat > /etc/systemd/system/liaot-prosody.service <<EOF
+  cat > /etc/systemd/system/lyaotalk-prosody.service <<EOF
 [Unit]
 Description=Lyao Talk Prosody registration helper
-Requires=liaot-prosody.socket
+Requires=lyaotalk-prosody.socket
 After=prosody.service
 [Service]
 Type=simple
 User=prosody
 Group=prosody
-Environment=LIAOT_XMPP_DOMAIN=${XMPP_DOMAIN}
-ExecStart=/usr/bin/python3 /usr/local/lib/liaot/liaot_registration_helper.py
+Environment=LYAOTALK_XMPP_DOMAIN=${XMPP_DOMAIN}
+ExecStart=/usr/bin/python3 /usr/local/lib/lyaotalk/lyaotalk_registration_helper.py
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=/var/lib/prosody
 PrivateTmp=true
 EOF
   systemctl daemon-reload
-  systemctl enable --now liaot-prosody.socket
+  systemctl enable --now lyaotalk-prosody.socket
 
   systemctl enable prosody
   systemctl restart prosody
 
   XMPP_ADMIN_JID="${XMPP_ADMIN_USER}@${XMPP_DOMAIN}"
-  if prosodyctl register "${XMPP_ADMIN_USER}" "${XMPP_DOMAIN}" "${XMPP_ADMIN_PASS}" >/tmp/liaot-prosody-admin.log 2>&1; then
+  if prosodyctl register "${XMPP_ADMIN_USER}" "${XMPP_DOMAIN}" "${XMPP_ADMIN_PASS}" >/tmp/lyaotalk-prosody-admin.log 2>&1; then
     XMPP_ADMIN_CREATED=1
   else
-    if grep -Eiq "exists|already" /tmp/liaot-prosody-admin.log; then
+    if grep -Eiq "exists|already" /tmp/lyaotalk-prosody-admin.log; then
       warn "Default account ${XMPP_ADMIN_JID} already exists; keeping existing password"
       XMPP_ADMIN_CREATED=0
     else
-      cat /tmp/liaot-prosody-admin.log >&2 || true
+      cat /tmp/lyaotalk-prosody-admin.log >&2 || true
       error "Failed to create default XMPP admin account: ${XMPP_ADMIN_JID}"
     fi
   fi
@@ -792,7 +792,7 @@ Restart=always
 RestartSec=5
 LimitNOFILE=65536
 
-# Sandbox hardening — same rationale as liaot-api: an RCE in MinIO
+# Sandbox hardening — same rationale as lyaotalk-api: an RCE in MinIO
 # (Go binary; not impossible) without sandboxing means immediate access
 # to any other tenant on the same host. /data/minio is the only writable
 # path; everything else read-only.
@@ -839,10 +839,10 @@ EOF
   chmod +x /usr/local/bin/mc
   /usr/local/bin/mc alias set local http://127.0.0.1:9000 \
     "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}" --quiet 2>/dev/null || true
-  /usr/local/bin/mc mb local/liaot-files --quiet 2>/dev/null || true
-  /usr/local/bin/mc anonymous set none local/liaot-files --quiet 2>/dev/null || true
+  /usr/local/bin/mc mb local/lyaotalk-files --quiet 2>/dev/null || true
+  /usr/local/bin/mc anonymous set none local/lyaotalk-files --quiet 2>/dev/null || true
 
-  success "MinIO installed, bucket: liaot-files"
+  success "MinIO installed, bucket: lyaotalk-files"
 }
 
 install_nodejs() {
@@ -917,7 +917,7 @@ REDIS_URL=redis://:${REDIS_PASS}@127.0.0.1:6379/0
 MINIO_ENDPOINT=127.0.0.1:9000
 MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
 MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-MINIO_BUCKET=liaot-files
+MINIO_BUCKET=lyaotalk-files
 MINIO_SECURE=false
 SECRET_KEY=${SECRET_KEY}
 CORS_ORIGINS=["https://${DOMAIN}"]
@@ -989,7 +989,7 @@ EOF
   UVICORN_WORKERS=$(( NPROC * 2 + 1 ))
   (( UVICORN_WORKERS > 8 )) && UVICORN_WORKERS=8
   (( UVICORN_WORKERS < 2 )) && UVICORN_WORKERS=2
-  cat > /etc/systemd/system/liaot-api.service << EOF
+  cat > /etc/systemd/system/lyaotalk-api.service << EOF
 [Unit]
 Description=Lyao Talk FastAPI Backend
 After=network.target postgresql.service redis.service
@@ -1014,7 +1014,7 @@ RestartSec=5
 #
 # If an attacker manages remote code execution inside the FastAPI worker
 # (via a future 0-day in some dependency, an unpatched route handler, etc.),
-# without these directives they would inherit the full liaot user's
+# without these directives they would inherit the full lyaotalk user's
 # privileges: read .env (DB password, JWT secret, MinIO root credentials,
 # AI provider key), bind any socket, ptrace siblings, read /proc, write
 # anywhere the user can write.
@@ -1039,10 +1039,10 @@ ProtectClock=yes
 ProtectHostname=yes
 ProtectProc=invisible
 ProcSubset=pid
-# We need to write to: install_dir (for runtime cache), /var/log/liaot
+# We need to write to: install_dir (for runtime cache), /var/log/lyaotalk
 # (for app log), and the standard journald socket (handled outside FS).
 # Everything else on the FS is read-only.
-ReadWritePaths=${INSTALL_DIR} /var/log/liaot
+ReadWritePaths=${INSTALL_DIR} /var/log/lyaotalk
 
 # The API needs no elevated Linux capabilities.
 CapabilityBoundingSet=
@@ -1086,13 +1086,13 @@ WantedBy=multi-user.target
 EOF
 
   # Ensure the log directory exists with appropriate permissions
-  mkdir -p /var/log/liaot
-  chown ${APP_USER}:${APP_USER} /var/log/liaot
-  chmod 750 /var/log/liaot
+  mkdir -p /var/log/lyaotalk
+  chown ${APP_USER}:${APP_USER} /var/log/lyaotalk
+  chmod 750 /var/log/lyaotalk
 
   systemctl daemon-reload
-  systemctl enable liaot-api
-  systemctl start liaot-api
+  systemctl enable lyaotalk-api
+  systemctl start lyaotalk-api
   sleep 2
 
   cd "${SRC_DIR}"
@@ -1134,7 +1134,7 @@ install_nginx() {
   apt install -y -qq nginx
 
   # Temporary HTTP config for certbot validation.
-  cat > /etc/nginx/sites-available/liaot << EOF
+  cat > /etc/nginx/sites-available/lyaotalk << EOF
 server {
     listen 80;
     listen [::]:80;
@@ -1151,7 +1151,7 @@ server {
 }
 EOF
 
-  ln -sf /etc/nginx/sites-available/liaot /etc/nginx/sites-enabled/liaot
+  ln -sf /etc/nginx/sites-available/lyaotalk /etc/nginx/sites-enabled/lyaotalk
   rm -f /etc/nginx/sites-enabled/default
   nginx -t && systemctl restart nginx
   success "Nginx temporary config completed"
@@ -1181,15 +1181,15 @@ setup_ssl() {
     success "SSL certificate issued successfully"
   fi
 
-  cp configs/nginx/liaot.conf /etc/nginx/sites-available/liaot
-  sed -i "s|DOMAIN|${DOMAIN}|g" /etc/nginx/sites-available/liaot
-  sed -i "s|INSTALL_DIR|${INSTALL_DIR}|g" /etc/nginx/sites-available/liaot
+  cp configs/nginx/lyaotalk.conf /etc/nginx/sites-available/lyaotalk
+  sed -i "s|DOMAIN|${DOMAIN}|g" /etc/nginx/sites-available/lyaotalk
+  sed -i "s|INSTALL_DIR|${INSTALL_DIR}|g" /etc/nginx/sites-available/lyaotalk
   if [[ -n "${PROMETHEUS_ALLOW_CIDR:-}" ]]; then
-    sed -i "/location = \/api\/metrics {/,/deny all;/ s|deny all;|allow ${PROMETHEUS_ALLOW_CIDR};\n        deny all;|" /etc/nginx/sites-available/liaot
+    sed -i "/location = \/api\/metrics {/,/deny all;/ s|deny all;|allow ${PROMETHEUS_ALLOW_CIDR};\n        deny all;|" /etc/nginx/sites-available/lyaotalk
   fi
-  cat > /etc/nginx/conf.d/liaot-rate-limit.conf << 'EOF'
+  cat > /etc/nginx/conf.d/lyaotalk-rate-limit.conf << 'EOF'
 # Lyao Talk rate-limit and connection-limit zones.
-# Referenced by /etc/nginx/sites-available/liaot. If you change zone
+# Referenced by /etc/nginx/sites-available/lyaotalk. If you change zone
 # names here, update the conf to match.
 #
 # Sizes:
@@ -1303,7 +1303,7 @@ setup_firewall() {
 
   apply_sshd_dropin_and_reload() {
     mkdir -p /etc/ssh/sshd_config.d
-    cat > /etc/ssh/sshd_config.d/99-liaot-auth.conf <<'EOF'
+    cat > /etc/ssh/sshd_config.d/99-lyaotalk-auth.conf <<'EOF'
 PasswordAuthentication yes
 PubkeyAuthentication yes
 EOF
@@ -1326,7 +1326,7 @@ EOF
   apply_sshd_port() {
     local new_port="$1"
     mkdir -p /etc/ssh/sshd_config.d
-    cat > /etc/ssh/sshd_config.d/99-liaot-port.conf <<EOF
+    cat > /etc/ssh/sshd_config.d/99-lyaotalk-port.conf <<EOF
 Port ${new_port}
 EOF
     apply_sshd_dropin_and_reload
@@ -1361,7 +1361,7 @@ EOF
     done
 
     info "No existing SSH private key detected. Creating ${ssh_dir}/id_ed25519 automatically"
-    ssh-keygen -t ed25519 -f "${ssh_dir}/id_ed25519" -N "" -C "liaot@$(hostname)-$(date +%F)" >/dev/null
+    ssh-keygen -t ed25519 -f "${ssh_dir}/id_ed25519" -N "" -C "lyaotalk@$(hostname)-$(date +%F)" >/dev/null
     cat "${ssh_dir}/id_ed25519.pub"
   }
 
@@ -1451,7 +1451,7 @@ EOF
 
 setup_fail2ban() {
   step "Configure fail2ban (anti-bruteforce)"
-  cat > /etc/fail2ban/filter.d/liaot-api.conf << 'EOF'
+  cat > /etc/fail2ban/filter.d/lyaotalk-api.conf << 'EOF'
 [Definition]
 failregex = ^<HOST> - .* "POST /api/auth/(admin/login|register) HTTP.*" (4[0-9][0-9]) .*
 ignoreregex =
@@ -1471,10 +1471,10 @@ logpath = %(sshd_log)s
 [nginx-http-auth]
 enabled = true
 
-[liaot-api]
+[lyaotalk-api]
 enabled = true
 port = 443
-filter = liaot-api
+filter = lyaotalk-api
 logpath = /var/log/nginx/access.log
 maxretry = 5
 bantime = 3600
@@ -1493,13 +1493,13 @@ setup_backup() {
     apt install -y -qq rclone
   fi
 
-  cat > /usr/local/bin/liaot-backup.sh << BACKUP
+  cat > /usr/local/bin/lyaotalk-backup.sh << BACKUP
 #!/bin/bash
 set -euo pipefail
 BACKUP_DIR="/root/backups"
 DATE=\$(date +%Y%m%d_%H%M%S)
 BACKUP_REMOTE="${BACKUP_REMOTE}"
-BACKUP_ENCRYPTION_KEY_FILE="\${BACKUP_ENCRYPTION_KEY_FILE:-/root/.liaot-backup.key}"
+BACKUP_ENCRYPTION_KEY_FILE="\${BACKUP_ENCRYPTION_KEY_FILE:-/root/.lyaotalk-backup.key}"
 DB_NAME="${APP_USER}"
 ALERT_EMAIL="${ALERT_EMAIL}"
 mkdir -p "\$BACKUP_DIR"
@@ -1622,21 +1622,21 @@ fi
 
 echo "backup completed: \${DATE} (cipher=\$CIPHER iter=\$PBKDF2_ITER)"
 BACKUP
-  chmod +x /usr/local/bin/liaot-backup.sh
+  chmod +x /usr/local/bin/lyaotalk-backup.sh
 
   # Run backup daily at 03:00
-  echo "0 3 * * * root /usr/local/bin/liaot-backup.sh >> /var/log/liaot-backup.log 2>&1" \
-    > /etc/cron.d/liaot-backup
+  echo "0 3 * * * root /usr/local/bin/lyaotalk-backup.sh >> /var/log/lyaotalk-backup.log 2>&1" \
+    > /etc/cron.d/lyaotalk-backup
 
   success "Backup configured (daily at 03:00)"
 }
 
 setup_logrotate_and_journald() {
   step "Configure log rotation and journald limits"
-  cp "${SRC_DIR}/configs/logrotate/liaot" /etc/logrotate.d/liaot
+  cp "${SRC_DIR}/configs/logrotate/lyaotalk" /etc/logrotate.d/lyaotalk
 
   mkdir -p /etc/systemd/journald.conf.d
-  cat > /etc/systemd/journald.conf.d/liaot.conf << 'EOF'
+  cat > /etc/systemd/journald.conf.d/lyaotalk.conf << 'EOF'
 [Journal]
 SystemMaxUse=500M
 EOF
@@ -1646,10 +1646,10 @@ EOF
 
 setup_monitoring_alert() {
   step "Configure lightweight service monitoring and self-heal script"
-  cat > /usr/local/bin/liaot-alert.sh << 'EOF'
+  cat > /usr/local/bin/lyaotalk-alert.sh << 'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ -f /opt/liaot-src/.env ]]; then
+if [[ -f /opt/lyaotalk-src/.env ]]; then
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%$'\r'}"
     [[ -z "${line//[[:space:]]/}" ]] && continue
@@ -1667,14 +1667,14 @@ if [[ -f /opt/liaot-src/.env ]]; then
     if [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
       export "$key=$val"
     fi
-  done < /opt/liaot-src/.env
+  done < /opt/lyaotalk-src/.env
 fi
-services=(postgresql redis-server prosody liaot-api nginx)
+services=(postgresql redis-server prosody lyaotalk-api nginx)
 ALERT_EMAIL="${ALERT_EMAIL:-}"
 for svc in "${services[@]}"; do
   if ! systemctl is-active --quiet "$svc"; then
     msg="$(date '+%F %T') WARN service down: $svc"
-    echo "$msg" >> /var/log/liaot-alert.log
+    echo "$msg" >> /var/log/lyaotalk-alert.log
     systemctl restart "$svc" || true
     if [[ -n "$ALERT_EMAIL" ]] && command -v mail >/dev/null 2>&1; then
       echo "$msg" | mail -s "Lyao Talk service alert" "$ALERT_EMAIL" || true
@@ -1689,25 +1689,25 @@ for mount in / /data; do
   use_pct="$(df -P "$mount" | awk 'NR==2 {gsub(/%/, "", $5); print $5}')"
   if [[ -n "$use_pct" ]] && (( use_pct >= 90 )); then
     msg="$(date '+%F %T') WARN disk usage high: $mount ${use_pct}%"
-    echo "$msg" >> /var/log/liaot-alert.log
+    echo "$msg" >> /var/log/lyaotalk-alert.log
     if [[ -n "$ALERT_EMAIL" ]] && command -v mail >/dev/null 2>&1; then
       echo "$msg" | mail -s "Lyao Talk disk alert" "$ALERT_EMAIL" || true
     fi
   fi
 done
 EOF
-  chmod +x /usr/local/bin/liaot-alert.sh
-  echo "*/5 * * * * root /usr/local/bin/liaot-alert.sh" > /etc/cron.d/liaot-alert
+  chmod +x /usr/local/bin/lyaotalk-alert.sh
+  echo "*/5 * * * * root /usr/local/bin/lyaotalk-alert.sh" > /etc/cron.d/lyaotalk-alert
   success "Monitoring alert script configured (every 5 minutes)"
 }
 
 setup_quick_check() {
-  cat > /usr/local/bin/liaot-check << 'CHECK'
+  cat > /usr/local/bin/lyaotalk-check << 'CHECK'
 #!/usr/bin/env bash
 set -euo pipefail
 
 echo "=== Lyao Talk 30s Check ==="
-for svc in postgresql redis-server prosody minio liaot-api nginx; do
+for svc in postgresql redis-server prosody minio lyaotalk-api nginx; do
   state=$(systemctl is-active "$svc" 2>/dev/null || true)
   printf "%-16s %s\n" "$svc" "${state:-unknown}"
 done
@@ -1717,11 +1717,11 @@ echo "--- HTTP ---"
 curl -k -I --max-time 8 "https://$1" 2>/dev/null | head -n 1 || echo "https://$1 FAIL"
 curl -k -I --max-time 8 "https://$1/api/docs" 2>/dev/null | head -n 1 || echo "https://$1/api/docs FAIL"
 CHECK
-  chmod +x /usr/local/bin/liaot-check
+  chmod +x /usr/local/bin/lyaotalk-check
 }
 
 write_secrets_file() {
-  local secrets_file="/root/liaot-secrets.txt"
+  local secrets_file="/root/lyaotalk-secrets.txt"
   cat > "${secrets_file}" <<EOF
 Lyao Talk Secrets
 Generated: $(date '+%F %T')
@@ -1760,14 +1760,14 @@ print_summary() {
   fi
   echo ""
   echo -e "  ${YELLOW}Useful commands:${NC}"
-  echo -e "  systemctl status liaot-api   # Check API status"
-  echo -e "  journalctl -u liaot-api -f   # Follow API logs"
+  echo -e "  systemctl status lyaotalk-api   # Check API status"
+  echo -e "  journalctl -u lyaotalk-api -f   # Follow API logs"
   echo -e "  systemctl status prosody        # Check XMPP status"
   echo -e "  systemctl status nginx          # Check Nginx status"
-  echo -e "  liaot-backup.sh              # Run backup now"
-  echo -e "  liaot-check ${DOMAIN}        # Run 30-second checks"
+  echo -e "  lyaotalk-backup.sh              # Run backup now"
+  echo -e "  lyaotalk-check ${DOMAIN}        # Run 30-second checks"
   echo ""
-  echo -e "  Secrets file: /root/liaot-secrets.txt (chmod 600)"
+  echo -e "  Secrets file: /root/lyaotalk-secrets.txt (chmod 600)"
   echo ""
   echo -e "  ${RED}Store these generated passwords safely:${NC}"
   echo -e "  Database: ${DB_PASS}"

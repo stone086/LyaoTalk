@@ -40,6 +40,8 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
     upsertRoom({ ...room, accountId: activeAccountId, joinState: "joining" });
     try {
       await client.joinRoom(room.jid, room.nickname);
+      void client.publishMucBookmark({ jid: room.jid, name: room.name, nickname: room.nickname, autojoin: true })
+        .catch(() => toast.error(t("group.bookmarkSyncFailed")));
       // Promise resolved means server confirmed self-presence with code 110.
       // The bridge handler also sets joinState; this is just safety.
       setJoinState(activeAccountId, room.jid, "joined");
@@ -65,6 +67,7 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
     if (!activeAccountId) return;
     const client = getClient(activeAccountId);
     client?.leaveRoom(room.jid, room.nickname);
+    void client?.retractMucBookmark(room.jid).catch(() => toast.error(t("group.bookmarkSyncFailed")));
     removeRoom(activeAccountId, room.jid);
     deleteConversation(generateConversationId(activeAccountId, room.jid));
     toast(t("group.leftRoom"));
@@ -218,6 +221,8 @@ export default function GroupPanel() {
 
     try {
       await client.joinRoom(roomJid, nickname);
+      void client.publishMucBookmark({ jid: roomJid, name: roomName, nickname, autojoin: true })
+        .catch(() => toast.error(t("group.bookmarkSyncFailed")));
       // Bridge handler also flips state to "joined" on the room.joined event.
       navigate(`/chat/${convId}`);
       return true;

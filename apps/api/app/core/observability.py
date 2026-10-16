@@ -1,4 +1,4 @@
-"""Lightweight observability helpers for LiaoT.
+"""Lightweight observability helpers for LyaoTalk.
 
 This module intentionally avoids new runtime dependencies so the 1.8.x
 hash-pinned Python install remains stable. It exposes Prometheus-compatible
@@ -52,7 +52,7 @@ class MetricsRegistry:
         route = normalize_route(path)
         labels = tuple(sorted({"method": method, "route": route, "status_class": status_class}.items()))
         with self._lock:
-            self._counters[("liaot_http_requests_total", labels)] += 1
+            self._counters[("lyaotalk_http_requests_total", labels)] += 1
             state = self._http_latency.get(labels)
             if state is None:
                 state = _HistogramState(buckets={bucket: 0 for bucket in _BUCKETS})
@@ -67,30 +67,30 @@ class MetricsRegistry:
         now = time.time()
         lines: list[str] = []
         lines.extend([
-            "# HELP liaot_build_info Build and runtime information for this API process.",
-            "# TYPE liaot_build_info gauge",
+            "# HELP lyaotalk_build_info Build and runtime information for this API process.",
+            "# TYPE lyaotalk_build_info gauge",
         ])
         try:
             from app.core.version import get_app_version
             version = get_app_version()
         except Exception:
             version = "unknown"
-        lines.append(f'liaot_build_info{{version="{_escape_label(version)}"}} 1')
+        lines.append(f'lyaotalk_build_info{{version="{_escape_label(version)}"}} 1')
         lines.extend([
-            "# HELP liaot_process_uptime_seconds Seconds since the API process started.",
-            "# TYPE liaot_process_uptime_seconds gauge",
-            f"liaot_process_uptime_seconds {now - self._started_at:.3f}",
-            "# HELP liaot_http_requests_total Total HTTP requests observed by the API middleware.",
-            "# TYPE liaot_http_requests_total counter",
+            "# HELP lyaotalk_process_uptime_seconds Seconds since the API process started.",
+            "# TYPE lyaotalk_process_uptime_seconds gauge",
+            f"lyaotalk_process_uptime_seconds {now - self._started_at:.3f}",
+            "# HELP lyaotalk_http_requests_total Total HTTP requests observed by the API middleware.",
+            "# TYPE lyaotalk_http_requests_total counter",
         ])
         with self._lock:
             for (name, label_items), value in sorted(self._counters.items()):
-                if name != "liaot_http_requests_total":
+                if name != "lyaotalk_http_requests_total":
                     continue
                 lines.append(f"{name}{_labelset(**dict(label_items))} {value:.0f}")
             lines.extend([
-                "# HELP liaot_http_request_duration_seconds HTTP request latency histogram.",
-                "# TYPE liaot_http_request_duration_seconds histogram",
+                "# HELP lyaotalk_http_request_duration_seconds HTTP request latency histogram.",
+                "# TYPE lyaotalk_http_request_duration_seconds histogram",
             ])
             for label_items, state in sorted(self._http_latency.items()):
                 base_labels = dict(label_items)
@@ -98,21 +98,21 @@ class MetricsRegistry:
                 for bucket in _BUCKETS:
                     cumulative = state.buckets[bucket]
                     lines.append(
-                        "liaot_http_request_duration_seconds_bucket"
+                        "lyaotalk_http_request_duration_seconds_bucket"
                         f"{_labelset(**base_labels, le=str(bucket))} {cumulative}"
                     )
                 lines.append(
-                    "liaot_http_request_duration_seconds_bucket"
+                    "lyaotalk_http_request_duration_seconds_bucket"
                     f"{_labelset(**base_labels, le='+Inf')} {state.count}"
                 )
-                lines.append(f"liaot_http_request_duration_seconds_count{_labelset(**base_labels)} {state.count}")
-                lines.append(f"liaot_http_request_duration_seconds_sum{_labelset(**base_labels)} {state.total:.6f}")
+                lines.append(f"lyaotalk_http_request_duration_seconds_count{_labelset(**base_labels)} {state.count}")
+                lines.append(f"lyaotalk_http_request_duration_seconds_sum{_labelset(**base_labels)} {state.total:.6f}")
             lines.extend([
-                "# HELP liaot_events_total Security and operational events emitted by the application.",
-                "# TYPE liaot_events_total counter",
+                "# HELP lyaotalk_events_total Security and operational events emitted by the application.",
+                "# TYPE lyaotalk_events_total counter",
             ])
             for (name, label_items), value in sorted(self._counters.items()):
-                if name == "liaot_http_requests_total":
+                if name == "lyaotalk_http_requests_total":
                     continue
                 lines.append(f"{name}{_labelset(**dict(label_items))} {value:.0f}")
         return "\n".join(lines) + "\n"

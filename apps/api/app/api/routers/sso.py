@@ -42,7 +42,7 @@ except ImportError:
     aioredis = None  # type: ignore[assignment]
 
 router = APIRouter()
-logger = logging.getLogger("liaot.sso")
+logger = logging.getLogger("lyaotalk.sso")
 
 SSO_CODE_TTL = 30        # seconds for one-time exchange code
 OIDC_STATE_TTL = 600     # seconds for OIDC CSRF state
@@ -420,7 +420,7 @@ async def oidc_callback(
     # Verify email_verified=true. Without this check, an attacker who
     # registers an unverified email at the IdP (many IdPs allow account
     # creation with any email and verify lazily-or-never) could log in to
-    # LiaoT claiming to be that email's owner. The OIDC spec says
+    # LyaoTalk claiming to be that email's owner. The OIDC spec says
     # "RPs SHOULD NOT rely on this value being true". We treat it as a
     # required signal: if the IdP doesn't verify emails, we don't trust
     # the email_verified flag's presence — we trust that a deployment

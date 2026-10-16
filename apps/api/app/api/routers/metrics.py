@@ -10,7 +10,7 @@ from app.core.config import settings
 from app.core.observability import metrics_registry
 
 router = APIRouter()
-logger = logging.getLogger("liaot.csp")
+logger = logging.getLogger("lyaotalk.csp")
 
 
 @router.get(
@@ -88,7 +88,7 @@ async def collect_web_vitals(request: Request, batch: WebVitalsBatch):
         # Skip reports with implausible timestamps to keep the buffer tidy
         if abs(report.timestamp - now_ms) > one_day_ms:
             continue
-        metrics_registry.inc("liaot_events_total", event="web_vital", name=report.name, rating=report.rating)
+        metrics_registry.inc("lyaotalk_events_total", event="web_vital", name=report.name, rating=report.rating)
         _web_vitals_buffer.append(
             {
                 "name": report.name,
@@ -193,7 +193,7 @@ async def receive_csp_report(request: Request):
     # resources that an operator needs to add to the policy.
     client_ip = (request.client.host if request.client else "?")
     for r in reports:
-        metrics_registry.inc("liaot_events_total", event="csp_violation", directive=r["directive"] or "unknown")
+        metrics_registry.inc("lyaotalk_events_total", event="csp_violation", directive=r["directive"] or "unknown")
         logger.warning(
             "csp_violation",
             extra={

@@ -6,13 +6,13 @@ from pydantic import model_validator
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://localhost:5432/liaot"
+    DATABASE_URL: str = "postgresql+asyncpg://localhost:5432/lyaotalk"
     REDIS_URL: str = "redis://localhost:6379/0"
 
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = ""
     MINIO_SECRET_KEY: str = ""
-    MINIO_BUCKET: str = "liaot-files"
+    MINIO_BUCKET: str = "lyaotalk-files"
     MINIO_SECURE: bool = False
 
     SECRET_KEY: str = secrets.token_urlsafe(48)
@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     # Web Push (VAPID)
     VAPID_PRIVATE_KEY: str = ""
     VAPID_PUBLIC_KEY: str = ""
-    VAPID_EMAIL: str = "admin@liaot.local"
+    VAPID_EMAIL: str = "admin@lyaotalk.local"
 
     # TURN/STUN credentials for Prosody/coturn integration. The API does not
     # expose TURN_SECRET publicly; accepting it here keeps install-generated

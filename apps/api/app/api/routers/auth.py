@@ -34,13 +34,13 @@ except ImportError:
     _pwd_context = None
 
 router = APIRouter()
-logger = logging.getLogger("liaot.auth")
+logger = logging.getLogger("lyaotalk.auth")
 UTC = timezone.utc
 
 
 def _register_with_prosody(username: str, domain: str, password: str):
     """Register through a narrow local helper running as the Prosody user."""
-    helper = "/run/liaot-prosody.sock"
+    helper = "/run/lyaotalk-prosody.sock"
     if Path(helper).exists():
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
             conn.settimeout(20)
@@ -134,7 +134,7 @@ async def admin_login(
         )
     if data.username != ADMIN_USERNAME or not _verify_admin_password(data.password):
         # Don't distinguish "bad username" from "bad password" in either response or timing
-        metrics_registry.inc("liaot_events_total", event="admin_login_failed")
+        metrics_registry.inc("lyaotalk_events_total", event="admin_login_failed")
         logger.warning("admin_login_failed", extra={"username": data.username, "client_ip_masked": masked_for_log})
         await write_audit(
             db,
@@ -143,7 +143,7 @@ async def admin_login(
             client_ip=client_ip,
         )
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    metrics_registry.inc("liaot_events_total", event="admin_login_ok")
+    metrics_registry.inc("lyaotalk_events_total", event="admin_login_ok")
     logger.info("admin_login_ok", extra={"username": data.username, "client_ip_masked": masked_for_log})
     await write_audit(
         db,

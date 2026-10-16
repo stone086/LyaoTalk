@@ -63,7 +63,7 @@ import { initializeOmemoKeys, buildOwnBundle, NS_DEVICELIST, NS_BUNDLES } from "
  * Initialize OMEMO for an account and publish our bundle to PEP.
  * Should be called once per session, after XMPP connection is established.
  *
- * @param accountId   LiaoT account id (used to namespace keys in IndexedDB)
+ * @param accountId   LyaoTalk account id (used to namespace keys in IndexedDB)
  * @param xmppClient  Connected XMPP client with publishPepNode / fetchPepNode
  */
 export async function initOmemo(

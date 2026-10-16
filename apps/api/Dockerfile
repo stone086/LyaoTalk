@@ -36,8 +36,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
-RUN groupadd --system --gid 1001 liaot && \
-    useradd --system --uid 1001 --gid liaot --no-create-home --shell /usr/sbin/nologin liaot
+RUN groupadd --system --gid 1001 lyaotalk && \
+    useradd --system --uid 1001 --gid lyaotalk --no-create-home --shell /usr/sbin/nologin lyaotalk
 
 WORKDIR /app
 
@@ -48,9 +48,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 # Copy app code with proper ownership
-COPY --chown=liaot:liaot . .
+COPY --chown=lyaotalk:lyaotalk . .
 
-USER liaot
+USER lyaotalk
 
 EXPOSE 8000
 
@@ -83,9 +83,9 @@ CMD ["uvicorn", "app.main:app", \
 #     --memory=1g --memory-swap=1g \      # bound RAM
 #     --user 1001:1001 \                  # already enforced via USER above
 #                                         # but explicit at run-time is safer
-#     --network liaot-internal \       # isolated network — only DB, Redis,
+#     --network lyaotalk-internal \       # isolated network — only DB, Redis,
 #                                         # MinIO, and reverse proxy reachable
-#     liaot-api:1.6.0
+#     lyaotalk-api:1.6.0
 #
 # For Kubernetes, equivalent securityContext:
 #   readOnlyRootFilesystem: true

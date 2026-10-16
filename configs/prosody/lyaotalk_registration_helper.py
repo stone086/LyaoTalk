@@ -9,8 +9,8 @@ import subprocess
 import hashlib
 
 
-DOMAIN = os.environ.get("LIAOT_XMPP_DOMAIN", "")
-DATA_ROOT = os.environ.get("LIAOT_PROSODY_DATA_ROOT", "/var/lib/prosody")
+DOMAIN = os.environ.get("LYAOTALK_XMPP_DOMAIN", "")
+DATA_ROOT = os.environ.get("LYAOTALK_PROSODY_DATA_ROOT", "/var/lib/prosody")
 
 
 def _encoded_name(value: str) -> str:

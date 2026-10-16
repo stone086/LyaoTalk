@@ -15,7 +15,7 @@ const queryClient = new QueryClient({
 });
 
 async function clearLegacyPwaCachesOnce() {
-  const flag = "liaot-sw-reset-2026-04-20";
+  const flag = "lyaotalk-sw-reset-2026-04-20";
   if (localStorage.getItem(flag) === "done") return;
   if (!("serviceWorker" in navigator)) {
     localStorage.setItem(flag, "done");

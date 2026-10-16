@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/../apps/api"
-python3 -m venv /tmp/liaot-hash-venv
-. /tmp/liaot-hash-venv/bin/activate
+python3 -m venv /tmp/lyaotalk-hash-venv
+. /tmp/lyaotalk-hash-venv/bin/activate
 python -m pip install --upgrade pip pip-tools
 pip-compile --generate-hashes --output-file=requirements.txt requirements.in
 pip install --require-hashes -r requirements.txt

@@ -2,7 +2,7 @@
 
 ## Service status
 ```bash
-cd /opt/liaot-src
+cd /opt/lyaotalk-src
 bash manage.sh status
 ```
 
@@ -56,7 +56,7 @@ bash manage.sh watchdog
 ```
 
 ## Systemd templates
-- `configs/systemd/liaot-api.service.template`
+- `configs/systemd/lyaotalk-api.service.template`
 - `configs/systemd/minio.service.template`
 
 Use templates as reference for manual recovery or migration to a new host.

@@ -1,8 +1,8 @@
--- mod_liaot_push.lua
+-- mod_lyaotalk_push.lua
 -- Prosody Component module that receives XEP-0357 push notifications
--- and forwards them via HTTP to LiaoT backend.
+-- and forwards them via HTTP to LyaoTalk backend.
 --
--- Install: copy to /usr/lib/prosody-modules/mod_liaot_push/mod_liaot_push.lua
+-- Install: copy to /usr/lib/prosody-modules/mod_lyaotalk_push/mod_lyaotalk_push.lua
 -- Configure: see Component "push.DOMAIN" in prosody.cfg.lua
 
 local jid = require "util.jid";
@@ -10,8 +10,8 @@ local st = require "util.stanza";
 local http = require "net.http";
 local json = require "util.json";
 
-local notify_url = module:get_option_string("liaot_push_url", "http://127.0.0.1:8000/push/notify");
-local shared_secret = module:get_option_string("liaot_push_secret", "");
+local notify_url = module:get_option_string("lyaotalk_push_url", "http://127.0.0.1:8000/push/notify");
+local shared_secret = module:get_option_string("lyaotalk_push_secret", "");
 
 -- Handle <iq type="set"><pubsub><publish node="..."> from registered users
 -- which carries the push payload (per XEP-0357 §6).
@@ -46,7 +46,7 @@ module:hook("iq-set/host/http://jabber.org/protocol/pubsub:pubsub", function(eve
     end
   end
 
-  -- Async HTTP POST to LiaoT backend
+  -- Async HTTP POST to LyaoTalk backend
   local payload = json.encode({
     account_jid = target_user,
     title = title,
@@ -68,4 +68,4 @@ module:hook("iq-set/host/http://jabber.org/protocol/pubsub:pubsub", function(eve
   return event.origin.send(st.reply(stanza));
 end);
 
-module:log("info", "LiaoT push relay loaded, forwarding to %s", notify_url);
+module:log("info", "LyaoTalk push relay loaded, forwarding to %s", notify_url);

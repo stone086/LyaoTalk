@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Stage 0 validation helper for LiaoT.
+# Stage 0 validation helper for LyaoTalk.
 # This script intentionally performs safe checks only. Server/runtime checks are
 # optional and should be run on a clean staging VM after install.sh completes.
 
@@ -180,7 +180,7 @@ run_server_checks() {
   fi
 
   if command -v systemctl >/dev/null 2>&1; then
-    service_is_active liaot-api
+    service_is_active lyaotalk-api
     service_is_active prosody
     service_is_active nginx
     service_is_active minio
@@ -210,18 +210,18 @@ run_server_checks() {
     warn "curl not found"
   fi
 
-  local alembic_bin="/opt/liaot/api/.venv/bin/alembic"
+  local alembic_bin="/opt/lyaotalk/api/.venv/bin/alembic"
   if [[ -x "$alembic_bin" ]]; then
-    (cd /opt/liaot/api && sudo -u liaot "$alembic_bin" current) && pass "alembic current passed" || fail "alembic current failed"
-    (cd /opt/liaot/api && sudo -u liaot "$alembic_bin" heads) && pass "alembic heads passed" || fail "alembic heads failed"
-    (cd /opt/liaot/api && sudo -u liaot "$alembic_bin" upgrade head) && pass "alembic upgrade head passed" || fail "alembic upgrade head failed"
+    (cd /opt/lyaotalk/api && sudo -u lyaotalk "$alembic_bin" current) && pass "alembic current passed" || fail "alembic current failed"
+    (cd /opt/lyaotalk/api && sudo -u lyaotalk "$alembic_bin" heads) && pass "alembic heads passed" || fail "alembic heads failed"
+    (cd /opt/lyaotalk/api && sudo -u lyaotalk "$alembic_bin" upgrade head) && pass "alembic upgrade head passed" || fail "alembic upgrade head failed"
   else
     warn "Alembic binary not found at $alembic_bin"
   fi
 
   if command -v journalctl >/dev/null 2>&1; then
-    info "Recent liaot-api journal lines:"
-    journalctl -u liaot-api --since "10 min ago" --no-pager -n 80 || true
+    info "Recent lyaotalk-api journal lines:"
+    journalctl -u lyaotalk-api --since "10 min ago" --no-pager -n 80 || true
   fi
 }
 

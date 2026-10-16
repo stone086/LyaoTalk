@@ -1,4 +1,4 @@
-"""Structured logging setup for LiaoT."""
+"""Structured logging setup for LyaoTalk."""
 
 from __future__ import annotations
 

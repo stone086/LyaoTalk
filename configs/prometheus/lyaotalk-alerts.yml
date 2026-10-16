@@ -1,0 +1,46 @@
+groups:
+  - name: lyaotalk-observability
+    rules:
+      - alert: LyaoTalkHigh5xxRate
+        expr: |
+          sum(rate(lyaotalk_http_requests_total{status_class="5xx"}[5m]))
+          /
+          clamp_min(sum(rate(lyaotalk_http_requests_total[5m])), 1)
+          > 0.01
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "LyaoTalk API 5xx rate is above 1%"
+          description: "Investigate lyaotalk-api logs, DB connectivity, Redis, and recent deployments."
+
+      - alert: LyaoTalkAdminLoginFailures
+        expr: increase(lyaotalk_events_total{event="admin_login_failed"}[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LyaoTalk admin login failures detected"
+          description: "More than 5 failed admin logins in 5 minutes. Check audit logs and nginx access logs."
+
+      - alert: LyaoTalkCspViolation
+        expr: increase(lyaotalk_events_total{event="csp_violation"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LyaoTalk CSP violation reported"
+          description: "Could be XSS probing or a legitimate resource missing from CSP. Review /api/csp-report logs."
+
+      - alert: LyaoTalkHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(lyaotalk_http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LyaoTalk API p95 latency above 2 seconds"
+          description: "Check DB slow queries, MinIO, Redis, CPU, and recent traffic spikes."

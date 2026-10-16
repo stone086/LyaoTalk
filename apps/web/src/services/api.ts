@@ -1,7 +1,7 @@
 import axios from "axios";
 import { getAccountPassword, useAccountStore } from "@/stores/accountStore";
 import { trustedFileObjectKey } from "./trustedFilesUrl";
-export const ADMIN_SESSION_EXPIRED_EVENT = "liaot:admin-session-expired";
+export const ADMIN_SESSION_EXPIRED_EVENT = "lyaotalk:admin-session-expired";
 const USER_TOKEN_KEY_PREFIX = "liaot-user-token:";
 const USER_REFRESH_KEY_PREFIX = "liaot-user-refresh:";
 const ADMIN_REFRESH_KEY = "admin_refresh_token";
@@ -47,7 +47,7 @@ export async function privateFileBlob(rawUrl: string, accountId?: string | null,
   if (!objectKey || !accountId) throw new Error("Private file URL or account is unavailable");
   const response = await api.get(`/attachments/download/${objectKey}`, {
     responseType: "blob",
-    headers: { "X-LiaoT-Account-Id": accountId },
+    headers: { "X-LyaoTalk-Account-Id": accountId },
     signal,
   });
   return response.data as Blob;
@@ -58,7 +58,7 @@ export async function remoteEncryptedBlob(rawUrl: string, accountId?: string | n
   if (!accountId) throw new Error("Account is unavailable");
   const response = await api.post("/attachments/remote-encrypted", { url: rawUrl }, {
     responseType: "blob",
-    headers: { "X-LiaoT-Account-Id": accountId },
+    headers: { "X-LyaoTalk-Account-Id": accountId },
     signal,
   });
   return response.data as Blob;
@@ -106,9 +106,9 @@ api.interceptors.request.use((config) => {
   const publicAuthRequest = /^\/auth\/(?:user-token|admin\/login|register|config)(?:$|[/?])/.test(config.url ?? "");
 
   let accountId =
-    (config as typeof config & { __liaotAccountId?: string | null }).__liaotAccountId ??
-    (typeof config.headers?.["X-LiaoT-Account-Id"] === "string"
-      ? config.headers["X-LiaoT-Account-Id"]
+    (config as typeof config & { __lyaotalkAccountId?: string | null }).__lyaotalkAccountId ??
+    (typeof config.headers?.["X-LyaoTalk-Account-Id"] === "string"
+      ? config.headers["X-LyaoTalk-Account-Id"]
       : undefined) ??
     store.activeAccountId;
 
@@ -129,10 +129,10 @@ api.interceptors.request.use((config) => {
     console.warn("[API] NO TOKEN ❌", accountId);
   }
 
-  (config as typeof config & { __liaotAccountId?: string | null }).__liaotAccountId = publicAuthRequest ? null : accountId;
+  (config as typeof config & { __lyaotalkAccountId?: string | null }).__lyaotalkAccountId = publicAuthRequest ? null : accountId;
 
-  if (config.headers && "X-LiaoT-Account-Id" in config.headers) {
-    delete config.headers["X-LiaoT-Account-Id"];
+  if (config.headers && "X-LyaoTalk-Account-Id" in config.headers) {
+    delete config.headers["X-LyaoTalk-Account-Id"];
   }
 
   // Keep JSON default for normal requests, but never force it for FormData uploads.
@@ -237,7 +237,7 @@ api.interceptors.response.use(
     }
 
     // Decide which refresh path to use based on which token was attached
-    const accountId = (config as typeof config & { __liaotAccountId?: string | null }).__liaotAccountId ?? null;
+    const accountId = (config as typeof config & { __lyaotalkAccountId?: string | null }).__lyaotalkAccountId ?? null;
     const attachedToken = typeof config.headers?.Authorization === "string" ? config.headers.Authorization.replace(/^Bearer\s+/i, "") : null;
     const currentUserToken = accountId ? getUserToken(accountId) : null;
     // Another request may already have refreshed this account's token while
@@ -317,12 +317,12 @@ export const messagesApi = {
   clearHistory: (accountId: string) =>
     api.delete("/messages/history", {
       params: { account_id: accountId },
-      headers: { "X-LiaoT-Account-Id": accountId },
+      headers: { "X-LyaoTalk-Account-Id": accountId },
     }).then((r) => r.data),
   clearConversation: (accountId: string, peerJid: string) =>
     api.delete("/messages/conversation-history", {
       params: { account_id: accountId, peer_jid: peerJid },
-      headers: { "X-LiaoT-Account-Id": accountId },
+      headers: { "X-LyaoTalk-Account-Id": accountId },
     }).then((r) => r.data),
 };
 
@@ -330,11 +330,11 @@ export const messagesApi = {
 export const attachmentsApi = {
     publishEncrypted: (attachmentId: string, accountId: string) =>
       api.post(`/attachments/${encodeURIComponent(attachmentId)}/publish-encrypted`, null,
-        { headers: { "X-LiaoT-Account-Id": accountId } }).then((r) => r.data as { url: string }),
+        { headers: { "X-LyaoTalk-Account-Id": accountId } }).then((r) => r.data as { url: string }),
   share: (attachmentId: string, recipientJid: string, accountId: string) =>
     api.post(`/attachments/${encodeURIComponent(attachmentId)}/share`,
       { recipient_jid: recipientJid },
-      { headers: { "X-LiaoT-Account-Id": accountId } }).then((r) => r.data),
+      { headers: { "X-LyaoTalk-Account-Id": accountId } }).then((r) => r.data),
   upload: (file: File, messageId?: string, accountId?: string) => {
     const form = new FormData();
     form.append("file", file, file.name);
@@ -350,7 +350,7 @@ export const attachmentsApi = {
     // The axios request interceptor will still add Authorization: Bearer <token>
     // because we are not setting that header here.
     const headers: Record<string, string> = {};
-    if (accountId) headers["X-LiaoT-Account-Id"] = accountId;
+    if (accountId) headers["X-LyaoTalk-Account-Id"] = accountId;
 
     return api.post("/attachments/upload", form, { headers }).then((r) => r.data);
   },
@@ -416,5 +416,5 @@ export const authApi = {
     }),
   logout: (refresh_token?: string, accountId?: string) =>
     api.post("/auth/logout", refresh_token ? { refresh_token } : {},
-      accountId ? { headers: { "X-LiaoT-Account-Id": accountId } } : undefined).then((r) => r.data),
+      accountId ? { headers: { "X-LyaoTalk-Account-Id": accountId } } : undefined).then((r) => r.data),
 };

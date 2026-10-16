@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: "preflight or deploy; deploy requires explicit staging approval"
+        description: "preflight or deploy"
         type: choice
         options: [preflight, deploy]
         default: preflight
       confirmation:
-        description: "For deploy, type DEPLOY-ISOLATED-LYAOTALK"
+        description: "For deploy, type DEPLOY-LYAOTALK"
         required: false
         type: string
 
@@ -34,7 +34,7 @@ jobs:
           test -f apps/api/requirements.txt
           test -f apps/web/package-lock.json
           if [[ "${{ inputs.mode }}" == deploy ]]; then
-            [[ "${{ inputs.confirmation }}" == DEPLOY-ISOLATED-LYAOTALK ]] || { echo "Explicit confirmation missing" >&2; exit 1; }
+            [[ "${{ inputs.confirmation }}" == DEPLOY-LYAOTALK ]] || { echo "Explicit confirmation missing" >&2; exit 1; }
           fi
           echo "Preflight checks passed; no remote changes in this job."
 
@@ -42,14 +42,14 @@ jobs:
     needs: validate
     if: inputs.mode == 'deploy'
     runs-on: ubuntu-latest
-    environment: lyaotalk-staging
+    environment: lyaotalk-production
     steps:
-      - name: Deploy to opt-in isolated staging VPS
+      - name: Deploy to LyaoTalk VPS
         env:
-          HOST: ${{ secrets.LYAOTALK_STAGING_HOST }}
-          USER: ${{ secrets.LYAOTALK_STAGING_USER }}
-          SSH_KEY: ${{ secrets.LYAOTALK_STAGING_SSH_KEY }}
-          SSH_HOST_KEY: ${{ secrets.LYAOTALK_STAGING_HOST_KEY }}
+          HOST: ${{ secrets.LYAOTALK_VPS_HOST }}
+          USER: ${{ secrets.LYAOTALK_VPS_USER }}
+          SSH_KEY: ${{ secrets.LYAOTALK_VPS_SSH_KEY }}
+          SSH_HOST_KEY: ${{ secrets.LYAOTALK_VPS_HOST_KEY }}
           TARGET_SHA: ${{ github.sha }}
         shell: bash
         run: |
@@ -63,12 +63,12 @@ jobs:
           ssh -o StrictHostKeyChecking=yes -o BatchMode=yes "$USER@$HOST" "bash -s -- '$TARGET_SHA'" <<'REMOTE'
           set -euo pipefail
           sha="$1"
-          [[ -f /etc/lyaotalk/isolated-staging-approved ]] || { echo "Not an opted-in isolated staging host" >&2; exit 1; }
-          [[ -d /opt/liaot-src/.git && -f /opt/liaot-src/manage.sh ]] || { echo "Existing app installation required" >&2; exit 1; }
-          cd /opt/liaot-src
+          [[ -d /opt/lyaotalk-src/.git && -f /etc/lyaotalk/api.env ]] || { echo "LyaoTalk release host required" >&2; exit 1; }
+          cd /opt/lyaotalk-src
           [[ "$(git remote get-url origin)" == "https://github.com/stone086/LyaoTalk.git" ]] || { echo "Unexpected remote; refusing to modify" >&2; exit 1; }
           git fetch --prune origin main
           [[ "$(git rev-parse origin/main)" == "$sha" ]] || { echo "Branch moved since workflow start; aborting" >&2; exit 1; }
           [[ "$(git rev-parse --abbrev-ref HEAD)" == main ]] || { echo "Expected main branch" >&2; exit 1; }
-          sudo bash manage.sh update
+          git merge --ff-only origin/main
+          sudo bash scripts/deploy-vps-release.sh "$sha"
           REMOTE

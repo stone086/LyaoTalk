@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 export type Language = "en-US" | "zh-CN";
 
 const LANGUAGE_KEY = "liaot-language";
-const LANGUAGE_EVENT = "liaot:language-change";
+const LANGUAGE_EVENT = "lyaotalk:language-change";
 
 const enUS = {
     "nav.chats": "Chats",
@@ -389,6 +389,7 @@ const enUS = {
     "group.joined": "Joined",
     "group.joining": "Joining...",
     "group.joinFailed": "Could not join the room",
+    "group.bookmarkSyncFailed": "Group joined, but syncing it to your other devices failed",
     "group.members": "members",
     "group.leave": "Leave room",
     "group.invite": "Invite",
@@ -845,6 +846,7 @@ const zhCN: Record<MessageKey, string> = {
     "group.joined": "已加入",
     "group.joining": "正在加入...",
     "group.joinFailed": "无法加入群组",
+    "group.bookmarkSyncFailed": "已加入群组，但同步到其他设备失败",
     "group.members": "成员",
     "group.leave": "退出群组",
     "group.invite": "邀请",

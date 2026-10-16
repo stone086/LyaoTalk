@@ -23,11 +23,11 @@ for f in "${required[@]}"; do
 done
 
 # Check for operational keywords that matter during an incident.
-grep -q "LIAOT_DOMAIN" docs/runbook/install.md || fail "install runbook missing LIAOT_DOMAIN install command"
+grep -q "LYAOTALK_DOMAIN" docs/runbook/install.md || fail "install runbook missing LYAOTALK_DOMAIN install command"
 grep -q "rollback" docs/runbook/upgrade.md || fail "upgrade runbook missing rollback procedure"
 grep -q "pg_dump\|pg_restore" docs/runbook/backup-restore.md || fail "backup runbook missing database backup/restore commands"
 grep -q "DELETE FROM refresh_tokens" docs/runbook/incident-response.md || fail "incident response missing refresh token revocation"
-grep -q "liaot_http_requests_total" docs/runbook/monitoring.md || fail "monitoring runbook missing Prometheus HTTP metric"
+grep -q "lyaotalk_http_requests_total" docs/runbook/monitoring.md || fail "monitoring runbook missing Prometheus HTTP metric"
 grep -q "SECRET_KEY" docs/runbook/secrets-rotation.md || fail "secrets rotation missing SECRET_KEY procedure"
 grep -q "RPO" docs/runbook/disaster-recovery.md || fail "disaster recovery missing RPO/RTO targets"
 

@@ -45,7 +45,7 @@ configure_logging(
     level=settings.LOG_LEVEL,
     json_logs=(settings.LOG_FORMAT.lower() != "text"),
 )
-logger = logging.getLogger("liaot")
+logger = logging.getLogger("lyaotalk")
 
 
 @asynccontextmanager
@@ -109,7 +109,7 @@ async def request_logging_middleware(request: Request, call_next):
         query_state = finish_query_counting(query_token)
         if query_state is not None:
             metrics_registry.inc(
-                "liaot_events_total",
+                "lyaotalk_events_total",
                 event="db_queries",
                 route=normalize_route(request.url.path),
                 amount=float(query_state.count),
@@ -141,13 +141,13 @@ async def request_logging_middleware(request: Request, call_next):
     if query_state is not None:
         route = normalize_route(request.url.path)
         metrics_registry.inc(
-            "liaot_events_total",
+            "lyaotalk_events_total",
             event="db_queries",
             route=route,
             amount=float(query_state.count),
         )
         if query_state.count > settings.PERF_QUERY_WARN_THRESHOLD:
-            metrics_registry.inc("liaot_events_total", event="n_plus_one_suspected", route=route)
+            metrics_registry.inc("lyaotalk_events_total", event="n_plus_one_suspected", route=route)
             logger.warning(
                 "n_plus_one_suspected",
                 extra={

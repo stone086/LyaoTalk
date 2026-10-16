@@ -33,7 +33,7 @@ function xmppFingerprintQrPayload(jid: string, deviceId: number | undefined, fin
     return `xmpp:${encodeURIComponent(jid)}?omemo-sid-${deviceId}=${encodeURIComponent(compact)}`;
   }
   return JSON.stringify({
-    type: "liaot.omemo-fingerprint",
+    type: "lyaotalk.omemo-fingerprint",
     version: 1,
     jid,
     fingerprint: compact,
