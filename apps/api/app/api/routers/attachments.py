@@ -231,7 +231,7 @@ async def share_attachment(
     recipient_jid = payload.recipient_jid.split("/", 1)[0].lower()
     recipient = await db.scalar(select(Account).where(Account.jid == recipient_jid, Account.is_enabled.is_(True)))
     if recipient is None:
-        raise HTTPException(status_code=422, detail="Recipient must have an active LiaoT account")
+        raise HTTPException(status_code=422, detail="Recipient must have an active Lyao Talk account")
     existing = await db.scalar(select(AttachmentGrant.id).where(
         AttachmentGrant.attachment_id == attachment_id,
         AttachmentGrant.account_id == recipient.id,

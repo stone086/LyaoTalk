@@ -161,7 +161,7 @@ async def link_preview(
             follow_redirects=False,
             trust_env=False,
             transport=PublicIPTransport(limits=httpx.Limits(max_connections=5)),
-            headers={"User-Agent": "LiaoTBot/1.0 (link preview)"},
+            headers={"User-Agent": "LyaoTalkBot/1.0 (link preview)"},
         ) as client:
             current_url = url
             status_code = None

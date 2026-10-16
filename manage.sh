@@ -71,7 +71,7 @@ git_fetch_with_retry() {
 }
 
 usage() {
-  echo -e "${CYAN}LiaoT manage${NC}"
+  echo -e "${CYAN}Lyao Talk manage${NC}"
   echo ""
   echo "Usage: bash manage.sh <command>"
   echo ""

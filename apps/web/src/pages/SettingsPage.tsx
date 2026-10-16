@@ -269,7 +269,7 @@ function AccountCard({ account }: { account: XmppAccount }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <ShareQr
           title={label("添加我为联系人", "Add me as a contact")}
-          description={label("联系人扫描后会打开 LiaoT 并添加你的 XMPP 地址。", "Scan to open LiaoT and add this XMPP address.")}
+          description={label("联系人扫描后会打开 Lyao Talk 并添加你的 XMPP 地址。", "Scan to open Lyao Talk and add this XMPP address.")}
           payload={contactUrl}
           copyText={bareJid}
         />
@@ -702,7 +702,7 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <p className="text-xs text-surface-200/20 text-center">LiaoT · v{__APP_VERSION__}</p>
+        <p className="text-xs text-surface-200/20 text-center">Lyao Talk · v{__APP_VERSION__}</p>
       </div>
     </div>
   );

@@ -1711,7 +1711,7 @@ export class XmppClient {
    */
   private async _computeCapsHash(): Promise<string> {
     const features = [...XmppClient.SUPPORTED_FEATURES].sort();
-    const idString = "client/web//LiaoT<" + features.join("<") + "<";
+    const idString = "client/web//Lyao Talk<" + features.join("<") + "<";
     const buf = new TextEncoder().encode(idString);
     const hash = await crypto.subtle.digest("SHA-1", buf);
     // base64 encode
@@ -1735,7 +1735,7 @@ export class XmppClient {
           xmlns: "http://jabber.org/protocol/disco#info",
           ...(requestedNode ? { node: requestedNode } : {}),
         })
-        .c("identity", { category: "client", type: "web", name: "LiaoT" }).up();
+        .c("identity", { category: "client", type: "web", name: "Lyao Talk" }).up();
       for (const feature of XmppClient.SUPPORTED_FEATURES) {
         reply.c("feature", { var: feature }).up();
       }
