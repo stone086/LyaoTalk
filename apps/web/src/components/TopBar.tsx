@@ -80,6 +80,14 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
   };
 
   const toggleOmemo = () => {
+    if (conversation?.type === "group") {
+      toast(t("omemo.groupUnavailable"), {
+        duration: 3500,
+        position: "top-right",
+        style: { marginTop: "68px", maxWidth: "min(22rem, calc(100vw - 2rem))" },
+      });
+      return;
+    }
     const next = !omemoEnabled;
     setOmemoEnabled(next);
     if (next) toast(t("omemo.enabledNotice"), {
@@ -123,7 +131,7 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
         {!compact && !conversation && <div className="hidden flex-1 sm:block" />}
         {!compact && <>
         {conversation && <button type="button" onClick={() => setShowSearch(true)} className="btn-ghost p-2" title={t("topbar.searchPlaceholder")} aria-label={t("topbar.searchPlaceholder")}><Search size={16} /></button>}
-        {conversation && <button type="button" onClick={toggleOmemo} className={`btn-ghost p-2 ${omemoEnabled ? "text-success" : "text-warn"}`} title={omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-label={omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-pressed={omemoEnabled}>{omemoEnabled ? <Lock size={16} /> : <Unlock size={16} />}</button>}
+        {conversation && <button type="button" onClick={toggleOmemo} className={`btn-ghost p-2 ${conversation.type === "group" || !omemoEnabled ? "text-warn" : "text-success"}`} title={conversation.type === "group" ? t("omemo.groupUnavailable") : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-label={conversation.type === "group" ? t("omemo.groupUnavailable") : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-pressed={conversation.type === "group" ? false : omemoEnabled}>{conversation.type === "group" || !omemoEnabled ? <Unlock size={16} /> : <Lock size={16} />}</button>}
         {conversation && <button type="button" onClick={toggleTheme} className="btn-ghost p-2" title={t("topbar.theme")} aria-label={t("topbar.theme")}>{dark ? <Sun size={16} /> : <Moon size={16} />}</button>}
         {conversation?.type === "private" && <div ref={callMenuRef} className="relative">
           <button type="button" onClick={() => { setShowCallMenu((value) => !value); setShowChatMenu(false); }} className="btn-ghost p-2" title={t("chat.callOptions")} aria-label={t("chat.callOptions")} aria-expanded={showCallMenu} aria-haspopup="menu"><Phone size={16} /></button>
