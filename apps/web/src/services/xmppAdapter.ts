@@ -529,6 +529,9 @@ export class XmppClient {
           replyTo: replyNode?.getAttribute("id") ?? undefined,
           replaceId: replaceNode?.getAttribute("id") ?? undefined,
           omemo: omemo ?? undefined,
+          realSenderJid: type === "groupchat"
+            ? normalizeValidBareJid(realStanza.querySelector('x[xmlns="http://jabber.org/protocol/muc#user"] item[jid]')?.getAttribute("jid") ?? "") ?? undefined
+            : undefined,
         };
         this.emit("message.received", {
           accountId: this.config.accountId,
@@ -1996,4 +1999,5 @@ export function destroyClient(accountId: string, preserveResumableSession = fals
 export function getAllClients(): XmppClient[] {
   return Array.from(clients.values());
 }
+
 
