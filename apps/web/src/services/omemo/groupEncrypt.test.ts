@@ -1,5 +1,12 @@
+// @vitest-environment node
 import { webcrypto } from "node:crypto";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+vi.hoisted(() => {
+  (globalThis as typeof globalThis & { window: typeof globalThis }).window = globalThis;
+  (globalThis as typeof globalThis & { XMLHttpRequest: unknown }).XMLHttpRequest = class {
+    getResponseHeader() { return null; }
+  };
+});
 import { KeyHelper } from "@privacyresearch/libsignal-protocol-typescript/lib/key-helper";
 
 const data = new Map<string, unknown>();
@@ -65,3 +72,4 @@ describe("group OMEMO key fanout", () => {
     expect(await decryptEnvelope(members[2], bundles[2].deviceId, members[0], envelope)).toBe(plaintext);
   });
 });
+
