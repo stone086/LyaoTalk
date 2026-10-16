@@ -6,7 +6,6 @@ import { initXmppBridge } from "@/services/xmppBridge";
 import { markIntentionalDisconnect } from "@/services/connectionSupervisor";
 import { accountsApi, authApi, setUserToken, setUserRefreshToken, clearUserToken } from "@/services/api";
 import { apiSocket } from "@/services/apiSocket";
-import { requestNotificationPermission } from "@/stores/notificationStore";
 import toast from "react-hot-toast";
 import { Wifi, Lock, User, Eye, EyeOff, UserPlus } from "lucide-react";
 import { useLanguage } from "@/utils/i18n";
@@ -105,7 +104,6 @@ export default function LoginPage() {
         setUserToken(id, tokenRes.access_token);
         if ((tokenRes as any).refresh_token) setUserRefreshToken(id, (tokenRes as any).refresh_token);
       }
-      await requestNotificationPermission();
       toast.success(`${t("login.connectedAs")}: ${jid}`);
       // apiSocket.connect(id);
       navigate("/");
@@ -382,3 +380,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
