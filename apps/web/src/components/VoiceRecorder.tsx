@@ -123,7 +123,9 @@ export default function VoiceRecorder({ onSend, onCancel, embedded = false }: Vo
     }
 
     const mimeType = recorder.mimeType || chunksRef.current[0]?.type || "audio/webm";
-    const extension = mimeType.startsWith("audio/mp4") ? "m4a" : mimeType.startsWith("audio/ogg") ? "ogg" : "webm";
+    // .webm is commonly classified as video by XMPP clients even when its
+    // only track is Opus audio. .weba keeps the container and signals audio.
+    const extension = mimeType.startsWith("audio/mp4") ? "m4a" : mimeType.startsWith("audio/ogg") ? "ogg" : "weba";
     const blob = new Blob(chunksRef.current, { type: mimeType });
     const file = new File([blob], `voice-${Date.now()}.${extension}`, { type: blob.type });
     cleanup();

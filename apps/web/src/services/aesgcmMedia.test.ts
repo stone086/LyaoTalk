@@ -9,6 +9,10 @@ describe("federated AES-GCM media link", () => {
     expect(decryptedMediaType("photo.jpg?expires=123")).toBe("image/jpeg");
     expect(decryptedMediaType("unknown.bin")).toBe("application/octet-stream");
   });
+  it("marks voice WebM as audio so clients do not show it as video", () => {
+    expect(decryptedMediaType("voice-123.weba")).toBe("audio/webm");
+    expect(decryptedMediaType("clip.webm")).toBe("video/webm");
+  });
   it("puts the IV and key in a URL fragment that recipients can parse", async () => {
     const { fragment } = await encryptForAesgcm(new Blob(["test image"]) as globalThis.Blob);
     expect(fragment).toMatch(/^#[0-9a-f]{88}$/);

@@ -99,6 +99,11 @@ def _public_media_signature(attachment_id: str, expires: int) -> str:
     return hmac.new(settings.SECRET_KEY.encode(), message, hashlib.sha256).hexdigest()
 
 
+# Media links are stored in chat history. A three-day capability made voice
+# messages permanently unavailable to other XMPP clients after that window.
+ENCRYPTED_MEDIA_LIFETIME_SECONDS = 365 * 24 * 3600
+
+
 @router.post("/{attachment_id}/publish-encrypted", summary="Publish a temporary encrypted media link")
 async def publish_encrypted_attachment(
     attachment_id: str,
@@ -110,7 +115,7 @@ async def publish_encrypted_attachment(
         raise HTTPException(status_code=404, detail="Attachment not found")
     if attachment.mime_type != "application/octet-stream":
         raise HTTPException(status_code=415, detail="Only encrypted media may be published")
-    expires = int(time.time()) + 3 * 24 * 3600
+    expires = int(time.time()) + ENCRYPTED_MEDIA_LIFETIME_SECONDS
     signature = _public_media_signature(attachment_id, expires)
     name = quote(attachment.file_name, safe="")
     # Keep the signed capability in path segments. Some XEP-0454 clients
@@ -186,7 +191,7 @@ async def _validate_public_encrypted_attachment(
     sig: str,
     db: AsyncSession,
 ) -> Attachment:
-    if expires < time.time() or expires > time.time() + 3 * 24 * 3600 + 60:
+    if expires < time.time() or expires > time.time() + ENCRYPTED_MEDIA_LIFETIME_SECONDS + 60:
         raise HTTPException(status_code=404, detail="Not found")
     expected = _public_media_signature(attachment_id, expires)
     if not hmac.compare_digest(sig, expected):

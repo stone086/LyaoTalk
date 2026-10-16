@@ -35,7 +35,7 @@ export function decryptedMediaType(fileName: string): string {
     png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
     webp: "image/webp", bmp: "image/bmp", heic: "image/heic", heif: "image/heif",
     mp3: "audio/mpeg", m4a: "audio/mp4", ogg: "audio/ogg", oga: "audio/ogg",
-    opus: "audio/ogg", wav: "audio/wav", webm: "video/webm",
+    opus: "audio/ogg", wav: "audio/wav", weba: "audio/webm", webm: "video/webm",
     mp4: "video/mp4", mov: "video/quicktime", pdf: "application/pdf",
   };
   return types[extension ?? ""] ?? "application/octet-stream";
