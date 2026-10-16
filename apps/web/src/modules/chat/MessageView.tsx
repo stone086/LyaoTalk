@@ -46,7 +46,7 @@ function parseAesgcmMediaLink(raw?: string): { href: string; fileName: string; i
   let fileName = encodedName;
   try { fileName = decodeURIComponent(encodedName); } catch { /* malformed peer URL */ }
   const lower = fileName.toLowerCase();
-  const isAudio = lower.endsWith(".m4a") || lower.endsWith(".mp3") || lower.endsWith(".ogg") || lower.endsWith(".wav") || lower.endsWith(".webm");
+  const isAudio = lower.endsWith(".m4a") || lower.endsWith(".mp3") || lower.endsWith(".ogg") || lower.endsWith(".wav") || lower.endsWith(".weba");
   return { href, fileName, isAudio };
 }
 
@@ -1466,37 +1466,32 @@ export default function MessageView({ conversationId }: { conversationId: string
           ) : (
             <VoiceRecorder embedded
               onSend={async (file) => {
-                // Upload as attachment, then send the public download URL
-                // to the peer via XMPP. Without this XMPP send the recipient
-                // never sees the voice message.
                 if (!activeAccountId) return;
                 const client = getClient(activeAccountId);
-                if (!client) {
-                  toast.error(t("voice.sendFailed"));
-                  return;
-                }
+                if (!client?.connected) throw new Error(t("chat.notConnected"));
                 try {
-                  const resp = await attachmentsApi.upload(file, undefined, activeAccountId);
                   const peerJid = conversation?.peerJid ?? conversationId;
-
-                  if (conversation?.type === "group") throw new Error("File sharing is available for direct chats only");
+                  const isGroup = conversation?.type === "group";
                   const isExternal = peerJid.split("/")[0].split("@")[1]?.toLowerCase() !== client.config.jid.split("@")[1]?.split("/")[0].toLowerCase();
-                  if (isExternal && !getOmemoEnabled()) throw new Error(t("media.enableOmemoForFederation"));
-                  let mediaUrl = resp.download_url;
-                  if (isExternal) {
-                    mediaUrl = await publishFederatedMedia(file, file.name, activeAccountId);
-                  } else {
-                    await attachmentsApi.share(resp.id, peerJid, activeAccountId);
-                  }
+                  if (!isGroup && isExternal && !getOmemoEnabled()) throw new Error(t("media.enableOmemoForFederation"));
+                  // The private /files/ URL requires our API session and cannot be
+                  // fetched by Conversations. Share ciphertext through a signed,
+                  // unauthenticated XEP-0454 URL for both private and MUC chats.
+                  const mediaUrl = await publishFederatedMedia(file, file.name, activeAccountId);
                   let sentEncrypted = false;
                   let sentId: string;
-                  if (isExternal) {
+                  if (!isGroup && getOmemoEnabled()) {
                     const envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
-                    if (!envelope) throw new Error("Cannot encrypt media link for this recipient");
-                    sentId = client.sendOmemoMessage(peerJid, envelope, "chat");
-                    sentEncrypted = true;
+                    if (envelope) {
+                      sentId = client.sendOmemoMessage(peerJid, envelope, "chat");
+                      sentEncrypted = true;
+                    } else if (isExternal) {
+                      throw new Error("Cannot encrypt media link for this recipient");
+                    } else {
+                      sentId = client.sendMessage(peerJid, mediaUrl, "chat");
+                    }
                   } else {
-                    sentId = client.sendMessage(peerJid, mediaUrl, "chat");
+                    sentId = client.sendMessage(peerJid, mediaUrl, isGroup ? "groupchat" : "chat");
                   }
 
                   // Mirror in local store so the user sees their own voice msg
@@ -1510,13 +1505,6 @@ export default function MessageView({ conversationId }: { conversationId: string
                     status: "sent",
                     encrypted: sentEncrypted,
                     timestamp: Date.now(),
-                    attachments: isExternal ? [] : [{
-                      id: resp.id,
-                      fileName: file.name,
-                      mimeType: file.type || resp.mime_type,
-                      sizeBytes: file.size,
-                      downloadUrl: resp.download_url,
-                    }],
                   };
                   addMessage(localMsg);
                   cacheMessages([localMsg]).catch(() => {});

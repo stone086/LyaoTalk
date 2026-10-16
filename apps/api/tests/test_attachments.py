@@ -3,6 +3,7 @@ Tests for the attachment upload endpoint.
 Covers: auth requirement, MIME validation, size limit.
 """
 import io
+import time
 import pytest
 from starlette.requests import Request
 from httpx import ASGITransport, AsyncClient
@@ -248,6 +249,7 @@ async def test_encrypted_public_link_requires_owner_and_expires(monkeypatch):
     parts = parsed.path.split("/")
     assert parts[-4] == "encrypted-id"
     expires, signature = int(parts[-3]), parts[-2]
+    assert attachments_router.ENCRYPTED_MEDIA_LIFETIME_SECONDS - 60 <= expires - int(time.time()) <= attachments_router.ENCRYPTED_MEDIA_LIFETIME_SECONDS
 
     class _Object:
         def stream(self, _size):

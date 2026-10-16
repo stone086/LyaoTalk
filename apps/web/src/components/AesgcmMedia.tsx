@@ -29,7 +29,7 @@ type Status =
 function pickKind(name: string): "image" | "audio" | "video" | "file" {
   const lower = name.toLowerCase();
   if (/\.(png|jpe?g|gif|webp|heic|heif|bmp)$/.test(lower)) return "image";
-  if (/\.(m4a|mp3|ogg|oga|opus|wav|webm)$/.test(lower)) return "audio";
+  if (/\.(m4a|mp3|ogg|oga|opus|wav|weba)$/.test(lower)) return "audio";
   if (/\.(mp4|mov|webm|mkv)$/.test(lower)) return "video";
   return "file";
 }
