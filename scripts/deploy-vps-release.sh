@@ -44,6 +44,13 @@ systemd-run --wait --collect --pipe \
   --property=WorkingDirectory="$target/apps/api" \
   /opt/lyaotalk-venv/bin/alembic upgrade head
 
+# Older release hosts run the API with ProtectSystem=strict but without a
+# writable private /tmp. Starlette's multipart parser rolls uploads to a
+# temporary file above 1 MiB and otherwise returns HTTP 400 before auth.
+install -d -m 755 /etc/systemd/system/lyaotalk-api.service.d
+printf '[Service]\nPrivateTmp=yes\n' > /etc/systemd/system/lyaotalk-api.service.d/20-private-tmp.conf
+systemctl daemon-reload
+
 rollback() {
   ln -s "$previous" "$current.rollback"
   mv -Tf "$current.rollback" "$current"
@@ -67,5 +74,15 @@ for attempt in {1..15}; do
 done
 [[ "$healthy" == true ]] || { echo "API health check failed after startup grace period" >&2; exit 1; }
 systemctl is-active --quiet lyaotalk-api prosody lyaotalk-minio lyaotalk-redis matrix-synapse mas
+
+# An unauthenticated 2 MiB upload must reach auth (401). A 400 here means
+# multipart spooling failed before the route was entered.
+probe_file="$(mktemp)"
+truncate -s 2M "$probe_file"
+probe_status="$(curl --silent --show-error --max-time 15 -o /dev/null -w '%{http_code}' \
+  -F "file=@${probe_file};type=video/webm" http://127.0.0.1:18000/attachments/upload)"
+rm -f "$probe_file"
+[[ "$probe_status" == 401 ]] || { echo "Multipart upload smoke check failed: HTTP $probe_status" >&2; exit 1; }
+
 trap - ERR
 printf 'Deployed LyaoTalk %s; Matrix healthy\n' "$sha"
