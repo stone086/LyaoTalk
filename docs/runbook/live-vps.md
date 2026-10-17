@@ -22,7 +22,9 @@ LyaoTalk maintenance.
 Run `sudo bash /opt/lyaotalk-src/manage.sh update`. It fast-forwards the source
 checkout, builds and tests a new release, makes an encrypted backup, applies
 database migrations, switches the active symlink, then checks the new API and
-Matrix. The GitHub manual VPS release workflow uses the same deploy script.
+Matrix. It updates the Prosody push module and restores the previous module if
+the post-switch checks fail. The GitHub manual VPS release workflow uses the
+same deploy script.
 Python requirement changes require a separately prepared virtual environment;
 the deploy script stops before switching releases in that case.
 

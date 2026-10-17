@@ -6,6 +6,7 @@ set -euo pipefail
 src=/opt/lyaotalk-src
 releases=/opt/lyaotalk-releases
 current=/opt/lyaotalk-current
+push_module=/usr/lib/prosody-modules/mod_lyaotalk_push.lua
 sha="${1:-}"
 
 [[ "$(id -u)" -eq 0 ]] || { echo "Run as root" >&2; exit 1; }
@@ -26,6 +27,9 @@ rsync -a --exclude=.git --exclude=node_modules --exclude=dist --exclude=.env \
   "$src/" "$target/"
 bash -n "$target/install.sh" "$target/manage.sh" "$target/scripts/deploy-vps-release.sh"
 python3 -m compileall -q "$target/apps/api/app" "$target/configs/prosody"
+luac -p "$target/configs/prosody/mod_lyaotalk_push.lua"
+[[ -f "$push_module" ]] || { echo "Prosody push module missing" >&2; exit 1; }
+cp -p "$push_module" "$target/.previous-push-module.lua"
 
 # A shared venv can serve either release only when package requirements match.
 if ! diff -q <(grep -v '^[[:space:]]*#' "$previous/apps/api/requirements.txt") \
@@ -54,13 +58,17 @@ systemctl daemon-reload
 rollback() {
   ln -s "$previous" "$current.rollback"
   mv -Tf "$current.rollback" "$current"
+  install -m 644 "$target/.previous-push-module.lua" "$push_module"
+  systemctl restart prosody
   systemctl restart lyaotalk-api
   echo "Release rollback restored $previous; inspect database migration compatibility" >&2
 }
 trap rollback ERR
 ln -s "$target" "$current.next"
 mv -Tf "$current.next" "$current"
+install -m 644 "$target/configs/prosody/mod_lyaotalk_push.lua" "$push_module"
 systemctl restart lyaotalk-api
+systemctl restart prosody
 systemctl restart lyaotalk-prosody.socket
 nginx -t
 systemctl reload nginx
