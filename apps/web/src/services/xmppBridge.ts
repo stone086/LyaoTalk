@@ -8,12 +8,13 @@ import { getClient, XmppClient, RosterContact as AdapterContact } from "./xmppAd
 import { restoreXmppPush } from "./push";
 import toast from "react-hot-toast";
 import { useRosterStore } from "@/stores/rosterStore";
-import { useChatStore } from "@/stores/chatStore";
+import { retractionMatchesMessage, useChatStore } from "@/stores/chatStore";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { useAccountStore } from "@/stores/accountStore";
 import { useGroupStore } from "@/stores/groupStore";
 import { initCrossDeviceSync } from "@/services/crossDeviceSync";
 import { initSearchIndex, indexMessage, removeFromIndex } from "@/services/searchIndex";
+import { applyMessageRetraction } from "@/services/messageRetraction";
 import { callManager, JingleSession } from "@/services/jingle";
 import {
   sdpToJingleXml,
@@ -433,7 +434,10 @@ export function initXmppBridge(client: XmppClient) {
 
     // Find or create conversation
     const convId = generateConversationId(accountId, from);
-    if (isGroupContext && useChatStore.getState().messages[convId]?.some((m) => m.id === message.id)) return;
+    if (isGroupContext && useChatStore.getState().messages[convId]?.some((m) => m.id === message.id)) {
+      if (message.stanzaId) useChatStore.getState().updateMessage(convId, message.id, { stanzaId: message.stanzaId, occupantJid: message.from });
+      return;
+    }
     const existingConv = useChatStore.getState().conversations[convId];
 
     if (!existingConv) {
@@ -601,6 +605,8 @@ export function initXmppBridge(client: XmppClient) {
       cipherPayload: incomingOmemo ? undefined : (incomingEncrypted ? String(message.body) : undefined),
       omemoEnvelope: incomingOmemo ?? undefined,
       replyToId: message.replyTo,
+      stanzaId: message.stanzaId,
+      occupantJid: isGroupContext ? message.from : undefined,
     };
 
     if (message.replaceId) {
@@ -626,6 +632,9 @@ export function initXmppBridge(client: XmppClient) {
 
     // Cache to IndexedDB
     cacheMessages([chatMsg]).catch(() => {});
+
+    // A retraction may have arrived before this message during MAM replay.
+    if (useChatStore.getState().messages[convId]?.find((m) => m.id === message.id)?.deletedAt) return;
 
     // KILLER-07: index for offline full-text search
     indexMessage(accountId, chatMsg.conversationId, chatMsg);
@@ -789,6 +798,8 @@ export function initXmppBridge(client: XmppClient) {
       cipherPayload: incomingOmemo ? undefined : (encrypted ? String(message.body) : undefined),
       omemoEnvelope: incomingOmemo ?? undefined,
       replyToId: message.replyTo,
+      stanzaId: message.stanzaId,
+      occupantJid: isGroup ? message.from : undefined,
     };
 
     useChatStore.getState().addMessage(chatMsg, { countAsUnread: false });
@@ -888,19 +899,24 @@ export function initXmppBridge(client: XmppClient) {
   client.on("message.retracted", (data: any) => {
     const messageId = data.messageId as string | undefined;
     if (!messageId) return;
+    const from = String(data.from ?? "");
+    const fromBare = normalizeBareJid(from);
+    const type: "chat" | "groupchat" = data.type === "groupchat" ? "groupchat" : "chat";
+    const peerJid = type === "groupchat"
+      ? fromBare
+      : fromBare === ownBareJid ? normalizeBareJid(String(data.to ?? "")) : fromBare;
+    if (!isValidBareJid(peerJid) || (type === "chat" && peerJid === ownBareJid)) return;
+    const conversationId = generateConversationId(accountId, peerJid);
     const store = useChatStore.getState();
-    const relevantConvIds = Object.values(store.conversations)
-      .filter((c) => c.accountId === accountId)
-      .map((c) => c.id);
-    for (const conversationId of relevantConvIds) {
-      const list = store.messages[conversationId] ?? [];
-      if (!list.some((m) => m.id === messageId)) continue;
-      store.updateMessage(conversationId, messageId, {
-        body: "Message deleted",
-        deletedAt: Date.now(),
-        editedAt: Date.now(),
-      });
-      break;
+    const request = { from, realSenderJid: data.realSenderJid as string | undefined, type, at: Date.now() };
+    const original = (store.messages[conversationId] ?? []).find((message) =>
+      (message.id === messageId || (type === "groupchat" && message.stanzaId === messageId))
+      && retractionMatchesMessage(message, request)
+    );
+    if (original) {
+      applyMessageRetraction(conversationId, original.id);
+    } else {
+      store.rememberRetraction(conversationId, messageId, request);
     }
   });
 
