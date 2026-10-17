@@ -17,10 +17,10 @@ Lyao Talk is an open-source XMPP-based web messaging app, built with React, Type
 - Frontend: `apps/web` (React, TypeScript, Vite)
 - Backend: `apps/api` (FastAPI)
 - Messaging server: Prosody
-- Current application version: `2.3.5`
+- Current application version: `2.3.6`
 
 Run `npm --prefix apps/web ci`, `npm --prefix apps/web run build`, and `npm --prefix apps/web test` to validate the frontend.
 
 ## Deployment
 
-See [VPS deployment and rollback instructions](docs/DEPLOYMENT.md). CI validation does not imply that the production VPS has been updated. The original LyaoTalk server is unchanged until a separately approved cutover.
+See [VPS deployment and rollback instructions](docs/DEPLOYMENT.md). Production updates are manual; the deployed version may differ from the version in this repository.
