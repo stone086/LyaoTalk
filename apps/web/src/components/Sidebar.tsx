@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
-  MessageSquare, Settings, Puzzle, Plus, Wifi, WifiOff, Star, Phone, Globe, LogOut, PanelLeftClose, PanelLeftOpen,
+  MessageSquare, Settings, Puzzle, Plus, Wifi, WifiOff, Star, Phone, Globe, LogOut,
 } from "lucide-react";
 import { getAccountPassword, useAccountStore } from "@/stores/accountStore";
 import { clsx } from "clsx";
@@ -40,7 +40,6 @@ export default function Sidebar() {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const [loggingOut, setLoggingOut] = useState(false);
-  const [expanded, setExpanded] = useState(() => localStorage.getItem("liaot-sidebar-expanded") === "true");
   const { accounts, activeId } = useAccountStore(
     useShallow((s) => ({
       accounts: s.accounts,
@@ -104,10 +103,7 @@ export default function Sidebar() {
   }, []);
 
   return (
-    <aside className={clsx(
-      "w-14 flex-shrink-0 flex flex-col items-center py-3 gap-2 bg-surface-950 border-r border-subtle transition-[width] duration-200",
-      expanded && "md:w-52"
-    )}>
+    <aside className="w-14 flex-shrink-0 flex flex-col items-center py-3 gap-2 bg-surface-950 border-r border-subtle">
       {/* Logo */}
       <div className="mb-2 w-9 h-9 rounded-xl overflow-hidden border border-accent/30 select-none">
         <img src="/icon-192.png" alt="Lyao Talk" className="w-full h-full object-cover" />
@@ -163,8 +159,7 @@ export default function Sidebar() {
             title={t(key)}
             className={({ isActive }) =>
               clsx(
-                "w-full flex items-center gap-3 py-2.5 rounded-lg transition-all duration-150",
-                expanded ? "md:justify-start md:px-3 justify-center" : "justify-center",
+                "w-full flex items-center justify-center py-2.5 rounded-lg transition-all duration-150",
                 isActive
                   ? "bg-accent/15 text-accent-soft"
                   : "text-surface-200/50 hover-surface hover:text-surface-200"
@@ -172,24 +167,9 @@ export default function Sidebar() {
             }
           >
             <Icon size={18} />
-            {expanded && <span className="hidden md:inline text-sm truncate">{t(key)}</span>}
           </NavLink>
         ))}
       </nav>
-
-      <button
-        type="button"
-        className="hidden md:flex w-[calc(100%-0.75rem)] items-center justify-center gap-2 rounded-lg py-2 text-surface-200/50 hover-surface"
-        onClick={() => setExpanded((value) => {
-          localStorage.setItem("liaot-sidebar-expanded", String(!value));
-          return !value;
-        })}
-        aria-label={expanded ? t("nav.collapseSidebar") : t("nav.expandSidebar")}
-        title={expanded ? t("nav.collapseSidebar") : t("nav.expandSidebar")}
-      >
-        {expanded ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
-        {expanded && <span className="text-xs">{t("nav.collapseSidebar")}</span>}
-      </button>
 
       {/* Connection status */}
       <button
