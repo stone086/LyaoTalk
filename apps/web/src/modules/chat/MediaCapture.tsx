@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera, SwitchCamera, Video, X } from "lucide-react";
 import { useLanguage } from "@/utils/i18n";
+import { videoRecordingToMp4 } from "@/services/videoFormat";
 
 interface MediaCaptureProps {
   onCaptured: (file: File) => void;
@@ -22,8 +23,10 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
   const recordingRef = useRef(false);
   const startingRef = useRef(false);
   const [error, setError] = useState(false);
+  const [videoError, setVideoError] = useState(false);
   const [ready, setReady] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
 
@@ -32,6 +35,7 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
     cancelledRef.current = false;
     setReady(false);
     setError(false);
+    setVideoError(false);
     if (!navigator.mediaDevices?.getUserMedia) {
       setError(true);
       return;
@@ -74,7 +78,7 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
 
   const takePhoto = () => {
     const preview = previewRef.current;
-    if (!preview?.videoWidth || !preview.videoHeight || recordingRef.current) return;
+    if (!preview?.videoWidth || !preview.videoHeight || recordingRef.current || processing) return;
     const canvas = document.createElement("canvas");
     canvas.width = preview.videoWidth;
     canvas.height = preview.videoHeight;
@@ -92,7 +96,7 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
   };
 
   const startRecording = async () => {
-    if (!streamRef.current || recordingRef.current || startingRef.current || typeof MediaRecorder === "undefined") {
+    if (!streamRef.current || recordingRef.current || startingRef.current || processing || typeof MediaRecorder === "undefined") {
       if (typeof MediaRecorder === "undefined") setError(true);
       return;
     }
@@ -107,7 +111,13 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
       if (cancelledRef.current || !streamRef.current) return;
       const tracks = [...streamRef.current.getVideoTracks(), ...(microphoneRef.current?.getAudioTracks() ?? [])];
       const stream = new MediaStream(tracks);
-      const preferred = ["video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]
+      const preferred = [
+        ...(microphoneRef.current ? ["video/mp4;codecs=avc1.42E01E,mp4a.40.2"] : []),
+        "video/mp4;codecs=avc1.42E01E",
+        "video/mp4",
+        "video/webm;codecs=vp8,opus",
+        "video/webm",
+      ]
         .find((mimeType) => MediaRecorder.isTypeSupported(mimeType));
       const recorder = new MediaRecorder(stream, preferred ? { mimeType: preferred } : undefined);
       chunksRef.current = [];
@@ -117,12 +127,21 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
         setRecording(false);
         microphoneRef.current?.getTracks().forEach((track) => track.stop());
         microphoneRef.current = null;
-        if (cancelledRef.current || !chunksRef.current.length) return;
-        const mimeType = recorder.mimeType.startsWith("video/mp4") ? "video/mp4" : "video/webm";
-        onCaptured(new File(chunksRef.current, `video-${Date.now()}.${mimeType === "video/mp4" ? "mp4" : "webm"}`, { type: mimeType }));
-        onClose();
+        if (cancelledRef.current) return;
+        const chunks = chunksRef.current;
+        chunksRef.current = [];
+        if (!chunks.length) { setVideoError(true); setError(true); return; }
+        setProcessing(true);
+        void videoRecordingToMp4(new Blob(chunks, { type: recorder.mimeType }))
+          .then((file) => {
+            if (cancelledRef.current) return;
+            onCaptured(file);
+            onClose();
+          })
+          .catch(() => { if (!cancelledRef.current) { setVideoError(true); setError(true); } })
+          .finally(() => { if (!cancelledRef.current) setProcessing(false); });
       };
-      recorder.onerror = () => setError(true);
+      recorder.onerror = () => { setVideoError(true); setError(true); };
       recorderRef.current = recorder;
       recorder.start(250);
       recordingRef.current = true;
@@ -131,6 +150,7 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
       maxTimerRef.current = setTimeout(stopRecording, MAX_VIDEO_MS);
     } catch {
       microphoneRef.current?.getTracks().forEach((track) => track.stop());
+      setVideoError(true);
       setError(true);
     } finally {
       startingRef.current = false;
@@ -146,12 +166,12 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
     <div className="fixed inset-0 z-[80] flex h-[100dvh] flex-col bg-black text-white" role="dialog" aria-modal="true" aria-label={t("chat.camera")}>
       <div className="flex items-center justify-between px-4 pt-[max(env(safe-area-inset-top),1rem)] pb-3">
         <button type="button" className="rounded-full p-2" onClick={close} aria-label={t("common.cancel")}><X size={26} /></button>
-        <span className="text-sm">{recording ? `${t("chat.recordVideo")} · ${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}` : t("chat.camera")}</span>
-        <button type="button" className="rounded-full p-2 disabled:opacity-30" onClick={() => setFacingMode((value) => value === "environment" ? "user" : "environment")} disabled={!ready || recording} aria-label={t("chat.switchCamera")}><SwitchCamera size={24} /></button>
+        <span className="text-sm">{processing ? t("chat.processingVideo") : recording ? `${t("chat.recordVideo")} · ${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}` : t("chat.camera")}</span>
+        <button type="button" className="rounded-full p-2 disabled:opacity-30" onClick={() => setFacingMode((value) => value === "environment" ? "user" : "environment")} disabled={!ready || recording || processing} aria-label={t("chat.switchCamera")}><SwitchCamera size={24} /></button>
       </div>
       {error ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-          <p>{t("chat.cameraUnavailable")}</p>
+          <p>{t(videoError ? "chat.videoEncodingFailed" : "chat.cameraUnavailable")}</p>
           <button type="button" className="btn-primary" onClick={() => { onFallback(); close(); }}>{t("chat.chooseExistingFile")}</button>
         </div>
       ) : (
@@ -162,15 +182,15 @@ export default function MediaCapture({ onCaptured, onFallback, onClose }: MediaC
           <div className="flex flex-col items-center gap-5 px-4 pt-4 pb-[max(env(safe-area-inset-bottom),1.5rem)]">
             <p className="text-sm text-white/70">{t("chat.captureHint")}</p>
             <div className="grid w-full max-w-md grid-cols-3 items-center justify-items-center">
-              <button type="button" className="flex flex-col items-center gap-1 text-xs text-white/80" onClick={() => { onFallback(); close(); }} aria-label={t("chat.chooseExistingFile")}><Camera size={24} />{t("chat.gallery")}</button>
+              <button type="button" disabled={processing} className="flex flex-col items-center gap-1 text-xs text-white/80 disabled:opacity-40" onClick={() => { onFallback(); close(); }} aria-label={t("chat.chooseExistingFile")}><Camera size={24} />{t("chat.gallery")}</button>
               <button
                 type="button"
-                disabled={!ready}
+                disabled={!ready || processing}
                 className={`h-20 w-20 rounded-full border-4 border-white p-1 touch-none disabled:opacity-40 ${recording ? "scale-90" : ""}`}
                 aria-label={t("chat.captureHint")}
                 onClick={takePhoto}
               ><span className={`block h-full w-full rounded-full ${recording ? "bg-red-500" : "bg-white"}`} /></button>
-              <button type="button" disabled={!ready} className="flex flex-col items-center gap-1 text-xs text-white/80 disabled:opacity-40" onClick={() => recordingRef.current ? stopRecording() : void startRecording()} aria-label={recording ? t("chat.stopVideo") : t("chat.recordVideo")}><Video size={24} />{recording ? t("chat.stopVideo") : t("chat.recordVideo")}</button>
+              <button type="button" disabled={!ready || processing} className="flex flex-col items-center gap-1 text-xs text-white/80 disabled:opacity-40" onClick={() => recordingRef.current ? stopRecording() : void startRecording()} aria-label={recording ? t("chat.stopVideo") : t("chat.recordVideo")}><Video size={24} />{recording ? t("chat.stopVideo") : t("chat.recordVideo")}</button>
             </div>
           </div>
         </>
