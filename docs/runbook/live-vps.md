@@ -39,3 +39,13 @@ without a maintenance window.
 
 Two ordinary test account credentials are in `/etc/lyaotalk/test-accounts.env`
 (root only). Do not copy that file into the repository or logs.
+
+## Native XMPP client file uploads
+
+The rabisuB Prosody 0.11 instance serves XEP-0363 at
+`upload.lyaot.2-yc.com` through Nginx `/upload/`. This is separate from
+LyaoTalk Web's API/MinIO attachment storage. The one-time migration is
+`scripts/enable-vps-xmpp-upload.sh`; it backs up the live Prosody and Nginx
+configuration and checks both services before completing. Upload slots require
+an authenticated XMPP session. Files are limited to 100 MiB and each account
+has a 500 MiB quota; Prosody expires old uploads on the next slot request.

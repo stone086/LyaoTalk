@@ -19,8 +19,8 @@ modules_enabled = {
   "private";
   "bookmarks";
   "blocklist";
-  -- File uploads are handled by LyaoTalk API + MinIO. Prosody mod_http_upload
-  -- is not installed on all supported distros, so do not load it here.
+  -- LyaoTalk Web uses API + MinIO; the separate upload component below
+  -- provides XEP-0363 to native XMPP clients such as Conversations.
   "vcard4";
   "vcard_legacy";
   "mam";
@@ -97,6 +97,7 @@ cross_domain_websocket = { "XMPP_FRONTEND_ORIGIN" }
 http_interfaces = { "127.0.0.1" }
 http_ports = { 5280 }
 https_ports = {}
+http_max_content_size = 101 * 1024 * 1024 -- Prosody 0.11 upload parser reads the global limit
 
 -- BOSH session hygiene: shorter inactivity = faster cleanup of abandoned
 -- mobile clients that closed without sending </stream:stream>.
@@ -148,6 +149,17 @@ Component "conference.XMPP_DOMAIN" "muc"
   muc_room_default_persistent = true
   max_history_messages = 100
   muc_log_by_default = false  -- per-room MAM, not all rooms by default
+
+-- Native clients discover this via service discovery on XMPP_DOMAIN.
+-- Installations must supply the community mod_http_upload module for Prosody
+-- 0.11; newer Prosody releases can migrate to mod_http_file_share.
+Component "upload.XMPP_DOMAIN" "http_upload"
+  modules_disabled = { "s2s" }
+  http_host = "upload.XMPP_DOMAIN"
+  http_external_url = "https://upload.XMPP_DOMAIN/"
+  http_upload_file_size_limit = 100 * 1024 * 1024
+  http_upload_quota = 500 * 1024 * 1024
+  http_upload_expire_after = 30 * 24 * 60 * 60
 
 
 -- =====================================================

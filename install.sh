@@ -590,6 +590,9 @@ install_redis() {
 install_prosody() {
   step "Install Prosody XMPP server"
   apt install -y -qq prosody prosody-modules lua-dbi-postgresql mercurial
+  if [[ ! -f /usr/lib/prosody/modules/mod_http_upload/mod_http_upload.lua && ! -f /usr/lib/prosody-modules/mod_http_upload/mod_http_upload.lua ]]; then
+    error "Prosody mod_http_upload is required for native XMPP client file transfers"
+  fi
   usermod -aG prosody "${APP_USER}" || true
 
   # Install prosody-modules (community modules) for mod_cloud_notify
@@ -1166,7 +1169,8 @@ setup_ssl() {
   local cert_privkey="${cert_dir}/privkey.pem"
   local has_usable_cert=0
   if [[ -f "$cert_fullchain" && -f "$cert_privkey" ]]; then
-    if openssl x509 -checkend 86400 -noout -in "$cert_fullchain" >/dev/null 2>&1; then
+    if openssl x509 -checkend 86400 -noout -in "$cert_fullchain" >/dev/null 2>&1 \
+      && openssl x509 -checkhost "upload.${XMPP_DOMAIN}" -noout -in "$cert_fullchain" 2>/dev/null | grep -q 'does match'; then
       has_usable_cert=1
       info "Usable certificate detected, skipping re-issuance"
     fi
@@ -1174,7 +1178,7 @@ setup_ssl() {
 
   if [[ "$has_usable_cert" -eq 0 ]]; then
     certbot certonly --nginx \
-      -d "${DOMAIN}" \
+      -d "${DOMAIN}" -d "upload.${XMPP_DOMAIN}" \
       --email "${EMAIL}" \
       --agree-tos \
       --non-interactive
@@ -1182,6 +1186,7 @@ setup_ssl() {
   fi
 
   cp configs/nginx/lyaotalk.conf /etc/nginx/sites-available/lyaotalk
+  sed -i "s|XMPP_DOMAIN|${XMPP_DOMAIN}|g" /etc/nginx/sites-available/lyaotalk
   sed -i "s|DOMAIN|${DOMAIN}|g" /etc/nginx/sites-available/lyaotalk
   sed -i "s|INSTALL_DIR|${INSTALL_DIR}|g" /etc/nginx/sites-available/lyaotalk
   if [[ -n "${PROMETHEUS_ALLOW_CIDR:-}" ]]; then
