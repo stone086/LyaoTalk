@@ -3,6 +3,7 @@
  * Wraps Strophe.js with a clean event-driven API.
  */
 import { normalizeBareJid, normalizeValidBareJid } from "@/utils/helpers";
+import { parseXmppDelayTimestamp } from "@/utils/xmppDelay";
 import type { IceServer } from "./jingle/types";
 
 export interface XmppClientConfig {
@@ -160,14 +161,6 @@ function sanitizeXmlText(input: string): string {
   return output;
 }
 
-function parseXmppDelayTimestamp(stanza: Element): number {
-  const stamp = stanza
-    .querySelector('delay[xmlns="urn:xmpp:delay"]')
-    ?.getAttribute("stamp");
-  if (!stamp) return Date.now();
-  const parsed = Date.parse(stamp);
-  return Number.isFinite(parsed) ? parsed : Date.now();
-}
 
 const OMEMO_NAMESPACE_LEGACY = "eu.siacs.conversations.axolotl";
 const OMEMO_NAMESPACE_MODERN = "urn:xmpp:omemo:2";
@@ -1413,7 +1406,7 @@ export class XmppClient {
     );
   }
 
-  fetchMAM(targetJid: string, options: { before?: string; limit?: number; type?: "chat" | "groupchat" } = {}) {
+  fetchMAM(targetJid: string, options: { before?: string; limit?: number; start?: number; type?: "chat" | "groupchat" } = {}) {
     if (!this._connection) return;
     const queryId = crypto.randomUUID();
     const limit = options.limit ?? 30;
@@ -1423,8 +1416,11 @@ export class XmppClient {
       .c("query", { xmlns: "urn:xmpp:mam:2", queryid: queryId })
       .c("x", { xmlns: "jabber:x:data", type: "submit" })
       .c("field", { var: "FORM_TYPE", type: "hidden" }).c("value").t("urn:xmpp:mam:2").up().up()
-      .c("field", { var: "with" }).c("value").t(targetJid).up().up().up()
-      .c("set", { xmlns: "http://jabber.org/protocol/rsm" })
+      .c("field", { var: "with" }).c("value").t(targetJid).up().up();
+    if (options.start) {
+      iq.c("field", { var: "start" }).c("value").t(new Date(options.start).toISOString()).up().up();
+    }
+    iq.up().c("set", { xmlns: "http://jabber.org/protocol/rsm" })
       .c("max").t(String(limit));
 
     if (options.before) iq.up().c("before").t(options.before);
@@ -1438,12 +1434,14 @@ export class XmppClient {
       const omemo = parseOmemoEnvelope(msg);
       if (!body && !omemo) return true;
       const forwarded = result.querySelector("forwarded") as Element | null;
+      const timestamp = forwarded ? parseXmppDelayTimestamp(forwarded) : null;
+      if (timestamp === null) return true;
       const xmppMsg: XmppMessage = {
         id: msg.getAttribute("id") ?? crypto.randomUUID(),
         from: msg.getAttribute("from") ?? "",
         to: msg.getAttribute("to") ?? "",
         body: body || "[OMEMO message]",
-        timestamp: forwarded ? parseXmppDelayTimestamp(forwarded) : Date.now(),
+        timestamp,
         type: (msg.getAttribute("type") ?? "chat") as "chat" | "groupchat",
         stanzaId: result.getAttribute("id") ?? undefined,
         replyTo: msg.querySelector('reply[xmlns="urn:xmpp:reply:0"]')?.getAttribute("id") ?? undefined,
