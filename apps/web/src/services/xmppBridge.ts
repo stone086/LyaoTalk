@@ -1125,6 +1125,14 @@ export function initXmppBridge(client: XmppClient) {
     if (!jingleEl) return;
 
     if (action === "session-initiate") {
+      // Jingle also carries file transfers (XEP-0234). Never feed those
+      // descriptions to WebRTC as if they were audio/video offers.
+      const hasRtpDescription = Array.from(jingleEl.getElementsByTagNameNS("*", "description") as HTMLCollectionOf<Element>)
+        .some((el) => el.namespaceURI === "urn:xmpp:jingle:apps:rtp:1" || el.getAttribute("xmlns") === "urn:xmpp:jingle:apps:rtp:1");
+      if (!hasRtpDescription) {
+        client.sendJingle(from, sid, terminateToJingleXml(sid, "unsupported-applications"));
+        return;
+      }
       // Incoming call - parse SDP from Jingle XML
       const contentEl = jingleEl.getElementsByTagNameNS("*", "content")[0];
       const senders = contentEl?.getAttribute("senders") ?? "both";

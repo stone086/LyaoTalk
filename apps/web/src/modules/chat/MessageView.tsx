@@ -30,7 +30,7 @@ import { useLanguage } from "@/utils/i18n";
 import { attachmentsApi, privateFileBlob } from "@/services/api";
 import { encryptForAesgcm, parseAesgcmUrl, toAesgcmUrl } from "@/services/aesgcmMedia";
 import { usePrivateFileUrl } from "@/hooks/usePrivateFileUrl";
-import { trustedFileObjectKey } from "@/services/trustedFilesUrl";
+import { isTrustedXmppUploadUrl, trustedFileObjectKey } from "@/services/trustedFilesUrl";
 import { encryptOmemoEnvelopeForPeer } from "@/services/e2ee";
 import { encryptGroupOmemoMessage, tryLibsignalEncrypt } from "@/services/xmppBridge";
 import { getGroupOmemoEnabled, getOmemoEnabled } from "@/services/omemoSettings";
@@ -102,9 +102,9 @@ function ReceivedFileLink({ rawUrl, accountId, onOpenImage }: {
   onOpenImage: (src: string, alt: string) => void;
 }) {
   const objectKey = trustedFileObjectKey(rawUrl, window.location.origin);
-  const name = objectKey?.split("/").pop() || "file";
+  const name = objectKey?.split("/").pop() || new URL(rawUrl, window.location.origin).pathname.split("/").pop() || "file";
   const extension = name.split(".").pop()?.toLowerCase();
-  const mimeType = extension === "png" ? "image/png" : extension === "jpg" || extension === "jpeg" ? "image/jpeg" : extension === "webp" ? "image/webp" : "application/octet-stream";
+  const mimeType = extension === "png" ? "image/png" : extension === "jpg" || extension === "jpeg" ? "image/jpeg" : extension === "webp" ? "image/webp" : extension === "gif" ? "image/gif" : "application/octet-stream";
   return <AttachmentView attachment={{ id: objectKey || rawUrl, fileName: name, mimeType, sizeBytes: 0, downloadUrl: rawUrl }} accountId={accountId} onOpenImage={onOpenImage} />;
 }
 
@@ -214,13 +214,13 @@ function MessageBubble({
                 />
               );
             }
-            if (!msg.attachments?.length && trustedFileObjectKey(msg.body.trim(), window.location.origin)) {
+            if (!msg.attachments?.length && (trustedFileObjectKey(msg.body.trim(), window.location.origin) || isTrustedXmppUploadUrl(msg.body.trim(), window.location.origin))) {
               return <ReceivedFileLink rawUrl={msg.body.trim()} accountId={activeAccountId} onOpenImage={onOpenImage} />;
             }
             return <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>;
           })()}
           {msg.body && (() => {
-            if (trustedFileObjectKey(msg.body.trim(), window.location.origin)) return null;
+            if (trustedFileObjectKey(msg.body.trim(), window.location.origin) || isTrustedXmppUploadUrl(msg.body.trim(), window.location.origin)) return null;
             const url = extractFirstUrl(msg.body);
             return url ? <LinkPreviewCard url={url} /> : null;
           })()}
@@ -893,14 +893,6 @@ export default function MessageView({ conversationId }: { conversationId: string
         toast.error("File sharing is available for direct chats only");
         return;
       }
-      if (!isExternalPeer) {
-        try {
-          await Promise.all(pendingFiles.map((file) => attachmentsApi.share(file.id, peerJid, activeAccountId)));
-        } catch (error: any) {
-          toast.error(error?.response?.data?.detail ?? "Recipient cannot access this file");
-          return;
-        }
-      }
     }
     let id = "";
     let sentEncrypted = false;
@@ -1004,14 +996,11 @@ export default function MessageView({ conversationId }: { conversationId: string
     }
     try {
       for (const file of pendingFiles) {
-        let mediaUrl = file.downloadUrl;
-        if (isExternalPeer) {
-          const original = await privateFileBlob(file.downloadUrl, activeAccountId);
-          mediaUrl = await publishFederatedMedia(original, file.name, activeAccountId);
-        }
+        const original = await privateFileBlob(file.downloadUrl, activeAccountId);
+        const mediaUrl = await publishFederatedMedia(original, file.name, activeAccountId);
         let fileEncrypted = false;
         let fileId: string;
-        if (isExternalPeer) {
+        if (getOmemoEnabled()) {
           const envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
           if (!envelope) throw new Error("Cannot encrypt media link for this recipient");
           fileId = client.sendOmemoMessage(peerJid, envelope, "chat");
@@ -1513,14 +1502,9 @@ export default function MessageView({ conversationId }: { conversationId: string
                     sentEncrypted = true;
                   } else if (!isGroup && getOmemoEnabled()) {
                     const envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
-                    if (envelope) {
-                      sentId = client.sendOmemoMessage(peerJid, envelope, "chat");
-                      sentEncrypted = true;
-                    } else if (isExternal) {
-                      throw new Error("Cannot encrypt media link for this recipient");
-                    } else {
-                      sentId = client.sendMessage(peerJid, mediaUrl, "chat");
-                    }
+                    if (!envelope) throw new Error("Cannot encrypt media link for this recipient");
+                    sentId = client.sendOmemoMessage(peerJid, envelope, "chat");
+                    sentEncrypted = true;
                   } else {
                     sentId = client.sendMessage(peerJid, mediaUrl, isGroup ? "groupchat" : "chat");
                   }
