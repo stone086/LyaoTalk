@@ -117,6 +117,18 @@
   .input-field:focus {
     border-color: rgb(var(--accent) / 0.6);
   }
+  /* Chrome on Android paints autofilled inputs with a pale native background.
+     Keep the fill and text tied to the active theme so credentials stay legible. */
+  .input-field:-webkit-autofill,
+  .input-field:-webkit-autofill:hover,
+  .input-field:-webkit-autofill:focus {
+    -webkit-text-fill-color: rgb(var(--surface-50));
+    caret-color: rgb(var(--surface-50));
+    -webkit-box-shadow: 0 0 0 1000px rgb(var(--surface-900)) inset,
+      var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+    box-shadow: 0 0 0 1000px rgb(var(--surface-900)) inset,
+      var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
 
   .sidebar-item {
     @apply flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer
