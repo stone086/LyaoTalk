@@ -106,6 +106,15 @@ export async function initSearchIndex(accountId: string): Promise<void> {
   const persisted = await loadIndexFromIdb(accountId);
   if (persisted) {
     _index = persisted;
+    // A retraction tombstone may have persisted after the index's last save.
+    const tombstones = useChatStore.getState().retractedMessageIds ?? {};
+    for (const key of Object.keys(tombstones)) {
+      const split = key.indexOf("\u0000");
+      if (split < 0) continue;
+      try { _index.remove({ id: `${key.slice(0, split)}:${key.slice(split + 1)}` } as any); }
+      catch { /* already absent */ }
+    }
+    if (Object.keys(tombstones).length) scheduleSave(accountId);
     return;
   }
 
@@ -156,10 +165,11 @@ export function indexMessage(accountId: string, conversationId: string, msg: Cha
 /**
  * Remove a message from the index (e.g. when retracted or conversation deleted).
  */
-export function removeFromIndex(conversationId: string, messageId: string): void {
+export function removeFromIndex(conversationId: string, messageId: string, accountId?: string): void {
   if (!_index) return;
   try {
     _index.remove({ id: `${conversationId}:${messageId}` } as any);
+    if (accountId) scheduleSave(accountId);
   } catch { /* ignore */ }
 }
 

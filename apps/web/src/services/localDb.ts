@@ -52,11 +52,16 @@ export function openLocalDb() {
 
 // Helper functions
 export async function cacheMessages(messages: ChatMessage[]) {
-  const cutoffs = useChatStore.getState().clearedBefore ?? {};
-  const rows: CachedMessage[] = messages.filter((m) => m.timestamp > (cutoffs[m.conversationId] ?? 0)).map((m) => ({
-    ...m,
-    cacheKey: `${m.conversationId}:${m.id}`,
-  }));
+  const state = useChatStore.getState();
+  const cutoffs = state.clearedBefore ?? {};
+  const rows: CachedMessage[] = messages.filter((m) => m.timestamp > (cutoffs[m.conversationId] ?? 0)).map((m) => {
+    const retractedAt = state.retractedMessageIds?.[`${m.conversationId}\u0000${m.id}`];
+    return {
+      ...m,
+      ...(retractedAt ? { body: "", deletedAt: retractedAt, attachments: [], cipherPayload: undefined, omemoEnvelope: undefined } : {}),
+      cacheKey: `${m.conversationId}:${m.id}`,
+    };
+  });
   await db.messages.bulkPut(rows);
 }
 
@@ -70,7 +75,10 @@ export async function getLocalMessages(conversationId: string, limit = 50) {
     .toArray();
   return rows
     .filter((msg) => msg.timestamp > cutoff)
-    .map(({ cacheKey: _cacheKey, ...msg }) => msg)
+    .map(({ cacheKey: _cacheKey, ...msg }) => {
+      const retractedAt = useChatStore.getState().retractedMessageIds?.[`${msg.conversationId}\u0000${msg.id}`];
+      return retractedAt ? { ...msg, body: "", deletedAt: retractedAt, attachments: [], cipherPayload: undefined, omemoEnvelope: undefined } : msg;
+    })
     .sort((a, b) => a.timestamp - b.timestamp);
 }
 

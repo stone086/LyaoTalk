@@ -34,6 +34,7 @@ import { isTrustedXmppUploadUrl, trustedFileObjectKey } from "@/services/trusted
 import { encryptOmemoEnvelopeForPeer } from "@/services/e2ee";
 import { encryptGroupOmemoMessage, tryLibsignalEncrypt } from "@/services/xmppBridge";
 import { getGroupOmemoEnabled, getOmemoEnabled } from "@/services/omemoSettings";
+import { applyMessageRetraction } from "@/services/messageRetraction";
 
 function parseAesgcmMediaLink(raw?: string): { href: string; fileName: string; isAudio: boolean } | null {
   if (!raw) return null;
@@ -184,9 +185,10 @@ function MessageBubble({
           )}
           onContextMenu={(e) => {
             e.preventDefault();
-            setMenuOpen(true);
+            if (!msg.deletedAt) setMenuOpen(true);
           }}
           onTouchStart={(e) => {
+            if (msg.deletedAt) return;
             // long-press detection (500ms)
             const target = e.currentTarget;
             const timer = window.setTimeout(() => setMenuOpen(true), 500);
@@ -195,7 +197,7 @@ function MessageBubble({
             target.addEventListener("touchmove", cancel, { once: true });
           }}
         >
-          {msg.replyToId && (
+          {!msg.deletedAt && msg.replyToId && (
             <div className="mb-2 px-2 py-1 rounded-md border-l-2 border-default inset-surface">
               <p className="text-[10px] text-surface-200/60">{replySender ?? t("chat.reply")}</p>
               <p className="text-xs text-surface-200/70 line-clamp-2 break-words">
@@ -203,7 +205,8 @@ function MessageBubble({
               </p>
             </div>
           )}
-          {msg.body && (() => {
+          {msg.deletedAt && <p className="text-sm italic text-surface-200/60">{t("chat.messageDeleted")}</p>}
+          {!msg.deletedAt && msg.body && (() => {
             const aesMedia = parseAesgcmMediaLink(msg.body);
             if (aesMedia) {
               return (
@@ -219,13 +222,13 @@ function MessageBubble({
             }
             return <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>;
           })()}
-          {msg.body && (() => {
+          {!msg.deletedAt && msg.body && (() => {
             if (trustedFileObjectKey(msg.body.trim(), window.location.origin) || isTrustedXmppUploadUrl(msg.body.trim(), window.location.origin)) return null;
             const url = extractFirstUrl(msg.body);
             return url ? <LinkPreviewCard url={url} /> : null;
           })()}
-          {msg.editedAt && <p className="text-[10px] text-surface-200/40 mt-1 cursor-default" title={`${t("chat.editedAt")} ${formatMsgTimeFull(msg.editedAt)}`}>{t("chat.edited")}</p>}
-          {msg.attachments?.map((att) => (
+          {!msg.deletedAt && msg.editedAt && <p className="text-[10px] text-surface-200/40 mt-1 cursor-default" title={`${t("chat.editedAt")} ${formatMsgTimeFull(msg.editedAt)}`}>{t("chat.edited")}</p>}
+          {!msg.deletedAt && msg.attachments?.map((att) => (
             <AttachmentView key={att.id} attachment={att} accountId={activeAccountId} onOpenImage={onOpenImage} />
           ))}
           <div className={clsx("mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5", isOwn ? "justify-end" : "justify-start")}>
@@ -240,7 +243,7 @@ function MessageBubble({
             {isOwn && msg.status === "failed" && <button onClick={() => onRetry(msg)} className="text-[10px] text-danger underline">{t("chat.retry")}</button>}
           </div>
         </div>
-        {!!msg.reactions && Object.keys(msg.reactions).length > 0 && (
+        {!msg.deletedAt && !!msg.reactions && Object.keys(msg.reactions).length > 0 && (
           <div className="flex gap-1 flex-wrap px-1">
             {Object.entries(msg.reactions).map(([emoji, count]) => (
               <button
@@ -254,7 +257,7 @@ function MessageBubble({
           </div>
         )}
       </div>
-      <div className="flex items-center self-center">
+      {!msg.deletedAt && <div className="flex items-center self-center">
         <button onClick={() => onReply(msg)} className="p-1.5 rounded-lg hover-surface text-surface-200/30 hover:text-surface-200">
           <CornerUpLeft size={13} />
         </button>
@@ -296,15 +299,15 @@ function MessageBubble({
                   …
                 </button>
               </div>
-              {isOwn && (
+              {isOwn && msg.status !== "failed" && (
                 <button onClick={() => { onDelete(msg); setMenuOpen(false); }} className="w-full text-left text-xs px-2 py-1.5 hover-surface rounded text-danger flex items-center gap-2">
-                  <Trash2 size={12} /> Delete
+                  <Trash2 size={12} /> {t("chat.deleteForEveryone")}
                 </button>
               )}
             </div>
           )}
         </div>
-      </div>
+      </div>}
       {showReactionPicker && createPortal(
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-3"
@@ -1099,19 +1102,25 @@ export default function MessageView({ conversationId }: { conversationId: string
   }, [forwardingMessage, forwardTargetId, activeAccountId, allConversations, t]);
 
   const handleDeleteMessage = useCallback((message: ChatMessage) => {
-    if (!activeAccountId) return;
+    if (!activeAccountId || !conversation || message.direction !== "out" || message.deletedAt) return;
     const client = getClient(activeAccountId);
-    client?.retractMessage(
-      conversation?.peerJid ?? conversationId,
-      message.id,
-      conversation?.type === "group" ? "groupchat" : "chat"
-    );
-    updateMessage(conversationId, message.id, {
-      body: "Message deleted",
-      editedAt: Date.now(),
-      deletedAt: Date.now(),
-    });
-  }, [activeAccountId, conversation, conversationId, updateMessage]);
+    if (!client?.connected) {
+      toast.error(t("chat.notConnected"));
+      return;
+    }
+    const targetId = conversation.type === "group" ? message.stanzaId : message.id;
+    if (!targetId) {
+      toast.error(t("chat.deleteServerIdMissing"));
+      return;
+    }
+    if (!window.confirm(t("chat.deleteForEveryoneConfirm"))) return;
+    try {
+      client.retractMessage(conversation.peerJid, targetId, conversation.type === "group" ? "groupchat" : "chat");
+      applyMessageRetraction(conversationId, message.id);
+    } catch (error: any) {
+      toast.error(error?.message ?? t("chat.sendFailed"));
+    }
+  }, [activeAccountId, conversation, conversationId, t]);
 
   const handleToggleStar = useCallback((message: ChatMessage) => {
     toggleMessageStar(conversationId, message.id);

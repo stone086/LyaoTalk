@@ -25,6 +25,10 @@ export interface ChatMessage {
   omemoEnvelope?: OmemoEnvelope;
   replyToId?: string;
   attachments?: MessageAttachment[];
+  /** MUC-assigned XEP-0359 id, used when retracting a group message. */
+  stanzaId?: string;
+  /** Full room/nickname JID, used to verify group retraction authorship. */
+  occupantJid?: string;
 }
 
 export interface MessageAttachment {
@@ -48,12 +52,29 @@ export interface Conversation {
   pinned: boolean;
 }
 
+export interface PendingRetraction {
+  from: string;
+  realSenderJid?: string;
+  type: "chat" | "groupchat";
+  at: number;
+}
+
+export function retractionMatchesMessage(message: ChatMessage, request: PendingRetraction): boolean {
+  if (request.type === "groupchat") {
+    return Boolean(message.occupantJid && message.occupantJid === request.from)
+      || Boolean(request.realSenderJid && normalizeBareJid(message.senderJid) === normalizeBareJid(request.realSenderJid));
+  }
+  return normalizeBareJid(message.senderJid) === normalizeBareJid(request.from);
+}
+
 interface ChatState {
   conversations: Record<string, Conversation>;
   messages: Record<string, ChatMessage[]>; // keyed by conversationId
   composerDrafts: Record<string, string>;
   typingPeers: Record<string, string | null>;
   clearedBefore: Record<string, number>; // local deletion cutoff for server MAM replay
+  retractedMessageIds: Record<string, number>; // prevents cached/MAM originals resurfacing
+  pendingRetractions: Record<string, PendingRetraction>;
   activeConversationId: string | null;
 
   setActiveConversation: (id: string | null) => void;
@@ -70,6 +91,8 @@ interface ChatState {
   getComposerDraft: (conversationId: string) => string;
   clearAccountData: (accountId: string) => void;
   updateMessage: (conversationId: string, messageId: string, patch: Partial<ChatMessage>) => void;
+  markMessageRetracted: (conversationId: string, messageId: string, at?: number) => void;
+  rememberRetraction: (conversationId: string, targetId: string, request: PendingRetraction) => void;
   toggleMessageStar: (conversationId: string, messageId: string) => void;
   toggleMessageReaction: (conversationId: string, messageId: string, emoji: string) => void;
   setTypingPeer: (conversationId: string, jid: string | null, typing: boolean) => void;
@@ -85,6 +108,8 @@ export const useChatStore = create<ChatState>()(
       composerDrafts: {},
       typingPeers: {},
       clearedBefore: {},
+      retractedMessageIds: {},
+      pendingRetractions: {},
       activeConversationId: null,
 
       setActiveConversation: (id) =>
@@ -124,6 +149,17 @@ export const useChatStore = create<ChatState>()(
       addMessage: (msg, options) =>
         set((s) => {
           if (msg.timestamp <= (s.clearedBefore?.[msg.conversationId] ?? 0)) return s;
+          const pendingKey = [msg.id, msg.stanzaId].filter(Boolean)
+            .map((id) => `${msg.conversationId}\u0000${id}`)
+            .find((key) => s.pendingRetractions?.[key] && retractionMatchesMessage(msg, s.pendingRetractions[key]));
+          const pending = pendingKey ? s.pendingRetractions[pendingKey] : undefined;
+          const nextPending = { ...s.pendingRetractions };
+          if (pendingKey) delete nextPending[pendingKey];
+          if (s.retractedMessageIds?.[`${msg.conversationId}\u0000${msg.id}`]) {
+            msg = { ...msg, body: "", deletedAt: s.retractedMessageIds[`${msg.conversationId}\u0000${msg.id}`], attachments: [], cipherPayload: undefined, omemoEnvelope: undefined };
+          } else if (pending) {
+            msg = { ...msg, body: "", deletedAt: pending.at, attachments: [], cipherPayload: undefined, omemoEnvelope: undefined };
+          }
           const countAsUnread = options?.countAsUnread ?? true;
           const existing = s.messages[msg.conversationId] ?? [];
           if (existing.some((m) => m.id === msg.id)) {
@@ -131,6 +167,8 @@ export const useChatStore = create<ChatState>()(
           }
           const conv = s.conversations[msg.conversationId];
           return {
+            pendingRetractions: nextPending,
+            retractedMessageIds: pending ? { ...s.retractedMessageIds, [`${msg.conversationId}\u0000${msg.id}`]: pending.at } : s.retractedMessageIds,
             messages: {
               ...s.messages,
               [msg.conversationId]: [...existing, msg].slice(-MAX_MESSAGES_PER_CONVERSATION),
@@ -182,6 +220,8 @@ export const useChatStore = create<ChatState>()(
           });
           return {
             messages: {},
+            retractedMessageIds: {},
+            pendingRetractions: {},
             conversations: nextConversations,
           };
         }),
@@ -208,6 +248,8 @@ export const useChatStore = create<ChatState>()(
 
           return {
             messages: nextMessages,
+            retractedMessageIds: Object.fromEntries(Object.entries(s.retractedMessageIds ?? {}).filter(([, at]) => at >= cutoffTs)),
+            pendingRetractions: Object.fromEntries(Object.entries(s.pendingRetractions ?? {}).filter(([, request]) => request.at >= cutoffTs)),
             conversations: nextConversations,
           };
         }),
@@ -314,12 +356,16 @@ export const useChatStore = create<ChatState>()(
           const nextMessages = { ...s.messages };
           const nextDrafts = { ...s.composerDrafts };
           const nextTypingPeers = { ...s.typingPeers };
+          const nextRetractions = { ...s.retractedMessageIds };
+          const nextPendingRetractions = { ...s.pendingRetractions };
           Object.entries(s.conversations).forEach(([id, conv]) => {
             if (conv.accountId !== accountId) return;
             delete nextConversations[id];
             delete nextMessages[id];
             delete nextDrafts[id];
             delete nextTypingPeers[id];
+            Object.keys(nextRetractions).filter((key) => key.startsWith(`${id}\u0000`)).forEach((key) => delete nextRetractions[key]);
+            Object.keys(nextPendingRetractions).filter((key) => key.startsWith(`${id}\u0000`)).forEach((key) => delete nextPendingRetractions[key]);
           });
           const activeStillExists =
             s.activeConversationId && nextConversations[s.activeConversationId];
@@ -328,6 +374,8 @@ export const useChatStore = create<ChatState>()(
             messages: nextMessages,
             composerDrafts: nextDrafts,
             typingPeers: nextTypingPeers,
+            retractedMessageIds: nextRetractions,
+            pendingRetractions: nextPendingRetractions,
             activeConversationId: activeStillExists ? s.activeConversationId : null,
           };
         }),
@@ -343,13 +391,44 @@ export const useChatStore = create<ChatState>()(
             return { ...msg, ...patch };
           });
           if (!touched) return s;
+          const conv = s.conversations[conversationId];
+          const isLatest = updated[updated.length - 1]?.id === messageId;
           return {
             messages: {
               ...s.messages,
               [conversationId]: updated,
             },
+            conversations: conv && isLatest && patch.body !== undefined
+              ? { ...s.conversations, [conversationId]: { ...conv, lastMessage: patch.body } }
+              : s.conversations,
           };
         }),
+
+      markMessageRetracted: (conversationId, messageId, at = Date.now()) =>
+        set((s) => {
+          const key = `${conversationId}\u0000${messageId}`;
+          const existing = s.messages[conversationId] ?? [];
+          const updated = existing.map((msg) => msg.id === messageId ? {
+            ...msg,
+            body: "",
+            deletedAt: at,
+            attachments: [],
+            cipherPayload: undefined,
+            omemoEnvelope: undefined,
+            decryptFailed: false,
+          } : msg);
+          const conv = s.conversations[conversationId];
+          return {
+            retractedMessageIds: { ...s.retractedMessageIds, [key]: at },
+            messages: { ...s.messages, [conversationId]: updated },
+            conversations: conv && updated[updated.length - 1]?.id === messageId
+              ? { ...s.conversations, [conversationId]: { ...conv, lastMessage: "Message deleted" } }
+              : s.conversations,
+          };
+        }),
+
+      rememberRetraction: (conversationId, targetId, request) =>
+        set((s) => ({ pendingRetractions: { ...s.pendingRetractions, [`${conversationId}\u0000${targetId}`]: request } })),
 
       toggleMessageStar: (conversationId, messageId) =>
         set((s) => {
@@ -417,6 +496,8 @@ export const useChatStore = create<ChatState>()(
         ),
         composerDrafts: s.composerDrafts,
         clearedBefore: s.clearedBefore,
+        retractedMessageIds: s.retractedMessageIds,
+        pendingRetractions: s.pendingRetractions,
         activeConversationId: s.activeConversationId,
       }),
     }

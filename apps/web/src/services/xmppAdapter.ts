@@ -402,6 +402,9 @@ export class XmppClient {
 
     // Incoming messages
     conn.addHandler((stanza: Element) => {
+      // MAM-forwarded messages have their own query handler below. Treating
+      // nested fallback bodies as live messages would resurrect retractions.
+      if (Array.from(stanza.children).some((child) => child.localName === "result" && child.namespaceURI === "urn:xmpp:mam:2")) return true;
       // XEP-0280 Message Carbons unwrapping:
       // <message><sent|received><forwarded><message>...real message...
       // Only trust carbons from our own bare JID.
@@ -437,6 +440,12 @@ export class XmppClient {
       // Parse OMEMO from the effective stanza (after carbon unwrapping).
       const omemo = parseOmemoEnvelope(realStanza);
       const id = realStanza.getAttribute("id") ?? crypto.randomUUID();
+      const roomBareJid = from.split("/")[0];
+      const stanzaId = type === "groupchat"
+        ? Array.from(realStanza.children).find((child) => child.localName === "stanza-id"
+          && child.namespaceURI === "urn:xmpp:sid:0"
+          && child.getAttribute("by") === roomBareJid)?.getAttribute("id") ?? undefined
+        : undefined;
       const subject = realStanza.querySelector("subject")?.textContent ?? "";
       if (type === "groupchat" && subject) {
         this.emit("room.subject", { accountId: this.config.accountId, roomJid: from.split("/")[0], subject });
@@ -517,12 +526,19 @@ export class XmppClient {
         return true;
       }
 
-      const retracted = realStanza.querySelector('retract[xmlns="urn:xmpp:message-retract:1"]');
+      const directChildren = Array.from(realStanza.children);
+      const applyTo = directChildren.find((child) => child.localName === "apply-to" && child.namespaceURI === "urn:xmpp:fasten:0");
+      const retracted = directChildren.find((child) =>
+        child.localName === "retract" && child.namespaceURI === "urn:xmpp:message-retract:1"
+      ) ?? Array.from(applyTo?.children ?? []).find((child) => child.localName === "retract" && child.namespaceURI === "urn:xmpp:message-retract:1");
       if (retracted) {
         this.emit("message.retracted", {
           accountId: this.config.accountId,
-          messageId: retracted.getAttribute("id"),
+          messageId: retracted.getAttribute("id") ?? applyTo?.getAttribute("id"),
           from,
+          type,
+          to: realStanza.getAttribute("to") ?? "",
+          realSenderJid: normalizeValidBareJid(realStanza.querySelector('x[xmlns="http://jabber.org/protocol/muc#user"] item[jid]')?.getAttribute("jid") ?? "") ?? undefined,
         });
         return true;
       }
@@ -537,6 +553,7 @@ export class XmppClient {
           body: body || "[OMEMO message]",
           timestamp: Date.now(),
           type: type as "chat" | "groupchat",
+          stanzaId,
           replyTo: replyNode?.getAttribute("id") ?? undefined,
           replaceId: replaceNode?.getAttribute("id") ?? undefined,
           omemo: omemo ?? undefined,
@@ -933,12 +950,16 @@ export class XmppClient {
   }
 
   retractMessage(toJid: string, messageId: string, type: "chat" | "groupchat" = "chat") {
-    if (!this._connection || !this._connected || !messageId) return;
-    const stanza = this._$msg({ to: toJid, type })
-      .c("apply-to", { xmlns: "urn:xmpp:fasten:0", id: messageId })
-      .c("retract", { xmlns: "urn:xmpp:message-retract:1" })
+    if (!this._connection || !this._connected) throw new Error("Not connected");
+    if (!messageId) throw new Error("Message ID is unavailable");
+    const stanza = this._$msg({ to: toJid, type, id: crypto.randomUUID() })
+      .c("retract", { xmlns: "urn:xmpp:message-retract:1", id: messageId })
       .up()
-      .up();
+      .c("fallback", { xmlns: "urn:xmpp:fallback:0", for: "urn:xmpp:message-retract:1" })
+      .up()
+      .c("body").t("/me retracted a previous message, but it's unsupported by your client.")
+      .up()
+      .c("store", { xmlns: "urn:xmpp:hints" }).up();
     this._connection.send(stanza);
   }
 
@@ -1491,6 +1512,18 @@ export class XmppClient {
       if (!result || result.getAttribute("queryid") !== queryId) return true;
       const msg = result.querySelector("forwarded message");
       if (!msg) return true;
+      const mamRetraction = Array.from(msg.children).find((child) => child.localName === "retract" && child.namespaceURI === "urn:xmpp:message-retract:1");
+      if (mamRetraction) {
+        this.emit("message.retracted", {
+          accountId: this.config.accountId,
+          messageId: mamRetraction.getAttribute("id"),
+          from: msg.getAttribute("from") ?? "",
+          to: msg.getAttribute("to") ?? "",
+          type: msg.getAttribute("type") ?? "chat",
+          realSenderJid: normalizeValidBareJid(msg.querySelector('x[xmlns="http://jabber.org/protocol/muc#user"] item[jid]')?.getAttribute("jid") ?? "") ?? undefined,
+        });
+        return true;
+      }
       const body = msg.querySelector("body")?.textContent ?? "";
       const omemo = parseOmemoEnvelope(msg);
       if (!body && !omemo) return true;
