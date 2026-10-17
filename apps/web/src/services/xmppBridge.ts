@@ -5,6 +5,7 @@
  */
 
 import { getClient, XmppClient, RosterContact as AdapterContact } from "./xmppAdapter";
+import { restoreXmppPush } from "./push";
 import toast from "react-hot-toast";
 import { useRosterStore } from "@/stores/rosterStore";
 import { useChatStore } from "@/stores/chatStore";
@@ -99,6 +100,9 @@ export function initXmppBridge(client: XmppClient) {
     }
     if (data.status === "connected" || data.status === "online" || data.status === "authenticated") {
       if (data.status === "connected") {
+        void restoreXmppPush(accountId).catch((error) => {
+          console.warn("[Push] XMPP registration failed", error);
+        });
         void client.fetchIceServers().then((servers) => {
           if (servers.length) callManager.setIceServers(accountId, servers);
         }).catch(() => {});

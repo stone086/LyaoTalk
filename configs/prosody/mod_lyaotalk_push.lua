@@ -5,7 +5,6 @@
 -- Install: copy to /usr/lib/prosody-modules/mod_lyaotalk_push/mod_lyaotalk_push.lua
 -- Configure: see Component "push.DOMAIN" in prosody.cfg.lua
 
-local jid = require "util.jid";
 local st = require "util.stanza";
 local http = require "net.http";
 local json = require "util.json";
@@ -22,8 +21,10 @@ module:hook("iq-set/host/http://jabber.org/protocol/pubsub:pubsub", function(eve
   local publish = pubsub:get_child("publish");
   if not publish then return; end
 
-  local from_jid = stanza.attr.from;
-  local target_user = jid.bare(from_jid);
+  local node = publish.attr.node;
+  if not node or not node:match("^[%w_%-]+$") or #node > 128 then
+    return event.origin.send(st.error_reply(stanza, "modify", "bad-request"));
+  end
 
   -- Extract notification body if present (XEP-0357 §6 form)
   local item = publish:get_child("item");
@@ -48,7 +49,7 @@ module:hook("iq-set/host/http://jabber.org/protocol/pubsub:pubsub", function(eve
 
   -- Async HTTP POST to LyaoTalk backend
   local payload = json.encode({
-    account_jid = target_user,
+    node = node,
     title = title,
     body = body,
     secret = shared_secret,
