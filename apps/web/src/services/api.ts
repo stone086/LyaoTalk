@@ -335,24 +335,35 @@ export const attachmentsApi = {
     api.post(`/attachments/${encodeURIComponent(attachmentId)}/share`,
       { recipient_jid: recipientJid },
       { headers: { "X-LyaoTalk-Account-Id": accountId } }).then((r) => r.data),
-  upload: (file: File, messageId?: string, accountId?: string) => {
-    const form = new FormData();
-    form.append("file", file, file.name);
-    if (messageId) form.append("message_id", messageId);
-
-    // CRITICAL: do NOT set Content-Type manually for FormData uploads.
-    // The browser must set it automatically as
-    //   "multipart/form-data; boundary=----WebKitFormBoundary..."
-    // Setting it manually omits the boundary, the server fails to parse the
-    // body (returning 400 or in some configs 401 from the auth middleware
-    // running before body parse), and the upload appears to fail.
-    //
-    // The axios request interceptor will still add Authorization: Bearer <token>
-    // because we are not setting that header here.
-    const headers: Record<string, string> = {};
-    if (accountId) headers["X-LyaoTalk-Account-Id"] = accountId;
-
-    return api.post("/attachments/upload", form, { headers }).then((r) => r.data);
+  upload: async (file: File, messageId?: string, accountId?: string) => {
+    const selectedAccountId = accountId ?? useAccountStore.getState().activeAccountId;
+    if (!selectedAccountId) throw new Error("Account sign-in required");
+    const send = async (token: string | null) => {
+      const form = new FormData();
+      form.append("file", file, file.name);
+      if (messageId) form.append("message_id", messageId);
+      // fetch owns the multipart boundary. Axios defaults/interceptors can
+      // accidentally retain JSON or an incomplete multipart Content-Type.
+      return fetch(`${API_URL}/attachments/upload`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+        credentials: "same-origin",
+      });
+    };
+    let response = await send(getUserToken(selectedAccountId));
+    if (response.status === 401) {
+      let token: string;
+      try {
+        token = await refreshUserToken(selectedAccountId);
+      } catch {
+        token = await reauthenticateUserToken(selectedAccountId);
+      }
+      response = await send(token);
+    }
+    const data = await response.json();
+    if (!response.ok) throw new Error(typeof data?.detail === "string" ? data.detail : `Upload failed (${response.status})`);
+    return data;
   },
 };
 
