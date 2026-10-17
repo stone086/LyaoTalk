@@ -19,6 +19,7 @@ function RoleIcon({ role, affiliation }: { role: MucMember["role"]; affiliation:
 
 function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom) => void }) {
   const { t } = useLanguage();
+  const [leaving, setLeaving] = useState(false);
   const navigate = useNavigate();
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const upsertConversation = useChatStore((s) => s.upsertConversation);
@@ -63,14 +64,22 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
     }
   };
 
-  const leave = () => {
-    if (!activeAccountId) return;
+  const leave = async () => {
+    if (!activeAccountId || leaving) return;
     const client = getClient(activeAccountId);
-    client?.leaveRoom(room.jid, room.nickname);
-    void client?.retractMucBookmark(room.jid).catch(() => toast.error(t("group.bookmarkSyncFailed")));
-    removeRoom(activeAccountId, room.jid);
-    deleteConversation(generateConversationId(activeAccountId, room.jid));
-    toast(t("group.leftRoom"));
+    if (!client?.connected) { toast.error(t("account.connectFirst")); return; }
+    setLeaving(true);
+    try {
+      await client.retractMucBookmark(room.jid);
+      client.leaveRoom(room.jid, room.nickname);
+      removeRoom(activeAccountId, room.jid);
+      deleteConversation(generateConversationId(activeAccountId, room.jid));
+      toast(t("group.leftRoom"));
+    } catch {
+      toast.error(t("group.bookmarkSyncFailed"));
+    } finally {
+      setLeaving(false);
+    }
   };
 
   const isJoined = room.joinState === "joined";
@@ -118,8 +127,9 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
             title={t("group.invite")}>
             <UserPlus size={13} />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); leave(); }}
-            className="p-1.5 rounded hover-surface text-surface-200/30 hover:text-danger"
+          <button onClick={(e) => { e.stopPropagation(); void leave(); }}
+            disabled={leaving}
+            className="p-1.5 rounded hover-surface text-surface-200/30 hover:text-danger disabled:opacity-40"
             title={t("group.leave")}>
             <LogOut size={13} />
           </button>

@@ -1023,15 +1023,58 @@ export class XmppClient {
     });
   }
 
-  retractMucBookmark(jid: string): Promise<void> {
-    if (!this._connection || !this._connected) return Promise.reject(new Error("Not connected"));
-    const iq = this._$iq({ type: "set" })
-      .c("pubsub", { xmlns: PUBSUB_NS })
-      .c("retract", { node: BOOKMARKS_NS, notify: "true" })
-      .c("item", { id: jid });
-    return new Promise((resolve, reject) => {
-      this._connection.sendIQ(iq.tree(), () => resolve(), reject, 10000);
+  async retractMucBookmark(jid: string): Promise<void> {
+    if (!this._connection || !this._connected) throw new Error("Not connected");
+    const roomJid = jid.trim().toLowerCase();
+    const sendIq = (stanza: Element) => new Promise<Element>((resolve, reject) => {
+      this._connection!.sendIQ(stanza, resolve, reject, 10000);
     });
+    const read = (stanza: Element) => sendIq(stanza).catch(() => null);
+    const modern = await read(this._$iq({ type: "get" })
+      .c("pubsub", { xmlns: PUBSUB_NS }).c("items", { node: BOOKMARKS_NS }).tree());
+    if (modern && parseMucBookmarks(modern).some((bookmark) => bookmark.jid === roomJid)) {
+      await sendIq(this._$iq({ type: "set" })
+        .c("pubsub", { xmlns: PUBSUB_NS })
+        .c("retract", { node: BOOKMARKS_NS, notify: "true" })
+        .c("item", { id: roomJid }).tree());
+    }
+
+    // Conversations and other clients may still use XEP-0048 bookmarks.
+    // Removing only the XEP-0402 item lets those legacy bookmarks rejoin the room.
+    const removeFromStorage = (result: Element | null): { storage: Element; itemId: string } | null => {
+      const source = result && Array.from(result.getElementsByTagName("storage"))
+        .find((node) => node.namespaceURI === "storage:bookmarks" || node.getAttribute("xmlns") === "storage:bookmarks");
+      if (!source) return null;
+      const storage = source.cloneNode(true) as Element;
+      const matching = Array.from(storage.getElementsByTagName("conference"))
+        .filter((node) => node.getAttribute("jid")?.trim().toLowerCase() === roomJid);
+      if (!matching.length) return null;
+      matching.forEach((node) => node.parentNode?.removeChild(node));
+      return { storage, itemId: source.parentElement?.getAttribute("id") || "current" };
+    };
+
+    const legacyPep = removeFromStorage(await read(this._$iq({ type: "get" })
+      .c("pubsub", { xmlns: PUBSUB_NS }).c("items", { node: "storage:bookmarks" }).tree()));
+    if (legacyPep) {
+      const publish = this._$iq({ type: "set" })
+        .c("pubsub", { xmlns: PUBSUB_NS })
+        .c("publish", { node: "storage:bookmarks" })
+        .c("item", { id: legacyPep.itemId });
+      publish.cnode(legacyPep.storage);
+      await sendIq(publish.tree());
+    }
+
+    const legacyPrivate = removeFromStorage(await read(this._$iq({ type: "get" })
+      .c("query", { xmlns: "jabber:iq:private" }).c("storage", { xmlns: "storage:bookmarks" }).tree()));
+    if (legacyPrivate) {
+      const update = this._$iq({ type: "set" }).c("query", { xmlns: "jabber:iq:private" });
+      update.cnode(legacyPrivate.storage);
+      await sendIq(update.tree());
+    }
+
+    if ((await this.fetchMucBookmarks()).some((bookmark) => bookmark.jid === roomJid)) {
+      throw new Error("Room bookmark could not be removed");
+    }
   }
 
   joinRoom(roomJid: string, nickname: string, password?: string): Promise<void> {
