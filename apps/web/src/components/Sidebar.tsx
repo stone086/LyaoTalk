@@ -169,33 +169,32 @@ export default function Sidebar() {
             <Icon size={18} />
           </NavLink>
         ))}
+        {/* Connection status */}
+        <button
+          type="button"
+          className="w-full flex items-center justify-center py-2.5 rounded-lg transition-colors hover:bg-surface-800 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!activeAccount}
+          onClick={toggleConnection}
+          title={activeAccount?.connected ? t("nav.goOffline") : t("nav.goOnline")}
+          aria-label={activeAccount?.connected ? t("nav.goOffline") : t("nav.goOnline")}
+          aria-pressed={Boolean(activeAccount?.connected)}
+        >
+          {!browserOnline ? <WifiOff size={18} className="text-danger" /> : activeAccount?.connected
+            ? <Wifi size={18} className="text-success" />
+            : <WifiOff size={18} className="text-surface-200/30" />
+          }
+        </button>
+        <button
+          type="button"
+          onClick={() => void handleLogout()}
+          disabled={!activeId || loggingOut}
+          title={t("nav.logout")}
+          aria-label={t("nav.logout")}
+          className="w-full flex items-center justify-center py-2.5 rounded-lg text-surface-200/50 hover:text-danger hover:bg-danger/10 disabled:opacity-40 transition-colors"
+        >
+          <LogOut size={18} />
+        </button>
       </nav>
-
-      {/* Connection status */}
-      <button
-        type="button"
-        className="mt-2 flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-surface-800 disabled:cursor-not-allowed disabled:opacity-40"
-        disabled={!activeAccount}
-        onClick={toggleConnection}
-        title={activeAccount?.connected ? t("nav.goOffline") : t("nav.goOnline")}
-        aria-label={activeAccount?.connected ? t("nav.goOffline") : t("nav.goOnline")}
-        aria-pressed={Boolean(activeAccount?.connected)}
-      >
-        {!browserOnline ? <WifiOff size={14} className="text-danger" /> : activeAccount?.connected
-          ? <Wifi size={14} className="text-success" />
-          : <WifiOff size={14} className="text-surface-200/30" />
-        }
-      </button>
-      <button
-        type="button"
-        onClick={() => void handleLogout()}
-        disabled={!activeId || loggingOut}
-        title={t("nav.logout")}
-        aria-label={t("nav.logout")}
-        className="w-10 h-10 flex items-center justify-center rounded-lg text-surface-200/50 hover:text-danger hover:bg-danger/10 disabled:opacity-40 transition-colors"
-      >
-        <LogOut size={18} />
-      </button>
     </aside>
   );
 }
