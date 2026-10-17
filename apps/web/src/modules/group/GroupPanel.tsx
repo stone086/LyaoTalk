@@ -5,7 +5,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { MucMember, MucRoom, useGroupStore } from "@/stores/groupStore";
 import { getClient, MucDiscoveryItem } from "@/services/xmppAdapter";
 import { clsx } from "clsx";
-import { Users, Plus, Hash, LogOut, Settings, Crown, Shield, UserPlus, Compass, RefreshCw, Trash2 } from "lucide-react";
+import { Users, Plus, Hash, LogOut, Settings, Crown, Shield, UserPlus, Compass, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/utils/i18n";
 import { generateConversationId } from "@/utils/helpers";
@@ -73,13 +73,6 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
     toast(t("group.leftRoom"));
   };
 
-  const removeLocalRoom = () => {
-    if (!activeAccountId) return;
-    removeRoom(activeAccountId, room.jid);
-    deleteConversation(generateConversationId(activeAccountId, room.jid));
-    toast(t("common.removed"));
-  };
-
   const isJoined = room.joinState === "joined";
   const isJoining = room.joinState === "joining";
   const isError = room.joinState === "error";
@@ -129,13 +122,6 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
             className="p-1.5 rounded hover-surface text-surface-200/30 hover:text-danger"
             title={t("group.leave")}>
             <LogOut size={13} />
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); removeLocalRoom(); }}
-            className="p-1.5 rounded hover-surface text-surface-200/30 hover:text-danger"
-            title={t("common.remove")}
-          >
-            <Trash2 size={13} />
           </button>
         </div>
       )}
