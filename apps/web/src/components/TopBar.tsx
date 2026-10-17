@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Search, Moon, Sun, PanelRight, Lock, Unlock, Phone, Video, MoreVertical } from "lucide-react";
+import { ArrowLeft, Search, Moon, Sun, PanelRight, Lock, Unlock, Phone, Video } from "lucide-react";
 import { useAccountStore } from "@/stores/accountStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import GlobalSearch from "@/modules/search/GlobalSearch";
@@ -24,7 +24,6 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
   const { t } = useLanguage();
   const [theme, setTheme] = useState(getStoredTheme());
   const [showSearch, setShowSearch] = useState(false);
-  const [showChatMenu, setShowChatMenu] = useState(false);
   const [showCallMenu, setShowCallMenu] = useState(false);
   const [omemoEnabled, setOmemoEnabledState] = useState(getOmemoEnabled());
   const [groupOmemoReady, setGroupOmemoReady] = useState(false);
@@ -36,7 +35,6 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
   const account = useAccountStore((s) => s.accounts.find((a) => a.id === s.activeAccountId));
   const conversation = useChatStore((s) => conversationId ? s.conversations[conversationId] : undefined);
   const reconnectingCount = useReconnectStore((s) => s.reconnectingAccountIds.length);
-  const headerRef = useRef<HTMLElement | null>(null);
   const callMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => onOmemoEnabledChange(setOmemoEnabledState), []);
@@ -60,19 +58,17 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
     "meta+k": () => setShowSearch(true),
     "escape": () => {
       setShowSearch(false);
-      setShowChatMenu(false);
       setShowCallMenu(false);
     },
   });
 
   useEffect(() => {
-    if (!showChatMenu && !showCallMenu) return;
+    if (!showCallMenu) return;
 
     const handlePointerDown = (event: MouseEvent | TouchEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
       if (showCallMenu && !callMenuRef.current?.contains(target)) setShowCallMenu(false);
-      if (showChatMenu && !headerRef.current?.contains(target)) setShowChatMenu(false);
     };
 
     document.addEventListener("mousedown", handlePointerDown);
@@ -81,7 +77,7 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("touchstart", handlePointerDown);
     };
-  }, [showChatMenu, showCallMenu]);
+  }, [showCallMenu]);
 
   useEffect(() => {
     setShowCallMenu(false);
@@ -123,19 +119,17 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
       position: "top-right",
       style: { marginTop: "68px", maxWidth: "min(20rem, calc(100vw - 2rem))" },
     });
-    setShowChatMenu(false);
   };
 
   const toggleTheme = () => {
     const next = dark ? "light" : "dark";
     setTheme(next);
     applyTheme(next);
-    setShowChatMenu(false);
   };
 
   return (
     <>
-      <header ref={headerRef} className="h-12 flex min-w-0 items-center gap-1 border-b border-subtle bg-surface-950/80 px-2 backdrop-blur-sm flex-shrink-0 relative z-20 sm:gap-2 sm:px-3">
+      <header className="h-12 flex min-w-0 items-center gap-1 border-b border-subtle bg-surface-950/80 px-2 backdrop-blur-sm flex-shrink-0 relative z-20 sm:gap-2 sm:px-3">
         {onBackToChats && (
           <button type="button" onClick={onBackToChats} className="btn-ghost p-2 md:hidden" aria-label={t("chat.backToChats")} title={t("chat.backToChats")}>
             <ArrowLeft size={18} />
@@ -161,8 +155,9 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
         {conversation && <button type="button" onClick={() => setShowSearch(true)} className="btn-ghost p-2" title={t("topbar.searchPlaceholder")} aria-label={t("topbar.searchPlaceholder")}><Search size={16} /></button>}
         {conversation && <button type="button" onClick={toggleOmemo} className={`btn-ghost p-2 ${conversation.type === "group" ? (groupOmemoReady && groupOmemoEnabled ? "text-success" : "text-warn") : (omemoEnabled ? "text-success" : "text-warn")}`} title={conversation.type === "group" && !groupOmemoReady ? t("omemo.groupUnavailable") : conversation.type === "group" ? (groupOmemoEnabled ? t("omemo.enabled") : t("omemo.disabled")) : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-label={conversation.type === "group" && !groupOmemoReady ? t("omemo.groupUnavailable") : conversation.type === "group" ? (groupOmemoEnabled ? t("omemo.enabled") : t("omemo.disabled")) : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-pressed={conversation.type === "group" ? groupOmemoReady && groupOmemoEnabled : omemoEnabled}>{conversation.type === "group" ? (groupOmemoReady && groupOmemoEnabled ? <Lock size={16} /> : <Unlock size={16} />) : (omemoEnabled ? <Lock size={16} /> : <Unlock size={16} />)}</button>}
         {conversation && <button type="button" onClick={toggleTheme} className="btn-ghost p-2" title={t("topbar.theme")} aria-label={t("topbar.theme")}>{dark ? <Sun size={16} /> : <Moon size={16} />}</button>}
+        {conversation && showRightToggle && <button type="button" onClick={onToggleRight} className="btn-ghost p-2" title={t("topbar.toggleInfo")} aria-label={t("topbar.toggleInfo")}><PanelRight size={16} /></button>}
         {conversation?.type === "private" && <div ref={callMenuRef} className="relative">
-          <button type="button" onClick={() => { setShowCallMenu((value) => !value); setShowChatMenu(false); }} className="btn-ghost p-2" title={t("chat.callOptions")} aria-label={t("chat.callOptions")} aria-expanded={showCallMenu} aria-haspopup="menu"><Phone size={16} /></button>
+          <button type="button" onClick={() => setShowCallMenu((value) => !value)} className="btn-ghost p-2" title={t("chat.callOptions")} aria-label={t("chat.callOptions")} aria-expanded={showCallMenu} aria-haspopup="menu"><Phone size={16} /></button>
           {showCallMenu && <div role="menu" aria-label={t("chat.callOptions")} className="popover-surface absolute right-0 top-full z-30 mt-1 w-40 rounded-xl p-1 text-sm">
             <button type="button" role="menuitem" onClick={() => { setShowCallMenu(false); void startCall(["audio"]); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover-surface"><Phone size={16} />{t("chat.audioCall")}</button>
             <button type="button" role="menuitem" onClick={() => { setShowCallMenu(false); void startCall(["audio", "video"]); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover-surface"><Video size={16} />{t("chat.videoCall")}</button>
@@ -179,7 +174,6 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
         {!conversation && <button onClick={toggleTheme} className="btn-ghost p-2">
           {dark ? <Sun size={16} /> : <Moon size={16} />}
         </button>}
-        {conversation && <button type="button" onClick={() => { setShowChatMenu((value) => !value); setShowCallMenu(false); }} className="btn-ghost p-2" title={t("topbar.moreActions")} aria-label={t("topbar.moreActions")} aria-expanded={showChatMenu}><MoreVertical size={17} /></button>}
         {account && !conversation && (
           <div className="hidden md:flex items-center gap-2 px-2 py-1 rounded-lg bg-surface-900 border-default select-none">
             <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center text-accent-soft text-xs uppercase font-medium">
@@ -194,9 +188,6 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
           </div>
         )}
         </>}
-        {showChatMenu && conversation && <div className="popover-surface absolute right-2 top-full z-30 mt-1 w-48 rounded-xl p-1 text-sm">
-          <button type="button" onClick={() => { onToggleRight?.(); setShowChatMenu(false); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover-surface"><PanelRight size={15} />{t("topbar.toggleInfo")}</button>
-        </div>}
       </header>
       {showSearch && <GlobalSearch onClose={() => setShowSearch(false)} />}
     </>
