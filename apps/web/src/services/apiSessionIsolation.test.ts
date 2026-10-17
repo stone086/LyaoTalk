@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import axios, { AxiosError, type AxiosAdapter, type AxiosResponse } from "axios";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, getUserRefreshToken, getUserToken, setUserRefreshToken, setUserToken } from "./api";
+import { api, attachmentsApi, getUserRefreshToken, getUserToken, setUserRefreshToken, setUserToken } from "./api";
 import { useAccountStore } from "@/stores/accountStore";
 import { setAccountPassword } from "@/stores/accountStore";
 
@@ -26,6 +26,20 @@ afterEach(() => {
 });
 
 describe("API account session isolation", () => {
+  it("uploads recorded video as browser-owned multipart with the selected account token", async () => {
+    setupAccounts();
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "video-1" }), { status: 200 }));
+    const file = new File(["recorded bytes"], "video-1.webm", { type: "video/webm" });
+    expect((await attachmentsApi.upload(file, undefined, "bob")).id).toBe("video-1");
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/attachments/upload");
+    expect(options?.headers).toEqual({ Authorization: "Bearer bob-access" });
+    const uploaded = (options?.body as FormData).get("file") as File;
+    expect(uploaded.name).toBe(file.name);
+    expect(uploaded.size).toBe(file.size);
+    expect(uploaded.type).toBe(file.type);
+  });
+
   it("does not attach or revoke another account token on login 401", async () => {
     setupAccounts();
     sessionStorage.setItem("admin_token", "admin-access");

@@ -1,18 +1,17 @@
 /**
- * VoiceRecorder.tsx - Hold-to-record voice messages.
+ * VoiceRecorder.tsx - Voice messages.
  *
- * Records Opus-encoded audio via MediaRecorder, uploads to MinIO via the
- * attachments endpoint, and sends as a regular file message with audio MIME.
+ * Records audio via MediaRecorder and sends genuine AAC-in-MP4 (.m4a).
  *
  * UX:
- *   - Mic button: tap = toggle, long-press = walkie-talkie style
+ *   - Mic button starts recording; cancel or send from the recording controls
  *   - During recording: red pulsing dot + elapsed time + waveform
- *   - On release: cancel (drag away) or send (release)
  */
 import { useState, useRef, useEffect } from "react";
 import { Mic, X, Send } from "lucide-react";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/utils/i18n";
+import { voiceRecordingToM4a } from "@/services/voiceFormat";
 
 interface VoiceRecorderProps {
   onSend: (file: File) => Promise<void>;
@@ -76,8 +75,8 @@ export default function VoiceRecorder({ onSend, onCancel, embedded = false }: Vo
       };
       tick();
 
-      // Let browsers without WebM support select their native recording format.
-      const mimeType = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"]
+      // Prefer native AAC; convert other browser recording formats before upload.
+      const mimeType = ["audio/mp4;codecs=mp4a.40.2", "audio/mp4", "audio/webm;codecs=opus", "audio/webm", "audio/ogg"]
         .find((type) => MediaRecorder.isTypeSupported(type));
       const recorder = new MediaRecorder(stream, {
         ...(mimeType ? { mimeType } : {}),
@@ -123,14 +122,11 @@ export default function VoiceRecorder({ onSend, onCancel, embedded = false }: Vo
     }
 
     const mimeType = recorder.mimeType || chunksRef.current[0]?.type || "audio/webm";
-    // .webm is commonly classified as video by XMPP clients even when its
-    // only track is Opus audio. .weba keeps the container and signals audio.
-    const extension = mimeType.startsWith("audio/mp4") ? "m4a" : mimeType.startsWith("audio/ogg") ? "ogg" : "weba";
     const blob = new Blob(chunksRef.current, { type: mimeType });
-    const file = new File([blob], `voice-${Date.now()}.${extension}`, { type: blob.type });
     cleanup();
 
     try {
+      const file = await voiceRecordingToM4a(blob, mimeType);
       await onSend(file);
     } catch (e: any) {
       toast.error(e?.message ?? t("voice.sendFailed"));
