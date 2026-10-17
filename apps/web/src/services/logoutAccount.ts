@@ -7,9 +7,11 @@ import { markIntentionalDisconnect, unsuperviseConnection } from "./connectionSu
 import { apiSocket } from "./apiSocket";
 import { clearLocalAccountData } from "./localDb";
 import { revokeAllAesgcmBlobs } from "./aesgcmMedia";
+import { unsubscribeFromPush } from "./push";
 
 /** End one account session while leaving every other account connected. */
 export async function logoutAccount(accountId: string): Promise<{ remoteRevoked: boolean }> {
+  await unsubscribeFromPush(accountId).catch(() => {});
   const refresh = getUserRefreshToken(accountId);
   let remoteRevoked = false;
   try {

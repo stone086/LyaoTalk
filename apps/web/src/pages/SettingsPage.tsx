@@ -18,6 +18,7 @@ import { accountsApi, authApi, setUserToken, setUserRefreshToken } from "@/servi
 import Avatar from "@/components/Avatar";
 import { apiSocket } from "@/services/apiSocket";
 import { isPushSubscribed, isPushSupported, subscribeToPush, unsubscribeFromPush } from "@/services/push";
+import { collectBrowserCapabilities } from "@/services/browserCompatibility";
 import { markIntentionalDisconnect } from "@/services/connectionSupervisor";
 import { logoutAccount } from "@/services/logoutAccount";
 
@@ -316,6 +317,8 @@ export default function SettingsPage() {
   const soundEnabled = useNotificationStore((s) => s.soundEnabled);
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
+  const [showPushInstallGuide, setShowPushInstallGuide] = useState(false);
+  const pushBrowser = collectBrowserCapabilities();
 
   useEffect(() => {
     let cancelled = false;
@@ -329,18 +332,32 @@ export default function SettingsPage() {
       }
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [activeAccountId]);
+
+  const handlePushChange = (checked: boolean) => {
+    if (checked && pushBrowser.isIOS && !pushBrowser.isStandalonePwa) {
+      setShowPushInstallGuide(true);
+      return;
+    }
+    void handleTogglePush(checked);
+  };
 
   const handleTogglePush = async (checked: boolean) => {
-    if (checked) {
-      const ok = await subscribeToPush();
-      setPushEnabled(ok);
-      if (!ok) toast.error(t("toast.pushFailed"));
-      else toast.success(t("toast.pushEnabled"));
-    } else {
-      const ok = await unsubscribeFromPush();
-      setPushEnabled(!ok);
-      if (ok) toast.success(t("toast.pushDisabled"));
+    try {
+      if (checked) {
+        const ok = await subscribeToPush();
+        setPushEnabled(ok);
+        if (!ok) toast.error(t("toast.pushFailed"));
+        else toast.success(t("toast.pushEnabled"));
+      } else {
+        const ok = await unsubscribeFromPush();
+        setPushEnabled(!ok);
+        if (ok) toast.success(t("toast.pushDisabled"));
+        else toast.error(t("toast.pushFailed"));
+      }
+    } catch {
+      setPushEnabled(!checked);
+      toast.error(t("toast.pushFailed"));
     }
   };
   const browserEnabled = useNotificationStore((s) => s.browserEnabled);
@@ -596,19 +613,33 @@ export default function SettingsPage() {
             {t("settings.notifications")}
           </h2>
           <div className="glass rounded-xl p-4 flex flex-col gap-3">
-            {pushSupported && (
+            {(pushSupported || pushBrowser.isIOS) && (
               <label className="flex items-center justify-between cursor-pointer">
                 <div className="flex flex-col">
                   <span className="text-sm text-surface-200">{t("settings.notifyPush")}</span>
-                  <span className="text-xs text-surface-200/40">{t("settings.notifyPushHint")}</span>
+                  <span className="text-xs text-surface-200/40">
+                    {pushBrowser.isIOS && !pushBrowser.isStandalonePwa
+                      ? t("settings.iosPushInstallHint")
+                      : t("settings.notifyPushHint")}
+                  </span>
                 </div>
                 <input
                   type="checkbox"
                   checked={pushEnabled}
-                  onChange={(e) => handleTogglePush(e.target.checked)}
+                  onChange={(e) => handlePushChange(e.target.checked)}
                   className="w-4 h-4 accent-[#7c6af7]"
                 />
               </label>
+            )}
+            {showPushInstallGuide && pushBrowser.isIOS && !pushBrowser.isStandalonePwa && (
+              <div role="note" className="rounded-lg border border-[#7c6af7]/40 bg-[#7c6af7]/10 p-3 text-xs text-surface-200">
+                <p className="font-medium">{t("settings.iosPushGuideTitle")}</p>
+                <ol className="mt-2 list-decimal space-y-1 pl-4">
+                  <li>{t("settings.iosPushGuideInstall")}</li>
+                  <li>{t("settings.iosPushGuideOpen")}</li>
+                  <li>{t("settings.iosPushGuideAllow")}</li>
+                </ol>
+              </div>
             )}
             {[
               { label: t("settings.notifyBrowser"), key: "browser" },

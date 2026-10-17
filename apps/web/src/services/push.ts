@@ -13,6 +13,51 @@
  */
 
 import { api } from "./api";
+import { getClient } from "./xmppAdapter";
+import { useAccountStore } from "@/stores/accountStore";
+import { collectBrowserCapabilities } from "./browserCompatibility";
+
+const PUSH_NODE_KEY = "lyaotalk:push-node:";
+const enabledKey = (accountId: string) => `lyaotalk:push-enabled:${accountId}`;
+
+function pushNode(accountId: string): string {
+  const key = `${PUSH_NODE_KEY}${accountId}`;
+  let node = localStorage.getItem(key);
+  if (!node || !/^[a-zA-Z0-9_-]{1,128}$/.test(node)) {
+    node = crypto.randomUUID();
+    localStorage.setItem(key, node);
+  }
+  return node;
+}
+
+function selectedAccount(): string | null {
+  return useAccountStore.getState().activeAccountId;
+}
+
+/** XEP-0357 registrations are session-bound, so restore them on reconnect. */
+export async function restoreXmppPush(accountId: string): Promise<void> {
+  if (localStorage.getItem(enabledKey(accountId)) !== "1") return;
+  if (!(await isPushSupported())) return;
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+  const client = getClient(accountId);
+  if (!subscription || !client?.connected) return;
+  await client.setPushEnabled(true, pushNode(accountId));
+  await registerBackendSubscription(accountId, subscription);
+}
+
+async function registerBackendSubscription(accountId: string, subscription: PushSubscription): Promise<void> {
+  const p256dhBuf = subscription.getKey("p256dh");
+  const authBuf = subscription.getKey("auth");
+  if (!p256dhBuf || !authBuf) throw new Error("Push subscription keys unavailable");
+  await api.post("/push/subscribe", {
+    endpoint: subscription.endpoint,
+    node: pushNode(accountId),
+    p256dh: arrayBufferToBase64(p256dhBuf),
+    auth: arrayBufferToBase64(authBuf),
+    user_agent: navigator.userAgent,
+  }, { headers: { "X-LyaoTalk-Account-Id": accountId } });
+}
 
 function urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -35,7 +80,9 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 export async function isPushSupported(): Promise<boolean> {
+  const browser = collectBrowserCapabilities();
   return (
+    (!browser.isIOS || browser.isStandalonePwa) &&
     "serviceWorker" in navigator &&
     "PushManager" in window &&
     "Notification" in window
@@ -49,6 +96,10 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 
 export async function subscribeToPush(): Promise<boolean> {
   if (!(await isPushSupported())) return false;
+
+  const accountId = selectedAccount();
+  const client = accountId ? getClient(accountId) : undefined;
+  if (!accountId || !client?.connected) return false;
 
   const permission = await requestNotificationPermission();
   if (permission !== "granted") return false;
@@ -72,36 +123,55 @@ export async function subscribeToPush(): Promise<boolean> {
   }
 
   // Extract keys
-  const p256dhBuf = subscription.getKey("p256dh");
-  const authBuf = subscription.getKey("auth");
-  if (!p256dhBuf || !authBuf) return false;
+  await registerBackendSubscription(accountId, subscription);
 
-  // Send to backend
-  await api.post("/push/subscribe", {
-    endpoint: subscription.endpoint,
-    p256dh: arrayBufferToBase64(p256dhBuf),
-    auth: arrayBufferToBase64(authBuf),
-    user_agent: navigator.userAgent,
-  });
+  try {
+    await client.setPushEnabled(true, pushNode(accountId));
+  } catch {
+    await api.delete("/push/unsubscribe", {
+      data: { endpoint: subscription.endpoint },
+      headers: { "X-LyaoTalk-Account-Id": accountId },
+    }).catch(() => {});
+    return false;
+  }
+  localStorage.setItem(enabledKey(accountId), "1");
 
   return true;
 }
 
-export async function unsubscribeFromPush(): Promise<boolean> {
+export async function unsubscribeFromPush(targetAccountId?: string): Promise<boolean> {
+  const accountId = targetAccountId ?? selectedAccount();
+  if (!accountId) return false;
   if (!("serviceWorker" in navigator)) return false;
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.getSubscription();
-  if (!subscription) return true;
+  if (!subscription) {
+    localStorage.removeItem(enabledKey(accountId));
+    return true;
+  }
+
+  const client = getClient(accountId);
+  if (client?.connected) {
+    try { await client.setPushEnabled(false, pushNode(accountId)); }
+    catch { return false; }
+  }
 
   try {
     await api.delete("/push/unsubscribe", {
       data: { endpoint: subscription.endpoint },
+      headers: { "X-LyaoTalk-Account-Id": accountId },
     });
-  } catch { /* non-fatal */ }
-  return await subscription.unsubscribe();
+  } catch { return false; }
+  localStorage.removeItem(enabledKey(accountId));
+  const otherEnabled = useAccountStore.getState().accounts.some(
+    (account) => account.id !== accountId && localStorage.getItem(enabledKey(account.id)) === "1",
+  );
+  return otherEnabled || await subscription.unsubscribe();
 }
 
 export async function isPushSubscribed(): Promise<boolean> {
+  const accountId = selectedAccount();
+  if (!accountId || localStorage.getItem(enabledKey(accountId)) !== "1") return false;
   if (!(await isPushSupported())) return false;
   try {
     const registration = await navigator.serviceWorker.ready;

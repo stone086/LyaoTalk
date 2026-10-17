@@ -286,6 +286,24 @@ export class XmppClient {
 
   get connected() { return this._connected; }
 
+  /** Register this XMPP session for XEP-0357 notifications. Re-send after reconnect. */
+  setPushEnabled(enabled: boolean, node: string): Promise<void> {
+    if (!this._connection || !this._connected) return Promise.reject(new Error("XMPP is not connected"));
+    const domain = this.config.jid.split("@")[1]?.split("/")[0];
+    if (!domain || !/^[a-z0-9.-]+$/i.test(domain) || !/^[a-zA-Z0-9_-]{1,128}$/.test(node)) {
+      return Promise.reject(new Error("Invalid push registration"));
+    }
+    const iq = this._$iq({ type: "set" })
+      .c(enabled ? "enable" : "disable", {
+        xmlns: "urn:xmpp:push:0",
+        jid: `push.${domain}`,
+        node,
+      }).tree();
+    return new Promise((resolve, reject) => {
+      this._connection.sendIQ(iq, () => resolve(), reject, 10000);
+    });
+  }
+
   on(event: XmppEvent, handler: EventHandler) {
     const list = this.handlers.get(event) ?? [];
     this.handlers.set(event, [...list, handler]);

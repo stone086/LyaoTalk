@@ -14,10 +14,11 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, or_
 from typing import Optional
 import json
 import logging
+import asyncio
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import limiter
@@ -69,6 +70,7 @@ def _validate_push_endpoint(endpoint: str) -> None:
 
 class PushSubscriptionRequest(BaseModel):
     endpoint: str = Field(..., min_length=10, max_length=2048)
+    node: str = Field(..., pattern=r"^[A-Za-z0-9_-]{1,128}$")
     p256dh: str = Field(..., min_length=1, max_length=256)
     auth: str = Field(..., min_length=1, max_length=64)
     user_agent: Optional[str] = Field(None, max_length=512)
@@ -76,7 +78,7 @@ class PushSubscriptionRequest(BaseModel):
 
 class PushNotifyRequest(BaseModel):
     """Internal endpoint called by Prosody mod_cloud_notify."""
-    account_jid: str = Field(..., min_length=3, max_length=130)
+    node: str = Field(..., pattern=r"^[A-Za-z0-9_-]{1,128}$")
     title: str = Field(..., max_length=256)
     body: str = Field(..., max_length=2048)
     badge: Optional[int] = Field(None, ge=0, le=99999)
@@ -97,16 +99,25 @@ async def subscribe(
         raise HTTPException(status_code=403, detail="User token required")
     _validate_push_endpoint(payload.endpoint)
 
-    # Upsert: replace any existing subscription for same endpoint.
-    # Note: this also implicitly lets a user "claim" any orphaned sub for the
-    # same endpoint URL, but since endpoints are scoped to a browser/device
-    # token only the legitimate device knows the URL, so this is fine.
+    # A node identifies exactly one registered account/device. A different
+    # account may not claim an existing node even if it guesses its value.
+    existing = await db.execute(
+        select(PushSubscription).where(PushSubscription.node == payload.node)
+    )
+    owner = existing.scalar_one_or_none()
+    if owner and owner.account_id != account_id:
+        raise HTTPException(status_code=409, detail="Push node already registered")
+    # Replace stale endpoint or node for this account only.
     await db.execute(
-        delete(PushSubscription).where(PushSubscription.endpoint == payload.endpoint)
+        delete(PushSubscription).where(
+            PushSubscription.account_id == account_id,
+            or_(PushSubscription.endpoint == payload.endpoint, PushSubscription.node == payload.node),
+        )
     )
     sub = PushSubscription(
         account_id=account_id,
         endpoint=payload.endpoint,
+        node=payload.node,
         p256dh=payload.p256dh,
         auth=payload.auth,
         user_agent=payload.user_agent,
@@ -124,17 +135,13 @@ async def unsubscribe(
 ):
     """Remove a Web Push subscription. Only deletes subs owned by caller."""
     account_id = current_user.get("account_id")
-    if not account_id and current_user.get("role") != "admin":
+    if not account_id:
         raise HTTPException(status_code=403, detail="User token required")
-    # Scope the delete to the caller's account so a malicious user can't
-    # unsubscribe someone else by guessing/leaking their endpoint URL.
-    if current_user.get("role") == "admin":
-        stmt = delete(PushSubscription).where(PushSubscription.endpoint == endpoint)
-    else:
-        stmt = delete(PushSubscription).where(
-            PushSubscription.endpoint == endpoint,
-            PushSubscription.account_id == account_id,
-        )
+    # Scope the delete to the caller's account.
+    stmt = delete(PushSubscription).where(
+        PushSubscription.endpoint == endpoint,
+        PushSubscription.account_id == account_id,
+    )
     await db.execute(stmt)
     await db.commit()
     return {"status": "ok"}
@@ -157,17 +164,10 @@ async def notify(
     if not expected or not _secrets.compare_digest(payload.secret, expected):
         raise HTTPException(status_code=403, detail="Invalid push secret")
 
-    # Find subscriptions for the target account
-    from app.models import Account
+    # Route using the opaque per-account node from the XEP-0357 publish IQ.
+    # The publishing server's stanza `from` is its domain, not the recipient.
     result = await db.execute(
-        select(Account).where(Account.jid == payload.account_jid)
-    )
-    account = result.scalar_one_or_none()
-    if not account:
-        return {"status": "no_account"}
-
-    result = await db.execute(
-        select(PushSubscription).where(PushSubscription.account_id == account.id)
+        select(PushSubscription).where(PushSubscription.node == payload.node)
     )
     subs = result.scalars().all()
     if not subs:
@@ -192,11 +192,10 @@ async def notify(
         "tag": "lyaotalk-msg",
     })
 
-    sent = 0
-    failed_endpoints = []
-    for sub in subs:
+    async def send_one(sub: PushSubscription) -> tuple[str, str]:
         try:
-            webpush(
+            await asyncio.to_thread(
+                webpush,
                 subscription_info={
                     "endpoint": sub.endpoint,
                     "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
@@ -204,14 +203,25 @@ async def notify(
                 data=notify_payload,
                 vapid_private_key=vapid_private_key,
                 vapid_claims={"sub": f"mailto:{vapid_email}"},
+                ttl=3600,
+                timeout=10,
+                headers={"Urgency": "high"},
             )
-            sent += 1
+            return ("sent", sub.endpoint)
         except WebPushException as exc:
             # 410 = subscription expired/revoked
             if exc.response and exc.response.status_code in (404, 410):
-                failed_endpoints.append(sub.endpoint)
+                return ("expired", sub.endpoint)
+            logger.warning("push_send_failed status=%s", exc.response.status_code if exc.response else "unknown")
         except Exception as exc:
-            logger.warning(f"push_send_failed endpoint={sub.endpoint[:80]} error={type(exc).__name__}: {exc}")
+            logger.warning("push_send_failed error=%s", type(exc).__name__)
+        return ("failed", sub.endpoint)
+
+    # pywebpush performs blocking HTTP I/O; send independently so one slow
+    # provider cannot stall the API event loop or other device deliveries.
+    outcomes = await asyncio.gather(*(send_one(sub) for sub in subs))
+    sent = sum(status == "sent" for status, _ in outcomes)
+    failed_endpoints = [endpoint for status, endpoint in outcomes if status == "expired"]
 
     # Clean up dead subscriptions
     if failed_endpoints:
