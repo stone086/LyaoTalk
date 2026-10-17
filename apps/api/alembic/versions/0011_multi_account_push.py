@@ -16,8 +16,15 @@ def upgrade() -> None:
     # Batch mode also handles SQLite, where an unnamed UNIQUE constraint
     # cannot be removed with a direct ALTER TABLE.
     naming = {"uq": "uq_%(table_name)s_%(column_0_name)s"}
+    # PostgreSQL kept the name assigned by CREATE TABLE in migration 0002.
+    # SQLite needs Alembic's naming convention for its unnamed constraint.
+    endpoint_constraint = (
+        "push_subscriptions_endpoint_key"
+        if op.get_bind().dialect.name == "postgresql"
+        else "uq_push_subscriptions_endpoint"
+    )
     with op.batch_alter_table("push_subscriptions", naming_convention=naming) as batch:
-        batch.drop_constraint("uq_push_subscriptions_endpoint", type_="unique")
+        batch.drop_constraint(endpoint_constraint, type_="unique")
         batch.add_column(sa.Column("node", sa.String(), nullable=True))
         batch.create_unique_constraint(
             "uq_push_subscriptions_account_endpoint", ["account_id", "endpoint"]
