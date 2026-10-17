@@ -13,6 +13,7 @@ export function useMAM(peerJid: string, conversationId: string) {
   const [oldestStanzaId, setOldestStanzaId] = useState<string | undefined>();
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const messages = useChatStore((s) => s.messages[conversationId] ?? []);
+  const clearedBefore = useChatStore((s) => s.clearedBefore[conversationId] ?? 0);
 
   const fetchHistory = useCallback(async () => {
     if (!activeAccountId || loading || !hasMore) return;
@@ -48,9 +49,9 @@ export function useMAM(peerJid: string, conversationId: string) {
         resolve();
       });
 
-      client.fetchMAM(peerJid, { before, limit: 30 });
+      client.fetchMAM(peerJid, { before, limit: 30, start: clearedBefore || undefined });
     });
-  }, [activeAccountId, peerJid, conversationId, loading, hasMore, oldestStanzaId, messages]);
+  }, [activeAccountId, peerJid, conversationId, loading, hasMore, oldestStanzaId, messages, clearedBefore]);
 
   return { fetchHistory, loading, hasMore };
 }
