@@ -1,7 +1,7 @@
 {
   "name": "lyaotalk-monorepo",
   "description": "Root workspace for Lyao Talk development. Delegates to apps/web for frontend build.",
-  "version": "2.3.5",
+  "version": "2.3.6",
   "private": true,
   "scripts": {
     "install:web": "npm --prefix apps/web install",
