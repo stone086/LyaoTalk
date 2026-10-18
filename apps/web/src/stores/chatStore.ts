@@ -74,6 +74,7 @@ interface ChatState {
   typingPeers: Record<string, string | null>;
   clearedBefore: Record<string, number>; // local deletion cutoff for server MAM replay
   retractedMessageIds: Record<string, number>; // prevents cached/MAM originals resurfacing
+  locallyDeletedMessageIds: Record<string, number>; // local-only removal survives cache/MAM replay
   pendingRetractions: Record<string, PendingRetraction>;
   activeConversationId: string | null;
 
@@ -92,6 +93,7 @@ interface ChatState {
   clearAccountData: (accountId: string) => void;
   updateMessage: (conversationId: string, messageId: string, patch: Partial<ChatMessage>) => void;
   markMessageRetracted: (conversationId: string, messageId: string, at?: number) => void;
+  removeLocalMessage: (conversationId: string, messageId: string) => void;
   rememberRetraction: (conversationId: string, targetId: string, request: PendingRetraction) => void;
   toggleMessageStar: (conversationId: string, messageId: string) => void;
   toggleMessageReaction: (conversationId: string, messageId: string, emoji: string) => void;
@@ -109,6 +111,7 @@ export const useChatStore = create<ChatState>()(
       typingPeers: {},
       clearedBefore: {},
       retractedMessageIds: {},
+      locallyDeletedMessageIds: {},
       pendingRetractions: {},
       activeConversationId: null,
 
@@ -148,6 +151,7 @@ export const useChatStore = create<ChatState>()(
 
       addMessage: (msg, options) =>
         set((s) => {
+          if (s.locallyDeletedMessageIds?.[`${msg.conversationId}\u0000${msg.id}`]) return s;
           if (msg.timestamp <= (s.clearedBefore?.[msg.conversationId] ?? 0)) return s;
           const pendingKey = [msg.id, msg.stanzaId].filter(Boolean)
             .map((id) => `${msg.conversationId}\u0000${id}`)
@@ -221,6 +225,7 @@ export const useChatStore = create<ChatState>()(
           return {
             messages: {},
             retractedMessageIds: {},
+            locallyDeletedMessageIds: {},
             pendingRetractions: {},
             conversations: nextConversations,
           };
@@ -249,6 +254,7 @@ export const useChatStore = create<ChatState>()(
           return {
             messages: nextMessages,
             retractedMessageIds: Object.fromEntries(Object.entries(s.retractedMessageIds ?? {}).filter(([, at]) => at >= cutoffTs)),
+            locallyDeletedMessageIds: Object.fromEntries(Object.entries(s.locallyDeletedMessageIds ?? {}).filter(([, at]) => at >= cutoffTs)),
             pendingRetractions: Object.fromEntries(Object.entries(s.pendingRetractions ?? {}).filter(([, request]) => request.at >= cutoffTs)),
             conversations: nextConversations,
           };
@@ -326,11 +332,14 @@ export const useChatStore = create<ChatState>()(
           delete nextMessages[conversationId];
           delete nextDrafts[conversationId];
           delete nextTypingPeers[conversationId];
+          const localDeletes = Object.fromEntries(Object.entries(s.locallyDeletedMessageIds ?? {})
+            .filter(([key]) => !key.startsWith(`${conversationId}\u0000`)));
           return {
             conversations: nextConversations,
             messages: nextMessages,
             composerDrafts: nextDrafts,
             typingPeers: nextTypingPeers,
+            locallyDeletedMessageIds: localDeletes,
             clearedBefore: { ...s.clearedBefore, [conversationId]: Date.now() },
             activeConversationId: s.activeConversationId === conversationId ? null : s.activeConversationId,
           };
@@ -357,6 +366,7 @@ export const useChatStore = create<ChatState>()(
           const nextDrafts = { ...s.composerDrafts };
           const nextTypingPeers = { ...s.typingPeers };
           const nextRetractions = { ...s.retractedMessageIds };
+          const nextLocalDeletions = { ...s.locallyDeletedMessageIds };
           const nextPendingRetractions = { ...s.pendingRetractions };
           Object.entries(s.conversations).forEach(([id, conv]) => {
             if (conv.accountId !== accountId) return;
@@ -365,6 +375,7 @@ export const useChatStore = create<ChatState>()(
             delete nextDrafts[id];
             delete nextTypingPeers[id];
             Object.keys(nextRetractions).filter((key) => key.startsWith(`${id}\u0000`)).forEach((key) => delete nextRetractions[key]);
+            Object.keys(nextLocalDeletions).filter((key) => key.startsWith(`${id}\u0000`)).forEach((key) => delete nextLocalDeletions[key]);
             Object.keys(nextPendingRetractions).filter((key) => key.startsWith(`${id}\u0000`)).forEach((key) => delete nextPendingRetractions[key]);
           });
           const activeStillExists =
@@ -375,6 +386,7 @@ export const useChatStore = create<ChatState>()(
             composerDrafts: nextDrafts,
             typingPeers: nextTypingPeers,
             retractedMessageIds: nextRetractions,
+            locallyDeletedMessageIds: nextLocalDeletions,
             pendingRetractions: nextPendingRetractions,
             activeConversationId: activeStillExists ? s.activeConversationId : null,
           };
@@ -423,6 +435,21 @@ export const useChatStore = create<ChatState>()(
             messages: { ...s.messages, [conversationId]: updated },
             conversations: conv && updated[updated.length - 1]?.id === messageId
               ? { ...s.conversations, [conversationId]: { ...conv, lastMessage: "Message deleted" } }
+              : s.conversations,
+          };
+        }),
+
+      removeLocalMessage: (conversationId, messageId) =>
+        set((s) => {
+          const previous = s.messages[conversationId] ?? [];
+          const remaining = previous.filter((message) => message.id !== messageId);
+          const conv = s.conversations[conversationId];
+          const latest = remaining[remaining.length - 1];
+          return {
+            locallyDeletedMessageIds: { ...s.locallyDeletedMessageIds, [`${conversationId}\u0000${messageId}`]: Date.now() },
+            messages: { ...s.messages, [conversationId]: remaining },
+            conversations: conv && previous[previous.length - 1]?.id === messageId
+              ? { ...s.conversations, [conversationId]: { ...conv, lastMessage: latest?.body ?? "", lastMessageAt: latest?.timestamp } }
               : s.conversations,
           };
         }),
@@ -497,6 +524,7 @@ export const useChatStore = create<ChatState>()(
         composerDrafts: s.composerDrafts,
         clearedBefore: s.clearedBefore,
         retractedMessageIds: s.retractedMessageIds,
+        locallyDeletedMessageIds: s.locallyDeletedMessageIds,
         pendingRetractions: s.pendingRetractions,
         activeConversationId: s.activeConversationId,
       }),
