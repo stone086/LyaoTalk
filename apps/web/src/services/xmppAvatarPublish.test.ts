@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { webcrypto } from "node:crypto";
 import { XmppClient } from "./xmppAdapter";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("XMPP avatar publication", () => {
   it("publishes data before metadata and reports server rejection", async () => {
-    vi.stubGlobal("crypto", webcrypto);
+    vi.stubGlobal("crypto", { subtle: { digest: async () => new Uint8Array(20).buffer } });
     const client = new XmppClient({ jid: "alice@example.test", password: "", wsUrl: "", accountId: "alice" });
     const nodes: string[] = [];
     const builder = {
