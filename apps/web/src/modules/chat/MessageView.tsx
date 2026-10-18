@@ -25,6 +25,7 @@ import { processSlashCommand } from "@/services/slashCommands";
 import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
 import MediaCapture from "./MediaCapture";
 import LocationPicker from "./LocationPicker";
+import LocationViewer from "./LocationViewer";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/utils/i18n";
 import { attachmentsApi, privateFileBlob } from "@/services/api";
@@ -118,6 +119,7 @@ function MessageBubble({
   isOwn,
   onReply,
   onOpenImage,
+  onOpenLocation,
   onRetry,
   onEdit,
   onForward,
@@ -134,6 +136,7 @@ function MessageBubble({
   isOwn: boolean;
   onReply: (m: ChatMessage) => void;
   onOpenImage: (src: string, alt: string) => void;
+  onOpenLocation: (latitude: number, longitude: number) => void;
   onRetry: (m: ChatMessage) => void;
   onEdit: (m: ChatMessage) => void;
   onForward: (m: ChatMessage) => void;
@@ -212,14 +215,14 @@ function MessageBubble({
             const geo = parseGeoUri(msg.body);
             if (geo) {
               return (
-                <a href={geo.mapUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 hover:bg-accent/20" aria-label={t("chat.openLocationMap")}>
+                <button type="button" onClick={() => onOpenLocation(geo.latitude, geo.longitude)} className="flex items-center gap-3 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-left hover:bg-accent/20" aria-label={t("chat.openLocationMap")}>
                   <MapPin size={22} className="shrink-0 text-accent-soft" />
                   <span className="min-w-0">
                     <span className="block text-sm font-medium">{t("chat.location")}</span>
                     <span className="block text-xs text-surface-200/60">{geo.latitude.toFixed(6)}, {geo.longitude.toFixed(6)}</span>
                     <span className="block text-xs text-accent-soft">{t("chat.openLocationMap")}</span>
                   </span>
-                </a>
+                </button>
               );
             }
             const aesMedia = parseAesgcmMediaLink(msg.body);
@@ -525,6 +528,7 @@ export default function MessageView({ conversationId }: { conversationId: string
   const [pendingFiles, setPendingFiles] = useState<UploadedFile[]>([]);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
+  const [viewingLocation, setViewingLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ChatMessage | null>(null);
   const [forwardTargetId, setForwardTargetId] = useState("");
@@ -1294,6 +1298,7 @@ export default function MessageView({ conversationId }: { conversationId: string
         isOwn={isOwn}
         onReply={setReplyTo}
         onOpenImage={(src, alt) => setLightbox({ src, alt })}
+        onOpenLocation={(latitude, longitude) => setViewingLocation({ latitude, longitude })}
         onRetry={retryFailedMessage}
         onEdit={handleEditMessage}
         onForward={handleForwardMessage}
@@ -1680,6 +1685,9 @@ export default function MessageView({ conversationId }: { conversationId: string
           }}
           onClose={() => setLocationDialogOpen(false)}
         />
+      )}
+      {viewingLocation && (
+        <LocationViewer latitude={viewingLocation.latitude} longitude={viewingLocation.longitude} onClose={() => setViewingLocation(null)} />
       )}
       {captureOpen && (
         <MediaCapture

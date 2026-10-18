@@ -10,7 +10,7 @@ describe("geo URI location messages", () => {
   });
 
   it("accepts valid optional altitude and uncertainty", () => {
-    expect(parseGeoUri("geo:-33.5,151.2,15;u=25")?.mapUrl).toBe("https://www.openstreetmap.org/?mlat=-33.5&mlon=151.2#map=16/-33.5/151.2");
+    expect(parseGeoUri("geo:-33.5,151.2,15;u=25")).toEqual({ latitude: -33.5, longitude: 151.2 });
   });
 
   it("rejects invalid coordinates and extra URI content", () => {
