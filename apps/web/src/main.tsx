@@ -2,13 +2,15 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "react-hot-toast";
+import toast, { Toaster } from "react-hot-toast";
+import { registerSW } from "virtual:pwa-register";
 import App from "./app/App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles/globals.css";
 import { applyTheme, getStoredTheme } from "./utils/theme";
 import { applyConfiguredHistoryRetention } from "./services/historyRetention";
 import { initWebVitals } from "./services/webVitals";
+import { getStoredLanguage } from "./utils/i18n";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 1000 * 60 * 5, retry: 1 } },
@@ -38,20 +40,30 @@ async function clearLegacyPwaCachesOnce() {
 applyTheme(getStoredTheme());
 document.documentElement.classList.toggle("density-compact", localStorage.getItem("liaot-message-density") === "compact");
 applyConfiguredHistoryRetention().catch(() => {});
-clearLegacyPwaCachesOnce().catch(() => {});
-if ("serviceWorker" in navigator) {
-  const hadController = Boolean(navigator.serviceWorker.controller);
-  let refreshing = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (hadController && !refreshing) {
-      refreshing = true;
-      window.location.reload();
-    }
+function registerPwaUpdates() {
+  if (!("serviceWorker" in navigator)) return;
+  const updateSW = registerSW({
+    onNeedRefresh() {
+      const zh = getStoredLanguage() === "zh-CN";
+      toast((notice) => (
+        <span>
+          {zh ? "新版本已准备好。" : "An update is ready."}{" "}
+          <button type="button" onClick={() => {
+            toast.dismiss(notice.id);
+            void updateSW(true);
+          }}>{zh ? "更新并刷新" : "Update now"}</button>{" "}
+          <button type="button" onClick={() => toast.dismiss(notice.id)}>
+            {zh ? "稍后" : "Later"}
+          </button>
+        </span>
+      ), { id: "lyaotalk-update-ready", duration: Infinity });
+    },
   });
   window.addEventListener("focus", () => {
     void navigator.serviceWorker.getRegistration().then((registration) => registration?.update()).catch(() => {});
   });
 }
+void clearLegacyPwaCachesOnce().finally(registerPwaUpdates);
 initWebVitals();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
