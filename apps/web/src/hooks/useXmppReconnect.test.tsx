@@ -17,14 +17,15 @@ const mocks = vi.hoisted(() => {
 vi.mock("@/stores/accountStore", () => {
   const state = {
     accounts: [
-      { id: "restored", jid: "a@example.test", is_enabled: true, manuallyOffline: false },
-      { id: "needs-login", jid: "b@example.test", is_enabled: true, manuallyOffline: false },
+      { id: "restored", jid: "a@localhost", is_enabled: true, manuallyOffline: false },
+      { id: "needs-login", jid: "b@localhost", is_enabled: true, manuallyOffline: false },
+      { id: "external", jid: "test1@chat.52nbc.com", is_enabled: true, manuallyOffline: false },
     ],
     setConnected: mocks.connected,
   };
   return {
     useAccountStore: Object.assign((selector: (s: typeof state) => unknown) => selector(state), { getState: () => state }),
-    getAccountPassword: (id: string) => id === "restored" ? "runtime-password" : null,
+    getAccountPassword: (id: string) => id === "restored" || id === "external" ? "runtime-password" : null,
   };
 });
 vi.mock("@/stores/reconnectStore", () => ({ useReconnectStore: (selector: (s: { setReconnecting: typeof mocks.reconnecting }) => unknown) => selector({ setReconnecting: mocks.reconnecting }) }));
@@ -32,7 +33,6 @@ vi.mock("@/services/xmppAdapter", () => ({ createClient: mocks.createClient, get
 vi.mock("@/services/xmppBridge", () => ({ initXmppBridge: vi.fn() }));
 vi.mock("@/services/connectionSupervisor", () => ({ superviseConnection: mocks.supervise, unsuperviseConnection: vi.fn(), getSupervisorState: () => null }));
 vi.mock("@/services/api", () => ({ authApi: { getUserToken: mocks.getToken }, setUserToken: vi.fn(), setUserRefreshToken: vi.fn() }));
-vi.mock("@/services/xmppEndpoint", () => ({ resolveXmppWsUrl: vi.fn().mockResolvedValue("wss://example.test/xmpp-websocket"), isLocalXmppJid: () => false }));
 
 import { useXmppReconnect } from "./useXmppReconnect";
 import { useAccountStore } from "@/stores/accountStore";
@@ -55,6 +55,7 @@ describe("restored browser session", () => {
     expect(mocks.connect).toHaveBeenCalledOnce();
     expect(mocks.connected).toHaveBeenCalledWith("restored", true);
     expect(mocks.connected).not.toHaveBeenCalledWith("needs-login", true);
+    expect(mocks.connected).toHaveBeenCalledWith("external", false);
     await act(async () => root.unmount());
     element.remove();
   });

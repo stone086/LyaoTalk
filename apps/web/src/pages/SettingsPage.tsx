@@ -21,7 +21,25 @@ import { isPushSubscribed, isPushSupported, subscribeToPush, unsubscribeFromPush
 import { collectBrowserCapabilities } from "@/services/browserCompatibility";
 import { markIntentionalDisconnect } from "@/services/connectionSupervisor";
 import { logoutAccount } from "@/services/logoutAccount";
-import { isLocalXmppJid, resolveXmppWsUrl } from "@/services/xmppEndpoint";
+import { isLocalXmppAccount, requireLocalXmppAccount } from "@/services/localXmppAccount";
+
+/**
+ * Same-origin wsUrl helper - matches LoginPage.tsx logic.
+ * Avoids hardcoding ws://localhost:5280 which would break reconnects on
+ * production deployments where users access via wss://their-domain/.
+ */
+function deriveSameOriginWsUrl(configured?: string): string {
+  if (typeof window === "undefined") return configured || "ws://localhost:5280/xmpp-websocket";
+  const sameOrigin = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/xmpp-websocket`;
+  if (!configured) return sameOrigin;
+  try {
+    const u = new URL(configured);
+    return u.host === window.location.host ? configured : sameOrigin;
+  } catch {
+    return sameOrigin;
+  }
+}
+
 
 const MENTION_NOTIFY_KEY = "liaot-notify-mention";
 const DENSITY_KEY = "liaot-message-density";
@@ -136,6 +154,7 @@ function AccountCard({ account }: { account: XmppAccount }) {
   const connect = async () => {
     setConnecting(true);
     try {
+      requireLocalXmppAccount(account.jid);
       const runtimePassword = getAccountPassword(account.id);
       if (!runtimePassword) {
         toast.error("Password not available in this session. Please sign in again.");
@@ -145,14 +164,14 @@ function AccountCard({ account }: { account: XmppAccount }) {
       const client = createClient({
         jid: account.jid,
         password: runtimePassword,
-        wsUrl: await resolveXmppWsUrl(account.jid, account.wsUrl),
+        wsUrl: deriveSameOriginWsUrl(import.meta.env.VITE_XMPP_WS_URL as string | undefined),
         accountId: account.id,
       });
       initXmppBridge(client);
       client.on("connection.changed", (d: any) => setConnected(account.id, d.status === "connected"));
       await client.connect();
-      if (isLocalXmppJid(account.jid)) accountsApi.create({ jid: account.jid, domain: account.jid.split("@")[1] ?? "localhost" }).catch(() => {});
-      const tokenRes = isLocalXmppJid(account.jid) ? await authApi.getUserToken(account.jid, runtimePassword).catch(() => null) : null;
+      accountsApi.create({ jid: account.jid, domain: account.jid.split("@")[1] ?? "localhost" }).catch(() => {});
+      const tokenRes = await authApi.getUserToken(account.jid, runtimePassword).catch(() => null);
       if (tokenRes?.access_token) {
         setUserToken(account.id, tokenRes.access_token);
         if ((tokenRes as any).refresh_token) {
@@ -186,6 +205,20 @@ function AccountCard({ account }: { account: XmppAccount }) {
       setRemoving(false);
     }
   };
+
+  if (!isLocalXmppAccount(account.jid)) {
+    return (
+      <div className="glass rounded-xl p-4 flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm text-surface-50 truncate">{account.jid}</p>
+          <p className="text-xs text-surface-200/60">{label("外部账号已不支持网页登录", "External accounts can no longer sign in to LyaoTalk Web")}</p>
+        </div>
+        <button onClick={handleRemove} disabled={removing} className="btn-ghost text-xs text-danger flex items-center gap-1">
+          <Trash2 size={12} /> {t("account.remove")}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="glass rounded-xl p-4 flex flex-col gap-3">
@@ -425,20 +458,13 @@ export default function SettingsPage() {
   const handleAdd = async () => {
     if (!form.jid || !form.password) { toast.error(t("toast.jidRequired")); return; }
     const jid = normalizeAccountJid(form.jid);
+    try { requireLocalXmppAccount(jid); } catch (error: any) { toast.error(error.message); return; }
     const existing = useAccountStore.getState().accounts.find((a) => normalizeAccountJid(a.jid) === jid);
     const id = existing?.id ?? crypto.randomUUID();
-    let wsUrl: string;
-    try {
-      wsUrl = await resolveXmppWsUrl(jid, form.wsUrl || existing?.wsUrl);
-    } catch (error: any) {
-      toast.error(error?.message ?? t("toast.connectionFailed"));
-      return;
-    }
     addAccount({
       id,
       jid,
       domain: jid.split("@")[1] ?? "localhost",
-      wsUrl,
       password: form.password,
       displayName: jid.split("@")[0],
     });
@@ -447,21 +473,21 @@ export default function SettingsPage() {
       const client = createClient({
         jid,
         password: form.password,
-        wsUrl,
+        wsUrl: deriveSameOriginWsUrl(import.meta.env.VITE_XMPP_WS_URL as string | undefined),
         accountId: id,
       });
       initXmppBridge(client);
       client.on("connection.changed", (d: any) => setConnected(id, d.status === "connected"));
       await client.connect();
-      if (isLocalXmppJid(jid)) accountsApi.create({ jid, domain: jid.split("@")[1] ?? "localhost" }).catch(() => {});
-      const tokenRes = isLocalXmppJid(jid) ? await authApi.getUserToken(jid, form.password).catch(() => null) : null;
+      accountsApi.create({ jid, domain: jid.split("@")[1] ?? "localhost" }).catch(() => {});
+      const tokenRes = await authApi.getUserToken(jid, form.password).catch(() => null);
       if (tokenRes?.access_token) {
         setUserToken(id, tokenRes.access_token);
         if ((tokenRes as any).refresh_token) {
           setUserRefreshToken(id, (tokenRes as any).refresh_token);
         }
       }
-      if (isLocalXmppJid(jid)) apiSocket.connect(id);
+      apiSocket.connect(id);
     } catch (error: any) {
       toast.error(error?.message ?? t("toast.connectionFailed"));
     }
@@ -528,8 +554,6 @@ export default function SettingsPage() {
               <input className="input-field text-sm" type="password" placeholder={t("settings.password")}
                 value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })}
                 autoComplete="new-password" spellCheck={false} />
-              <input className="input-field text-sm" placeholder={t("settings.wsOptional")}
-                value={form.wsUrl} onChange={(e) => setForm({ ...form, wsUrl: e.target.value })} />
               <div className="flex gap-2">
                 <button onClick={handleAdd} className="btn-primary text-sm">{t("settings.add")}</button>
                 <button onClick={() => setShowAdd(false)} className="btn-ghost text-sm">{t("settings.cancel")}</button>
