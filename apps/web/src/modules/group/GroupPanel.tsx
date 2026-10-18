@@ -8,7 +8,7 @@ import { clsx } from "clsx";
 import { Users, Plus, Hash, LogOut, Settings, Crown, Shield, UserPlus, Compass, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/utils/i18n";
-import { generateConversationId } from "@/utils/helpers";
+import { generateConversationId, normalizeValidBareJid } from "@/utils/helpers";
 
 function RoleIcon({ role, affiliation }: { role: MucMember["role"]; affiliation: MucMember["affiliation"] }) {
   if (affiliation === "owner") return <Crown size={10} className="text-yellow-400" />;
@@ -20,6 +20,8 @@ function RoleIcon({ role, affiliation }: { role: MucMember["role"]; affiliation:
 function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom) => void }) {
   const { t } = useLanguage();
   const [leaving, setLeaving] = useState(false);
+  const [ownerExit, setOwnerExit] = useState<string[] | null>(null);
+  const [successor, setSuccessor] = useState("");
   const navigate = useNavigate();
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const upsertConversation = useChatStore((s) => s.upsertConversation);
@@ -27,6 +29,7 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
   const removeRoom = useGroupStore((s) => s.removeRoom);
   const upsertRoom = useGroupStore((s) => s.upsertRoom);
   const setJoinState = useGroupStore((s) => s.setJoinState);
+  const members = useGroupStore((s) => s.members[`${room.accountId}::${room.jid}`] ?? []);
 
   const join = async () => {
     if (!activeAccountId) return;
@@ -64,19 +67,86 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
     }
   };
 
+  const finishExit = async (destroyed = false) => {
+    if (!activeAccountId) return;
+    const client = getClient(activeAccountId);
+    if (!client) return;
+    try {
+      await client.retractMucBookmark(room.jid);
+    } catch {
+      toast.error(t("group.bookmarkRemovalFailed"));
+    }
+    if (!destroyed) client.leaveRoom(room.jid, room.nickname);
+    removeRoom(activeAccountId, room.jid);
+    deleteConversation(generateConversationId(activeAccountId, room.jid));
+    setOwnerExit(null);
+    toast.success(t(destroyed ? "group.destroyed" : "group.leftRoom"));
+  };
+
   const leave = async () => {
     if (!activeAccountId || leaving) return;
     const client = getClient(activeAccountId);
     if (!client?.connected) { toast.error(t("account.connectFirst")); return; }
     setLeaving(true);
     try {
-      await client.retractMucBookmark(room.jid);
-      client.leaveRoom(room.jid, room.nickname);
-      removeRoom(activeAccountId, room.jid);
-      deleteConversation(generateConversationId(activeAccountId, room.jid));
-      toast(t("group.leftRoom"));
-    } catch {
-      toast.error(t("group.bookmarkSyncFailed"));
+      const ownJid = client.config.jid.split("/")[0].toLowerCase();
+      const self = members.find((member) => member.jid === ownJid);
+      if (self && self.affiliation !== "owner") {
+        await finishExit();
+        return;
+      }
+      const owners = await client.fetchRoomAffiliations(room.jid, "owner");
+      if (!owners.includes(ownJid)) {
+        await finishExit();
+        return;
+      }
+      const [admins, affiliatedMembers] = await Promise.all([
+        client.fetchRoomAffiliations(room.jid, "admin"),
+        client.fetchRoomAffiliations(room.jid, "member"),
+      ]);
+      const eligible = [...new Set([
+        ...owners,
+        ...admins,
+        ...affiliatedMembers,
+        ...members.filter((member) => member.presence !== "unavailable").map((member) => member.jid),
+      ])].map((jid) => normalizeValidBareJid(jid)).filter((jid): jid is string => Boolean(jid) && jid !== ownJid);
+      setSuccessor(eligible[0] ?? "");
+      setOwnerExit(eligible);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("group.exitFailed"));
+    } finally {
+      setLeaving(false);
+    }
+  };
+
+  const destroy = async () => {
+    if (!activeAccountId || leaving) return;
+    const client = getClient(activeAccountId);
+    if (!client) return;
+    setLeaving(true);
+    try {
+      await client.destroyRoom(room.jid);
+      await finishExit(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("group.exitFailed"));
+    } finally {
+      setLeaving(false);
+    }
+  };
+
+  const transferAndLeave = async () => {
+    if (!activeAccountId || !successor || leaving) return;
+    const client = getClient(activeAccountId);
+    if (!client) return;
+    setLeaving(true);
+    try {
+      await client.setRoomAffiliation(room.jid, successor, "owner");
+      const owners = await client.fetchRoomAffiliations(room.jid, "owner");
+      if (!owners.includes(successor)) throw new Error(t("group.transferFailed"));
+      await client.setRoomAffiliation(room.jid, client.config.jid.split("/")[0], "none");
+      await finishExit();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("group.transferFailed"));
     } finally {
       setLeaving(false);
     }
@@ -135,6 +205,21 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
           </button>
         </div>
       )}
+      {ownerExit && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-label={t("group.ownerExitTitle")} onClick={(event) => event.stopPropagation()}>
+        <div className="popover-surface w-full max-w-md space-y-4 rounded-2xl p-5">
+          <h2 className="font-semibold">{t("group.ownerExitTitle")}</h2>
+          <p className="text-sm text-surface-200/70">{t("group.ownerExitPrompt")}</p>
+          <button type="button" className="btn-ghost border-default text-danger" disabled={leaving} onClick={() => void destroy()}>{t("group.destroyRoom")}</button>
+          {ownerExit.length > 0 ? <div className="space-y-2">
+            <label className="block text-sm" htmlFor={`successor-${room.jid}`}>{t("group.chooseSuccessor")}</label>
+            <select id={`successor-${room.jid}`} className="input w-full" value={successor} onChange={(event) => setSuccessor(event.target.value)}>
+              {ownerExit.map((jid) => <option key={jid} value={jid}>{members.find((member) => member.jid === jid)?.nickname ?? jid} ({jid})</option>)}
+            </select>
+            <button type="button" className="btn-primary" disabled={leaving || !successor} onClick={() => void transferAndLeave()}>{t("group.transferAndLeave")}</button>
+          </div> : <p className="text-sm text-surface-200/70">{t("group.noSuccessor")}</p>}
+          <button type="button" className="btn-ghost" disabled={leaving} onClick={() => setOwnerExit(null)}>{t("group.cancel")}</button>
+        </div>
+      </div>}
     </div>
   );
 }

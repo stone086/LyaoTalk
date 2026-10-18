@@ -1029,15 +1029,16 @@ export class XmppClient {
    */
   fetchMucBookmarks(): Promise<MucBookmark[]> {
     if (!this._connection || !this._connected) return Promise.reject(new Error("Not connected"));
-    const query = (stanza: Element) => new Promise<MucBookmark[]>((resolve) => {
-      this._connection.sendIQ(stanza, (result: Element) => resolve(parseMucBookmarks(result)), () => resolve([]), 10000);
+    const query = (stanza: Element) => new Promise<MucBookmark[] | null>((resolve) => {
+      this._connection.sendIQ(stanza, (result: Element) => resolve(parseMucBookmarks(result)), () => resolve(null), 10000);
     });
     const modern = this._$iq({ type: "get" }).c("pubsub", { xmlns: PUBSUB_NS }).c("items", { node: BOOKMARKS_NS });
     const legacyPep = this._$iq({ type: "get" }).c("pubsub", { xmlns: PUBSUB_NS }).c("items", { node: "storage:bookmarks" });
     const legacyPrivate = this._$iq({ type: "get" }).c("query", { xmlns: "jabber:iq:private" }).c("storage", { xmlns: "storage:bookmarks" });
     return Promise.all([query(modern.tree()), query(legacyPep.tree()), query(legacyPrivate.tree())]).then((sources) => {
+      if (sources.every((source) => source === null)) throw new Error("Group bookmarks unavailable");
       const byJid = new Map<string, MucBookmark>();
-      for (const source of sources) for (const bookmark of source) if (!byJid.has(bookmark.jid)) byJid.set(bookmark.jid, bookmark);
+      for (const source of sources) for (const bookmark of source ?? []) if (!byJid.has(bookmark.jid)) byJid.set(bookmark.jid, bookmark);
       return [...byJid.values()];
     });
   }
@@ -1276,6 +1277,44 @@ export class XmppClient {
     return new Promise((resolve, reject) => {
       this._connection.sendIQ(iq.tree(), () => resolve(), () => reject(new Error("Room config failed")));
     });
+  }
+
+  /** Read the server's affiliation list so owner actions do not rely on stale local presence. */
+  async fetchRoomAffiliations(roomJid: string, affiliation: "owner" | "admin" | "member"): Promise<string[]> {
+    if (!this._connection || !this._connected) throw new Error("Not connected");
+    const room = normalizeValidBareJid(roomJid);
+    if (!room) throw new Error("Invalid group address");
+    const iq = this._$iq({ type: "get", to: room })
+      .c("query", { xmlns: "http://jabber.org/protocol/muc#admin" })
+      .c("item", { affiliation }).tree();
+    return new Promise((resolve, reject) => this._connection!.sendIQ(iq, (result: Element) => {
+      resolve(Array.from(result.getElementsByTagName("item"))
+        .map((item) => normalizeValidBareJid(item.getAttribute("jid") ?? ""))
+        .filter((jid): jid is string => Boolean(jid)));
+    }, () => reject(new Error("Cannot inspect group ownership")), 10000));
+  }
+
+  setRoomAffiliation(roomJid: string, jid: string, affiliation: "owner" | "none"): Promise<void> {
+    if (!this._connection || !this._connected) return Promise.reject(new Error("Not connected"));
+    const room = normalizeValidBareJid(roomJid);
+    const member = normalizeValidBareJid(jid);
+    if (!room || !member) return Promise.reject(new Error("Invalid group address"));
+    const iq = this._$iq({ type: "set", to: room })
+      .c("query", { xmlns: "http://jabber.org/protocol/muc#admin" })
+      .c("item", { jid: member, affiliation }).tree();
+    return new Promise((resolve, reject) => this._connection!.sendIQ(iq, () => resolve(),
+      () => reject(new Error("Changing group owner failed")), 10000));
+  }
+
+  destroyRoom(roomJid: string): Promise<void> {
+    if (!this._connection || !this._connected) return Promise.reject(new Error("Not connected"));
+    const room = normalizeValidBareJid(roomJid);
+    if (!room) return Promise.reject(new Error("Invalid group address"));
+    const iq = this._$iq({ type: "set", to: room })
+      .c("query", { xmlns: "http://jabber.org/protocol/muc#owner" })
+      .c("destroy").tree();
+    return new Promise((resolve, reject) => this._connection!.sendIQ(iq, () => resolve(),
+      () => reject(new Error("Destroying group failed")), 10000));
   }
 
   /** Query all room affiliations, including offline members, before OMEMO send. */

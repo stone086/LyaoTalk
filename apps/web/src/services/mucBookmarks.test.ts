@@ -2,6 +2,15 @@ import { describe, expect, it } from "vitest";
 import { XmppClient, parseMucBookmarks } from "./xmppAdapter";
 
 describe("XEP-0402 room bookmarks", () => {
+  it("does not treat failed bookmark requests as an empty server list", async () => {
+    const client = new XmppClient({ jid: "lyao1@lyaot.2-yc.com", password: "", wsUrl: "", accountId: "lyao1" });
+    const internals = client as unknown as { _connected: boolean; _connection: unknown; _$iq: unknown };
+    internals._connected = true;
+    internals._$iq = () => ({ c() { return this; }, tree() { return document.createElement("iq"); } });
+    internals._connection = { sendIQ(_stanza: Element, _resolve: unknown, reject: () => void) { reject(); } };
+    await expect(client.fetchMucBookmarks()).rejects.toThrow("Group bookmarks unavailable");
+  });
+
   it("reads a phone-created room with its server JID, title, nick and autojoin flag", () => {
     const stanza = new DOMParser().parseFromString(`
       <iq type="result"><pubsub xmlns="http://jabber.org/protocol/pubsub">

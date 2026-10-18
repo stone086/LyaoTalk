@@ -1032,9 +1032,10 @@ export function initXmppBridge(client: XmppClient) {
   client.on("room.destroyed", (data: any) => {
     const roomJid = normalizeBareJid(data.roomJid as string);
     if (!roomJid) return;
-    useGroupStore.getState().setJoinState(accountId, roomJid, "destroyed", {
-      lastRemovalReason: "room-destroyed",
-    });
+    useGroupStore.getState().removeRoom(accountId, roomJid);
+    useChatStore.getState().deleteConversation(generateConversationId(accountId, roomJid));
+    void client.retractMucBookmark(roomJid).catch((error) =>
+      console.warn(`[XMPP MUC] could not remove destroyed room bookmark ${roomJid}`, error));
     const altJid = data.altJid ? ` Replacement: ${data.altJid}` : "";
     const reasonText = data.reasonText ? `: ${data.reasonText}` : "";
     useNotificationStore.getState().addNotification({
@@ -1045,28 +1046,18 @@ export function initXmppBridge(client: XmppClient) {
     });
   });
 
-  // After (re)connect, replay all rooms we believe we're a member of so the
-  // server resumes our presence. Without this, "几分钟掉线" reconnect
-  // would leave the user out of all their groups even though the UI shows
-  // joined state.
+  // After (re)connect, use server bookmarks before rejoining. Replaying every
+  // persisted local room can recreate a group that its owner already dissolved.
   client.on("connection.changed", (data: any) => {
     if (data.status !== "connected") return;
     const groupStore = useGroupStore.getState();
-    const joinedRooms = groupStore.getJoinedRooms(accountId);
-    // eslint-disable-next-line no-console
-    if (joinedRooms.length) console.info(`[XMPP MUC] auto-rejoining ${joinedRooms.length} room(s) for ${accountId}`);
-    for (const room of joinedRooms) {
-      // Mark as "joining" so UI shows pending state until server confirms
-      groupStore.setJoinState(accountId, room.jid, "joining");
-      client.joinRoom(room.jid, room.nickname).catch((err) => {
-        // The "room.join.failed" event will set state to "error" with details.
-        // eslint-disable-next-line no-console
-        console.warn(`[XMPP MUC] auto-rejoin failed room=${room.jid}`, err);
-      });
-    }
-    // Local browser storage cannot reveal groups created in another client.
-    // Reconcile the account's server-side XEP-0402 bookmarks on every login.
     void client.fetchMucBookmarks().then((bookmarks) => {
+      const bookmarkJids = new Set(bookmarks.map((bookmark) => bookmark.jid));
+      for (const room of Object.values(groupStore.rooms)) {
+        if (room.accountId !== accountId || bookmarkJids.has(room.jid)) continue;
+        groupStore.removeRoom(accountId, room.jid);
+        useChatStore.getState().deleteConversation(generateConversationId(accountId, room.jid));
+      }
       for (const bookmark of bookmarks) {
         const existing = groupStore.getRoom(accountId, bookmark.jid);
         const nickname = bookmark.nickname || client.config.jid.split("@")[0];
@@ -1088,7 +1079,7 @@ export function initXmppBridge(client: XmppClient) {
           unreadCount: 0,
           pinned: false,
         });
-        if (bookmark.autojoin && existing?.joinState !== "joined" && existing?.joinState !== "joining") {
+        if (bookmark.autojoin) {
           groupStore.setJoinState(accountId, bookmark.jid, "joining");
           void client.joinRoom(bookmark.jid, nickname).catch((error) => {
             console.warn(`[XMPP MUC] bookmarked room join failed room=${bookmark.jid}`, error);
