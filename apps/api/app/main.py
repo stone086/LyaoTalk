@@ -21,6 +21,7 @@ from app.api.routers import (
     discovery,
     conversations,
     messages,
+    map_search,
     metrics,
     plugins,
     preview,
@@ -203,6 +204,7 @@ app.include_router(contacts.router, prefix="/contacts", tags=["contacts"])
 app.include_router(attachments.router, prefix="/attachments", tags=["attachments"])
 app.include_router(calls.router, tags=["calls"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])
+app.include_router(map_search.router, tags=["map"])
 app.include_router(plugins.router, prefix="/plugins", tags=["plugins"])
 app.include_router(ai.router, prefix="/ai", tags=["ai"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"], dependencies=admin_dep)

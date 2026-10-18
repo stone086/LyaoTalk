@@ -1683,10 +1683,6 @@ export default function MessageView({ conversationId }: { conversationId: string
             appendToComposer(`geo:${latitude.toFixed(6)},${longitude.toFixed(6)}`);
             setLocationDialogOpen(false);
           }}
-          onSearch={(query) => {
-            appendToComposer(`https://www.openstreetmap.org/search?query=${encodeURIComponent(query)}`);
-            setLocationDialogOpen(false);
-          }}
           onClose={() => setLocationDialogOpen(false)}
         />
       )}
