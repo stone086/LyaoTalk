@@ -58,7 +58,7 @@ def _notification_tag(node: str, secret: str) -> str:
     expose the node itself or a JID to the browser notification surface.
     """
     digest = hmac.new(secret.encode(), node.encode(), hashlib.sha256).hexdigest()
-    return f"lyaotalk-{digest[:24]}"
+    return f"lyaotalk-{digest[:23]}"
 
 
 def _validate_push_endpoint(endpoint: str) -> None:
