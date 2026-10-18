@@ -8,6 +8,14 @@ import { ExpirationPlugin } from "workbox-expiration";
 
 declare const self: ServiceWorkerGlobalScope;
 
+self.addEventListener("install", () => {
+  void self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 // Pre-cache build manifest
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
