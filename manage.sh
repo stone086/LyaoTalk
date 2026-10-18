@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The release-based VPS layout keeps PostgreSQL and nginx shared with Matrix.
-# Never use the monolithic installer commands against that host.
+# The release-based VPS layout has existing PostgreSQL, nginx and Prosody data.
+# Never run the monolithic installer commands against that host.
 if [[ -f /etc/lyaotalk/api.env && -L /opt/lyaotalk-current ]]; then
   live_command="${1:-status}"
   case "$live_command" in
     status|check)
-      for unit in lyaotalk-api lyaotalk-minio lyaotalk-redis lyaotalk-prosody.socket prosody coturn nginx matrix-synapse mas; do
+      for unit in lyaotalk-api lyaotalk-minio lyaotalk-redis lyaotalk-prosody.socket prosody coturn nginx postgresql@14-main; do
         printf '%-28s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)"
       done
       curl -fsS https://lyaot.2-yc.com/api/health

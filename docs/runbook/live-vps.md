@@ -1,9 +1,9 @@
 # LyaoTalk on rabisuB
 
 The public XMPP domain is `lyaot.2-yc.com`; uploads and MUC use
-`upload.lyaot.2-yc.com` and `conference.lyaot.2-yc.com`. The host also runs
-Matrix. Its PostgreSQL, nginx and Matrix services must remain running during
-LyaoTalk maintenance.
+`upload.lyaot.2-yc.com` and `conference.lyaot.2-yc.com`. Matrix was retired
+on 2026-10-19; its former domain serves a retirement notice. PostgreSQL,
+nginx, Prosody and coturn remain essential to LyaoTalk.
 
 ## Layout
 
@@ -22,7 +22,7 @@ LyaoTalk maintenance.
 Run `sudo bash /opt/lyaotalk-src/manage.sh update`. It fast-forwards the source
 checkout, builds and tests a new release, makes an encrypted backup, applies
 database migrations, switches the active symlink, then checks the new API and
-Matrix. It updates the Prosody push module and restores the previous module if
+LyaoTalk services. It updates the Prosody push module and restores the previous module if
 the post-switch checks fail. The GitHub manual VPS release workflow uses the
 same deploy script.
 Python requirement changes require a separately prepared virtual environment;

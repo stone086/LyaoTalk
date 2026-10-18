@@ -10,6 +10,8 @@ Architecture:
   PWA frontend → POST /push/subscribe (registers endpoint)
 """
 import secrets as _secrets
+import hashlib
+import hmac
 from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from pydantic import BaseModel, Field
@@ -46,6 +48,16 @@ _ALLOWED_PUSH_HOSTS = {
     "web.push.apple.com",
     "notify.windows.com",
 }
+
+
+def _notification_tag(node: str, secret: str) -> str:
+    """Group only notifications for the same opaque device node.
+
+    A fixed tag merges notifications from separate logged-in accounts. Never
+    expose the node itself or a JID to the browser notification surface.
+    """
+    digest = hmac.new(secret.encode(), node.encode(), hashlib.sha256).hexdigest()
+    return f"lyaotalk-{digest[:24]}"
 
 
 def _validate_push_endpoint(endpoint: str) -> None:
@@ -189,7 +201,7 @@ async def notify(
         "title": payload.title,
         "body": payload.body,
         "badge": payload.badge,
-        "tag": "lyaotalk-msg",
+        "tag": _notification_tag(payload.node, expected),
     })
 
     async def send_one(sub: PushSubscription) -> tuple[str, str]:
