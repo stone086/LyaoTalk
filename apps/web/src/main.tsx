@@ -43,6 +43,7 @@ applyConfiguredHistoryRetention().catch(() => {});
 function registerPwaUpdates() {
   if (!("serviceWorker" in navigator)) return;
   const updateSW = registerSW({
+    immediate: true,
     onNeedRefresh() {
       const zh = getStoredLanguage() === "zh-CN";
       toast((notice) => (
