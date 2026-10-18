@@ -9,22 +9,13 @@ import { apiSocket } from "@/services/apiSocket";
 import toast from "react-hot-toast";
 import { Wifi, Lock, User, Eye, EyeOff, UserPlus } from "lucide-react";
 import { useLanguage } from "@/utils/i18n";
+import { isLocalXmppJid, resolveXmppWsUrl } from "@/services/xmppEndpoint";
 
 export default function LoginPage() {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const addAccount = useAccountStore((s) => s.addAccount);
   const currentHost = window.location.hostname.trim().toLowerCase();
-  const configuredWsUrl = (import.meta.env.VITE_XMPP_WS_URL as string | undefined) ?? "";
-  const wsUrl = (() => {
-    const sameOrigin = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/xmpp-websocket`;
-    if (!configuredWsUrl) return sameOrigin;
-    try {
-      return new URL(configuredWsUrl).host === window.location.host ? configuredWsUrl : sameOrigin;
-    } catch {
-      return sameOrigin;
-    }
-  })();
   const envXmppDomain = ((import.meta.env.VITE_XMPP_DOMAIN as string | undefined) ?? "").trim().toLowerCase();
 
   const [form, setForm] = useState({
@@ -49,7 +40,7 @@ export default function LoginPage() {
     !isLocalDomain(inviteDomain) ? inviteDomain :
     !isLocalDomain(currentHost) ? currentHost :
     xmppDomain;
-  const loginDomain = effectiveXmppDomain || inviteDomain || envXmppDomain || currentHost;
+  const loginDomain = inviteDomain || effectiveXmppDomain || envXmppDomain || currentHost;
 
   const expandJid = (value: string) => {
     const trimmed = value.trim();
@@ -58,7 +49,7 @@ export default function LoginPage() {
 
     const [username, ...domainParts] = trimmed.split("@");
     const domain = domainParts.join("@").toLowerCase();
-    const aliases = new Set([inviteDomain, publicDomain, currentHost].filter(Boolean));
+    const aliases = new Set([publicDomain, currentHost].filter(Boolean));
     // Never rewrite a public-domain JID to localhost/loopback.
     if (isLocalDomain(effectiveXmppDomain)) return trimmed;
     if (username && aliases.has(domain) && domain !== effectiveXmppDomain) {
@@ -88,16 +79,17 @@ export default function LoginPage() {
     // Prefer the backend account_id when available. A random local id makes
     // REST calls like /accounts/{id}/preferences fail with 403 because the JWT
     // contains the real server-side account_id.
-    const tokenRes = await authApi.getUserToken(jid, form.password).catch((tokenErr) => {
+    const tokenRes = isLocalXmppJid(jid) ? await authApi.getUserToken(jid, form.password).catch((tokenErr) => {
       console.warn("REST user token fallback failed; continuing with XMPP session", tokenErr);
       return null;
-    });
+    }) : null;
     const id = tokenRes?.account_id ?? existing?.id ?? crypto.randomUUID();
+    const wsUrl = await resolveXmppWsUrl(jid, existing?.wsUrl);
     const client = createClient({ jid, password: form.password, wsUrl, accountId: id });
     initXmppBridge(client);
     try {
       await withTimeout(client.connect(), 20000, t("login.connectionFailed"));
-      addAccount({ id, jid, domain, displayName: jid.split("@")[0] });
+      addAccount({ id, jid, domain, wsUrl, displayName: jid.split("@")[0] });
       setAccountPassword(id, form.password);
       clearUserToken(id);
       if (tokenRes?.access_token) {

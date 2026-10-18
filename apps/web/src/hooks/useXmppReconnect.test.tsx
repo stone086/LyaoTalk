@@ -32,6 +32,7 @@ vi.mock("@/services/xmppAdapter", () => ({ createClient: mocks.createClient, get
 vi.mock("@/services/xmppBridge", () => ({ initXmppBridge: vi.fn() }));
 vi.mock("@/services/connectionSupervisor", () => ({ superviseConnection: mocks.supervise, unsuperviseConnection: vi.fn(), getSupervisorState: () => null }));
 vi.mock("@/services/api", () => ({ authApi: { getUserToken: mocks.getToken }, setUserToken: vi.fn(), setUserRefreshToken: vi.fn() }));
+vi.mock("@/services/xmppEndpoint", () => ({ resolveXmppWsUrl: vi.fn().mockResolvedValue("wss://example.test/xmpp-websocket"), isLocalXmppJid: () => false }));
 
 import { useXmppReconnect } from "./useXmppReconnect";
 import { useAccountStore } from "@/stores/accountStore";
