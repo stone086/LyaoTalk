@@ -36,6 +36,7 @@ import { encryptGroupOmemoMessage, tryLibsignalEncrypt } from "@/services/xmppBr
 import { getGroupOmemoEnabled, getOmemoEnabled } from "@/services/omemoSettings";
 import { applyMessageRetraction } from "@/services/messageRetraction";
 import { removeFromIndex } from "@/services/searchIndex";
+import { parseGeoUri } from "@/utils/geoUri";
 
 function parseAesgcmMediaLink(raw?: string): { href: string; fileName: string; isAudio: boolean } | null {
   if (!raw) return null;
@@ -208,6 +209,19 @@ function MessageBubble({
           )}
           {msg.deletedAt && <p className="text-sm italic text-surface-200/60">{t("chat.messageDeleted")}</p>}
           {!msg.deletedAt && msg.body && (() => {
+            const geo = parseGeoUri(msg.body);
+            if (geo) {
+              return (
+                <a href={geo.mapUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 hover:bg-accent/20" aria-label={t("chat.openLocationMap")}>
+                  <MapPin size={22} className="shrink-0 text-accent-soft" />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{t("chat.location")}</span>
+                    <span className="block text-xs text-surface-200/60">{geo.latitude.toFixed(6)}, {geo.longitude.toFixed(6)}</span>
+                    <span className="block text-xs text-accent-soft">{t("chat.openLocationMap")}</span>
+                  </span>
+                </a>
+              );
+            }
             const aesMedia = parseAesgcmMediaLink(msg.body);
             if (aesMedia) {
               return (
@@ -1657,11 +1671,11 @@ export default function MessageView({ conversationId }: { conversationId: string
       {locationDialogOpen && (
         <LocationPicker
           onSelect={(latitude, longitude) => {
-            appendToComposer(`https://uri.amap.com/marker?position=${longitude.toFixed(6)},${latitude.toFixed(6)}&coordinate=wgs84`);
+            appendToComposer(`geo:${latitude.toFixed(6)},${longitude.toFixed(6)}`);
             setLocationDialogOpen(false);
           }}
           onSearch={(query) => {
-            appendToComposer(`https://uri.amap.com/search?keyword=${encodeURIComponent(query)}&view=map`);
+            appendToComposer(`https://www.openstreetmap.org/search?query=${encodeURIComponent(query)}`);
             setLocationDialogOpen(false);
           }}
           onClose={() => setLocationDialogOpen(false)}
