@@ -226,7 +226,9 @@ export function initXmppBridge(client: XmppClient) {
       const avatarKey = `${accountId}::${normalizedJid}`;
       if (!existing?.avatarUrl && !avatarFetchInFlight.has(avatarKey)) {
         avatarFetchInFlight.add(avatarKey);
-        client.fetchVCardAvatar(normalizedJid).then((avatarUrl) => {
+        client.fetchPepAvatar(normalizedJid).then((pepAvatar) =>
+          pepAvatar || client.fetchVCardAvatar(normalizedJid)
+        ).then((avatarUrl) => {
           if (avatarUrl) {
             const latest = useRosterStore.getState().getContact(accountId, normalizedJid);
             if (latest) {
@@ -355,6 +357,16 @@ export function initXmppBridge(client: XmppClient) {
       return;
     }
     roster.updatePresence(accountId, normalizedJid, normalizePresence(show), status);
+  });
+
+  client.on("avatar.updated", (data: any) => {
+    const jid = normalizeValidBareJid(data.jid);
+    if (!jid) return;
+    void client.fetchPepAvatar(jid).then((avatarUrl) => {
+      if (!avatarUrl) return;
+      const contact = useRosterStore.getState().getContact(accountId, jid);
+      if (contact) useRosterStore.getState().upsertContact({ ...contact, avatarUrl });
+    }).catch(() => {});
   });
 
   // Incoming messages -> ChatStore + notifications

@@ -5,6 +5,7 @@
 import { normalizeBareJid, normalizeValidBareJid } from "@/utils/helpers";
 import { parseXmppDelayTimestamp } from "@/utils/xmppDelay";
 import type { IceServer } from "./jingle/types";
+import { useAccountStore } from "@/stores/accountStore";
 
 export interface XmppClientConfig {
   jid: string;
@@ -29,6 +30,7 @@ export type XmppEvent =
   | "connection.changed"
   | "roster.updated"
   | "presence.updated"
+  | "avatar.updated"
   | "subscription.request"
   | "subscription.approved"
   | "subscription.denied"
@@ -347,7 +349,8 @@ export class XmppClient {
             this._setupDiscoHandler();      // XEP-0030 service discovery
             this._enableCarbons();          // XEP-0280 multi-device sync
             this._setupCsiHandling();       // XEP-0352 active/inactive
-            this._sendPresence();           // includes XEP-0115 caps
+            const account = useAccountStore.getState().accounts.find((item) => item.id === accountId);
+            this._sendPresence(account?.presence, account?.statusText); // includes XEP-0115 caps
             this._requestRoster();
             this._startKeepalive();
             resolve();
@@ -429,6 +432,13 @@ export class XmppClient {
       }
 
       const from = realStanza.getAttribute("from") ?? "";
+      const avatarItems = Array.from(realStanza.getElementsByTagName("items"))
+        .find((item) => item.getAttribute("node") === "urn:xmpp:avatar:metadata");
+      if (avatarItems) {
+        const peerJid = normalizeValidBareJid(from);
+        if (peerJid) this.emit("avatar.updated", { accountId: this.config.accountId, jid: peerJid });
+        return true;
+      }
       const type = realStanza.getAttribute("type") ?? "chat";
       const body = realStanza.querySelector("body")?.textContent ?? "";
       // A live direct message identifies the peer's current resource even
@@ -795,8 +805,8 @@ export class XmppClient {
       pres = this._$pres({ type: "unavailable" });
     } else {
       pres = this._$pres().c("show").t(show).up();
-      if (status) pres.c("status").t(status).up();
     }
+    if (status && show !== "unavailable") pres.c("status").t(status).up();
     // XEP-0115 Entity Capabilities
     if (hash && (!show || show !== "unavailable")) {
       pres.c("c", {
@@ -1763,7 +1773,7 @@ export class XmppClient {
    *   urn:xmpp:avatar:metadata (info: hash, MIME, size, dims)
    */
   async publishPepAvatar(imageBytes: Uint8Array, mimeType: string = "image/png", width?: number, height?: number) {
-    if (!this._connection || !this._connected) return;
+    if (!this._connection || !this._connected) throw new Error("Not connected");
     // SHA-1 hash
     const imageBuffer = imageBytes.buffer.slice(
       imageBytes.byteOffset,
@@ -1783,8 +1793,8 @@ export class XmppClient {
       .c("publish", { node: "urn:xmpp:avatar:data" })
       .c("item", { id: hashHex })
       .c("data", { xmlns: "urn:xmpp:avatar:data" }).t(dataB64);
-    await new Promise<void>((resolve) => {
-      this._connection.sendIQ(dataIq.tree(), () => resolve(), () => resolve());
+    await new Promise<void>((resolve, reject) => {
+      this._connection.sendIQ(dataIq.tree(), () => resolve(), () => reject(new Error("Avatar data publish failed")));
     });
 
     // Publish metadata
@@ -1801,8 +1811,8 @@ export class XmppClient {
       .c("item", { id: hashHex })
       .c("metadata", { xmlns: "urn:xmpp:avatar:metadata" })
       .c("info", metaAttrs);
-    await new Promise<void>((resolve) => {
-      this._connection.sendIQ(metaIq.tree(), () => resolve(), () => resolve());
+    await new Promise<void>((resolve, reject) => {
+      this._connection.sendIQ(metaIq.tree(), () => resolve(), () => reject(new Error("Avatar metadata publish failed")));
     });
   }
 

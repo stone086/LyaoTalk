@@ -5,7 +5,7 @@ import { getAccountPassword, normalizeAccountJid, setAccountPassword, useAccount
 import { createClient, destroyClient } from "@/services/xmppAdapter";
 import { getClient } from "@/services/xmppAdapter";
 import { initXmppBridge } from "@/services/xmppBridge";
-import { Trash2, Plus, Wifi, WifiOff, Copy, Check, QrCode } from "lucide-react";
+import { Trash2, Plus, Wifi, WifiOff, Copy, Check, QrCode, ImagePlus } from "lucide-react";
 import toast from "react-hot-toast";
 import { clsx } from "clsx";
 import { applyTheme, getStoredTheme, ThemeMode } from "@/utils/theme";
@@ -22,6 +22,7 @@ import { collectBrowserCapabilities } from "@/services/browserCompatibility";
 import { markIntentionalDisconnect } from "@/services/connectionSupervisor";
 import { logoutAccount } from "@/services/logoutAccount";
 import { isLocalXmppAccount, requireLocalXmppAccount } from "@/services/localXmppAccount";
+import { prepareAvatarImage } from "@/services/avatarImage";
 
 /**
  * Same-origin wsUrl helper - matches LoginPage.tsx logic.
@@ -125,10 +126,13 @@ function AccountCard({ account }: { account: XmppAccount }) {
   const { lang, t } = useLanguage();
   const navigate = useNavigate();
   const updatePresence = useAccountStore((s) => s.updatePresence);
+  const updateStatusText = useAccountStore((s) => s.updateStatusText);
+  const updateAvatar = useAccountStore((s) => s.updateAvatar);
   const setConnected = useAccountStore((s) => s.setConnected);
   const [connecting, setConnecting] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [statusText, setStatusText] = useState("");
+  const [avatarSaving, setAvatarSaving] = useState(false);
+  const [statusText, setStatusText] = useState(account.statusText ?? "");
   const bareJid = account.jid.split("/")[0].trim().toLowerCase();
   const accountDomain = bareJid.split("@")[1] ?? account.domain;
   const inviteUrl = useMemo(() => {
@@ -206,6 +210,23 @@ function AccountCard({ account }: { account: XmppAccount }) {
     }
   };
 
+  const changeAvatar = async (file?: File) => {
+    if (!file) return;
+    const client = getClient(account.id);
+    if (!client?.connected) { toast.error(t("toast.connectionFailed")); return; }
+    setAvatarSaving(true);
+    try {
+      const { bytes, dataUrl } = await prepareAvatarImage(file);
+      await client.publishPepAvatar(bytes, "image/jpeg", 192, 192);
+      updateAvatar(account.id, dataUrl);
+      toast.success(label("头像已更新", "Avatar updated"));
+    } catch (error: any) {
+      toast.error(error?.message ?? label("头像更新失败", "Avatar update failed"));
+    } finally {
+      setAvatarSaving(false);
+    }
+  };
+
   if (!isLocalXmppAccount(account.jid)) {
     return (
       <div className="glass rounded-xl p-4 flex items-center gap-3">
@@ -223,7 +244,13 @@ function AccountCard({ account }: { account: XmppAccount }) {
   return (
     <div className="glass rounded-xl p-4 flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <Avatar name={account.displayName ?? account.jid} size="md" presence={account.presence} />
+        <Avatar name={account.displayName ?? account.jid} src={account.avatarUrl} size="md" presence={account.presence} />
+        <label className={clsx("btn-ghost text-xs flex items-center gap-1 cursor-pointer", (!account.connected || avatarSaving) && "opacity-50 pointer-events-none")}>
+          <ImagePlus size={14} /> {avatarSaving ? label("上传中", "Uploading") : label("更换头像", "Change avatar")}
+          <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only"
+            disabled={!account.connected || avatarSaving}
+            onChange={(event) => { void changeAvatar(event.target.files?.[0]); event.target.value = ""; }} />
+        </label>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-surface-50 truncate">
             {account.displayName ?? account.jid.split("@")[0]}
@@ -245,6 +272,7 @@ function AccountCard({ account }: { account: XmppAccount }) {
             key={p.value}
             onClick={() => {
               updatePresence(account.id, p.value);
+              updateStatusText(account.id, statusText.trim());
               const client = getClient(account.id);
               if (client?.connected) {
                 client.setPresence(p.value, statusText.trim() || undefined);
@@ -274,7 +302,9 @@ function AccountCard({ account }: { account: XmppAccount }) {
           onClick={() => {
             const client = getClient(account.id);
             if (!client?.connected) return;
-            client.setPresence(account.presence, statusText.trim() || undefined);
+            const nextStatus = statusText.trim();
+            updateStatusText(account.id, nextStatus);
+            client.setPresence(account.presence, nextStatus || undefined);
             toast.success(t("account.statusUpdated"));
           }}
           className="btn-ghost text-xs py-1.5 px-2.5"
