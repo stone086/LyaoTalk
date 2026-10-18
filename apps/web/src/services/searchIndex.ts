@@ -107,7 +107,8 @@ export async function initSearchIndex(accountId: string): Promise<void> {
   if (persisted) {
     _index = persisted;
     // A retraction tombstone may have persisted after the index's last save.
-    const tombstones = useChatStore.getState().retractedMessageIds ?? {};
+    const state = useChatStore.getState();
+    const tombstones = { ...state.retractedMessageIds, ...state.locallyDeletedMessageIds };
     for (const key of Object.keys(tombstones)) {
       const split = key.indexOf("\u0000");
       if (split < 0) continue;

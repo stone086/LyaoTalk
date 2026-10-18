@@ -14,7 +14,7 @@ import LinkPreviewCard, { extractFirstUrl } from "@/components/LinkPreviewCard";
 import VoiceRecorder from "@/components/VoiceRecorder";
 import AesgcmMedia from "@/components/AesgcmMedia";
 import VirtualMessageList from "@/modules/chat/VirtualMessageList";
-import { cacheMessages, getDraft, getLocalMessages, saveDraft } from "@/services/localDb";
+import { cacheMessages, deleteLocalMessage, getDraft, getLocalMessages, saveDraft } from "@/services/localDb";
 import { getChatToolbarActions } from "@/plugins/host";
 import type { ChatToolbarAction } from "@/plugins/sdk";
 import { format, isSameDay } from "date-fns";
@@ -35,6 +35,7 @@ import { encryptOmemoEnvelopeForPeer } from "@/services/e2ee";
 import { encryptGroupOmemoMessage, tryLibsignalEncrypt } from "@/services/xmppBridge";
 import { getGroupOmemoEnabled, getOmemoEnabled } from "@/services/omemoSettings";
 import { applyMessageRetraction } from "@/services/messageRetraction";
+import { removeFromIndex } from "@/services/searchIndex";
 
 function parseAesgcmMediaLink(raw?: string): { href: string; fileName: string; isAudio: boolean } | null {
   if (!raw) return null;
@@ -301,7 +302,7 @@ function MessageBubble({
               </div>
               {isOwn && msg.status !== "failed" && (
                 <button onClick={() => { onDelete(msg); setMenuOpen(false); }} className="w-full text-left text-xs px-2 py-1.5 hover-surface rounded text-danger flex items-center gap-2">
-                  <Trash2 size={12} /> {t("chat.deleteForEveryone")}
+                  <Trash2 size={12} /> {t("chat.delete")}
                 </button>
               )}
             </div>
@@ -511,6 +512,7 @@ export default function MessageView({ conversationId }: { conversationId: string
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const [forwardingMessage, setForwardingMessage] = useState<ChatMessage | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ChatMessage | null>(null);
   const [forwardTargetId, setForwardTargetId] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -522,6 +524,8 @@ export default function MessageView({ conversationId }: { conversationId: string
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const loadedDraftConversationRef = useRef<string | null>(null);
+
+  useEffect(() => { setPendingDelete(null); }, [conversationId]);
 
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const conversation = useChatStore((s) => s.conversations[conversationId]);
@@ -536,6 +540,7 @@ export default function MessageView({ conversationId }: { conversationId: string
   const composerDraft = useChatStore((s) => s.composerDrafts[conversationId] ?? "");
   const addMessage = useChatStore((s) => s.addMessage);
   const updateMessage = useChatStore((s) => s.updateMessage);
+  const removeLocalMessage = useChatStore((s) => s.removeLocalMessage);
   const toggleMessageStar = useChatStore((s) => s.toggleMessageStar);
   const toggleMessageReaction = useChatStore((s) => s.toggleMessageReaction);
   const setComposerDraft = useChatStore((s) => s.setComposerDraft);
@@ -1102,25 +1107,37 @@ export default function MessageView({ conversationId }: { conversationId: string
   }, [forwardingMessage, forwardTargetId, activeAccountId, allConversations, t]);
 
   const handleDeleteMessage = useCallback((message: ChatMessage) => {
-    if (!activeAccountId || !conversation || message.direction !== "out" || message.deletedAt) return;
+    if (message.direction === "out" && !message.deletedAt) setPendingDelete(message);
+  }, []);
+
+  const handleDeleteForMe = useCallback(() => {
+    if (!pendingDelete || pendingDelete.conversationId !== conversationId || !conversation) return;
+    removeLocalMessage(conversationId, pendingDelete.id);
+    void deleteLocalMessage(conversationId, pendingDelete.id).catch(() => {});
+    removeFromIndex(conversationId, pendingDelete.id, conversation.accountId);
+    setPendingDelete(null);
+  }, [pendingDelete, conversation, conversationId, removeLocalMessage]);
+
+  const handleDeleteForEveryone = useCallback(() => {
+    if (!pendingDelete || pendingDelete.conversationId !== conversationId || !activeAccountId || !conversation) return;
     const client = getClient(activeAccountId);
     if (!client?.connected) {
       toast.error(t("chat.notConnected"));
       return;
     }
-    const targetId = conversation.type === "group" ? message.stanzaId : message.id;
+    const targetId = conversation.type === "group" ? pendingDelete.stanzaId : pendingDelete.id;
     if (!targetId) {
       toast.error(t("chat.deleteServerIdMissing"));
       return;
     }
-    if (!window.confirm(t("chat.deleteForEveryoneConfirm"))) return;
     try {
       client.retractMessage(conversation.peerJid, targetId, conversation.type === "group" ? "groupchat" : "chat");
-      applyMessageRetraction(conversationId, message.id);
+      applyMessageRetraction(conversationId, pendingDelete.id);
+      setPendingDelete(null);
     } catch (error: any) {
       toast.error(error?.message ?? t("chat.sendFailed"));
     }
-  }, [activeAccountId, conversation, conversationId, t]);
+  }, [activeAccountId, conversation, conversationId, pendingDelete, t]);
 
   const handleToggleStar = useCallback((message: ChatMessage) => {
     toggleMessageStar(conversationId, message.id);
@@ -1673,6 +1690,19 @@ export default function MessageView({ conversationId }: { conversationId: string
           onConfirm={handleConfirmForward}
           onCancel={() => { setForwardingMessage(null); setForwardTargetId(""); }}
         />
+      )}
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label={t("chat.delete")}>
+          <div className="popover-surface w-full max-w-sm rounded-2xl p-5 space-y-4">
+            <h2 className="text-base font-semibold">{t("chat.deleteForEveryoneQuestion")}</h2>
+            <p className="text-sm text-surface-200/70">{t("chat.deleteForEveryoneConfirm")}</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-ghost" onClick={() => setPendingDelete(null)}>{t("common.cancel")}</button>
+              <button type="button" className="btn-ghost" onClick={handleDeleteForMe}>{t("common.no")}</button>
+              <button type="button" className="btn-primary" onClick={handleDeleteForEveryone}>{t("common.yes")}</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -634,7 +634,8 @@ export function initXmppBridge(client: XmppClient) {
     cacheMessages([chatMsg]).catch(() => {});
 
     // A retraction may have arrived before this message during MAM replay.
-    if (useChatStore.getState().messages[convId]?.find((m) => m.id === message.id)?.deletedAt) return;
+    const storedMessage = useChatStore.getState().messages[convId]?.find((m) => m.id === message.id);
+    if (!storedMessage || storedMessage.deletedAt) return;
 
     // KILLER-07: index for offline full-text search
     indexMessage(accountId, chatMsg.conversationId, chatMsg);

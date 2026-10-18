@@ -17,7 +17,7 @@ const original = (overrides: Partial<ChatMessage> = {}): ChatMessage => ({
 });
 
 beforeEach(() => {
-  useChatStore.setState({ messages: {}, conversations: {}, clearedBefore: {}, retractedMessageIds: {}, pendingRetractions: {} });
+  useChatStore.setState({ messages: {}, conversations: {}, clearedBefore: {}, retractedMessageIds: {}, locallyDeletedMessageIds: {}, pendingRetractions: {} });
 });
 
 describe("message retraction", () => {
@@ -46,5 +46,15 @@ describe("message retraction", () => {
   it("rejects a retraction from another private sender", () => {
     expect(retractionMatchesMessage(original(), { from: "mallory@example.com", type: "chat", at: 1 })).toBe(false);
     expect(retractionMatchesMessage(original(), { from: "alice@example.com/laptop", type: "chat", at: 1 })).toBe(true);
+  });
+
+  it("removes a message only locally and hides it if MAM replays it", () => {
+    const store = useChatStore.getState();
+    store.addMessage(original());
+    store.removeLocalMessage(conversationId, "original-id");
+    expect(useChatStore.getState().messages[conversationId]).toEqual([]);
+    expect(useChatStore.getState().retractedMessageIds).toEqual({});
+    store.addMessage(original());
+    expect(useChatStore.getState().messages[conversationId]).toEqual([]);
   });
 });
