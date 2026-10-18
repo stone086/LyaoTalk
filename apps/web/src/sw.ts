@@ -8,14 +8,6 @@ import { ExpirationPlugin } from "workbox-expiration";
 
 declare const self: ServiceWorkerGlobalScope;
 
-self.addEventListener("install", () => {
-  void self.skipWaiting();
-});
-
-self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
-});
-
 // Pre-cache build manifest
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
@@ -119,7 +111,7 @@ self.addEventListener("notificationclick", (event: NotificationEvent) => {
   );
 });
 
-// Skip waiting on update — only accept messages from same-origin clients
+// Activate a waiting update only after the user chooses to refresh.
 self.addEventListener("message", (event) => {
   // Validate the source is one of our own clients (same origin)
   if (event.source && "url" in event.source) {
