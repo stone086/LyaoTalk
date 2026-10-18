@@ -27,7 +27,6 @@ registerRoute(
   new NavigationRoute(
     new NetworkFirst({
       cacheName: "pages-cache",
-      networkTimeoutSeconds: 3,
       plugins: [new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 24 * 60 * 60 })],
     })
   )

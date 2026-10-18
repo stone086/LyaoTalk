@@ -52,7 +52,6 @@ export default defineConfig({
             handler: "NetworkFirst",
             options: {
               cacheName: "pages-cache",
-              networkTimeoutSeconds: 3,
               expiration: { maxEntries: 20, maxAgeSeconds: 24 * 60 * 60 },
             },
           },
