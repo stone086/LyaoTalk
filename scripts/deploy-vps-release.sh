@@ -81,7 +81,7 @@ for attempt in {1..15}; do
   sleep 2
 done
 [[ "$healthy" == true ]] || { echo "API health check failed after startup grace period" >&2; exit 1; }
-systemctl is-active --quiet lyaotalk-api prosody lyaotalk-minio lyaotalk-redis matrix-synapse mas
+systemctl is-active --quiet lyaotalk-api prosody lyaotalk-minio lyaotalk-redis nginx postgresql@14-main coturn
 
 # An unauthenticated 2 MiB upload must reach auth (401). A 400 here means
 # multipart spooling failed before the route was entered.
@@ -93,4 +93,4 @@ rm -f "$probe_file"
 [[ "$probe_status" == 401 ]] || { echo "Multipart upload smoke check failed: HTTP $probe_status" >&2; exit 1; }
 
 trap - ERR
-printf 'Deployed LyaoTalk %s; Matrix healthy\n' "$sha"
+printf 'Deployed LyaoTalk %s; LyaoTalk services healthy\n' "$sha"
