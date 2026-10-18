@@ -12,6 +12,7 @@ export interface XmppAccount {
   displayName?: string;
   avatarUrl?: string;
   presence: PresenceType;
+  statusText?: string;
   connected: boolean;
   manuallyOffline?: boolean;
 }
@@ -23,6 +24,8 @@ interface AccountState {
   removeAccount: (id: string) => void;
   setActiveAccount: (id: string) => void;
   updatePresence: (id: string, presence: PresenceType) => void;
+  updateStatusText: (id: string, statusText: string) => void;
+  updateAvatar: (id: string, avatarUrl: string) => void;
   setConnected: (id: string, connected: boolean) => void;
   setManuallyOffline: (id: string, offline: boolean) => void;
 }
@@ -43,6 +46,7 @@ function dedupeAccounts(accounts: XmppAccount[]): XmppAccount[] {
       jid: key,
       domain: key.split("@")[1] ?? account.domain,
       presence: account.presence ?? existing?.presence ?? "available",
+      statusText: account.statusText ?? existing?.statusText,
       connected: account.connected ?? existing?.connected ?? false,
       manuallyOffline: account.manuallyOffline ?? existing?.manuallyOffline ?? false,
       is_enabled: account.is_enabled ?? existing?.is_enabled ?? true,
@@ -75,6 +79,7 @@ export const useAccountStore = create<AccountState>()(
             avatarUrl: account.avatarUrl ?? existing?.avatarUrl,
             is_enabled: account.is_enabled ?? existing?.is_enabled ?? true,
             presence: existing?.presence ?? "available",
+            statusText: existing?.statusText,
             connected: existing?.connected ?? false,
             manuallyOffline: existing?.manuallyOffline ?? false,
           };
@@ -110,6 +115,14 @@ export const useAccountStore = create<AccountState>()(
       updatePresence: (id, presence) =>
         set((s) => ({
           accounts: s.accounts.map((a) => (a.id === id ? { ...a, presence } : a)),
+        })),
+      updateStatusText: (id, statusText) =>
+        set((s) => ({
+          accounts: s.accounts.map((a) => (a.id === id ? { ...a, statusText } : a)),
+        })),
+      updateAvatar: (id, avatarUrl) =>
+        set((s) => ({
+          accounts: s.accounts.map((a) => (a.id === id ? { ...a, avatarUrl } : a)),
         })),
 
       setConnected: (id, connected) =>
