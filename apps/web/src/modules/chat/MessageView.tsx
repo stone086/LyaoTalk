@@ -37,7 +37,7 @@ import { encryptGroupOmemoMessage, tryLibsignalEncrypt } from "@/services/xmppBr
 import { getGroupOmemoEnabled, getOmemoEnabled } from "@/services/omemoSettings";
 import { applyMessageRetraction } from "@/services/messageRetraction";
 import { removeFromIndex } from "@/services/searchIndex";
-import { parseGeoUri } from "@/utils/geoUri";
+import { parseSharedLocation } from "@/utils/geoUri";
 
 function parseAesgcmMediaLink(raw?: string): { href: string; fileName: string; isAudio: boolean } | null {
   if (!raw) return null;
@@ -212,7 +212,7 @@ function MessageBubble({
           )}
           {msg.deletedAt && <p className="text-sm italic text-surface-200/60">{t("chat.messageDeleted")}</p>}
           {!msg.deletedAt && msg.body && (() => {
-            const geo = parseGeoUri(msg.body);
+            const geo = parseSharedLocation(msg.body);
             if (geo) {
               return (
                 <button type="button" onClick={() => onOpenLocation(geo.latitude, geo.longitude)} className="flex items-center gap-3 rounded-xl border border-accent/30 bg-accent/10 px-3 py-2 text-left hover:bg-accent/20" aria-label={t("chat.openLocationMap")}>
@@ -241,7 +241,7 @@ function MessageBubble({
             return <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.body}</p>;
           })()}
           {!msg.deletedAt && msg.body && (() => {
-            if (trustedFileObjectKey(msg.body.trim(), window.location.origin) || isTrustedXmppUploadUrl(msg.body.trim(), window.location.origin)) return null;
+            if (parseSharedLocation(msg.body) || trustedFileObjectKey(msg.body.trim(), window.location.origin) || isTrustedXmppUploadUrl(msg.body.trim(), window.location.origin)) return null;
             const url = extractFirstUrl(msg.body);
             return url ? <LinkPreviewCard url={url} /> : null;
           })()}
@@ -861,6 +861,10 @@ export default function MessageView({ conversationId }: { conversationId: string
 
   const sendMessage = useCallback(async () => {
     let body = input.trim();
+    const pastedLocation = parseSharedLocation(body);
+    if (pastedLocation && !body.startsWith("geo:")) {
+      body = `geo:${pastedLocation.latitude.toFixed(6)},${pastedLocation.longitude.toFixed(6)}`;
+    }
     if (!body && !pendingFiles.length) return;
     if (uploadingCount > 0) return;
     if (!activeAccountId) return;

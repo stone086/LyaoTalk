@@ -39,6 +39,19 @@ applyTheme(getStoredTheme());
 document.documentElement.classList.toggle("density-compact", localStorage.getItem("liaot-message-density") === "compact");
 applyConfiguredHistoryRetention().catch(() => {});
 clearLegacyPwaCachesOnce().catch(() => {});
+if ("serviceWorker" in navigator) {
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (hadController && !refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
+  });
+  window.addEventListener("focus", () => {
+    void navigator.serviceWorker.getRegistration().then((registration) => registration?.update()).catch(() => {});
+  });
+}
 initWebVitals();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
