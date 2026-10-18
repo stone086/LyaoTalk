@@ -21,24 +21,7 @@ import { isPushSubscribed, isPushSupported, subscribeToPush, unsubscribeFromPush
 import { collectBrowserCapabilities } from "@/services/browserCompatibility";
 import { markIntentionalDisconnect } from "@/services/connectionSupervisor";
 import { logoutAccount } from "@/services/logoutAccount";
-
-/**
- * Same-origin wsUrl helper - matches LoginPage.tsx logic.
- * Avoids hardcoding ws://localhost:5280 which would break reconnects on
- * production deployments where users access via wss://their-domain/.
- */
-function deriveSameOriginWsUrl(configured?: string): string {
-  if (typeof window === "undefined") return configured || "ws://localhost:5280/xmpp-websocket";
-  const sameOrigin = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/xmpp-websocket`;
-  if (!configured) return sameOrigin;
-  try {
-    const u = new URL(configured);
-    return u.host === window.location.host ? configured : sameOrigin;
-  } catch {
-    return sameOrigin;
-  }
-}
-
+import { isLocalXmppJid, resolveXmppWsUrl } from "@/services/xmppEndpoint";
 
 const MENTION_NOTIFY_KEY = "liaot-notify-mention";
 const DENSITY_KEY = "liaot-message-density";
@@ -162,14 +145,14 @@ function AccountCard({ account }: { account: XmppAccount }) {
       const client = createClient({
         jid: account.jid,
         password: runtimePassword,
-        wsUrl: deriveSameOriginWsUrl(import.meta.env.VITE_XMPP_WS_URL as string | undefined),
+        wsUrl: await resolveXmppWsUrl(account.jid, account.wsUrl),
         accountId: account.id,
       });
       initXmppBridge(client);
       client.on("connection.changed", (d: any) => setConnected(account.id, d.status === "connected"));
       await client.connect();
-      accountsApi.create({ jid: account.jid, domain: account.jid.split("@")[1] ?? "localhost" }).catch(() => {});
-      const tokenRes = await authApi.getUserToken(account.jid, runtimePassword).catch(() => null);
+      if (isLocalXmppJid(account.jid)) accountsApi.create({ jid: account.jid, domain: account.jid.split("@")[1] ?? "localhost" }).catch(() => {});
+      const tokenRes = isLocalXmppJid(account.jid) ? await authApi.getUserToken(account.jid, runtimePassword).catch(() => null) : null;
       if (tokenRes?.access_token) {
         setUserToken(account.id, tokenRes.access_token);
         if ((tokenRes as any).refresh_token) {
@@ -444,10 +427,18 @@ export default function SettingsPage() {
     const jid = normalizeAccountJid(form.jid);
     const existing = useAccountStore.getState().accounts.find((a) => normalizeAccountJid(a.jid) === jid);
     const id = existing?.id ?? crypto.randomUUID();
+    let wsUrl: string;
+    try {
+      wsUrl = await resolveXmppWsUrl(jid, form.wsUrl || existing?.wsUrl);
+    } catch (error: any) {
+      toast.error(error?.message ?? t("toast.connectionFailed"));
+      return;
+    }
     addAccount({
       id,
       jid,
       domain: jid.split("@")[1] ?? "localhost",
+      wsUrl,
       password: form.password,
       displayName: jid.split("@")[0],
     });
@@ -456,21 +447,21 @@ export default function SettingsPage() {
       const client = createClient({
         jid,
         password: form.password,
-        wsUrl: form.wsUrl || deriveSameOriginWsUrl(import.meta.env.VITE_XMPP_WS_URL as string | undefined),
+        wsUrl,
         accountId: id,
       });
       initXmppBridge(client);
       client.on("connection.changed", (d: any) => setConnected(id, d.status === "connected"));
       await client.connect();
-      accountsApi.create({ jid, domain: jid.split("@")[1] ?? "localhost" }).catch(() => {});
-      const tokenRes = await authApi.getUserToken(jid, form.password).catch(() => null);
+      if (isLocalXmppJid(jid)) accountsApi.create({ jid, domain: jid.split("@")[1] ?? "localhost" }).catch(() => {});
+      const tokenRes = isLocalXmppJid(jid) ? await authApi.getUserToken(jid, form.password).catch(() => null) : null;
       if (tokenRes?.access_token) {
         setUserToken(id, tokenRes.access_token);
         if ((tokenRes as any).refresh_token) {
           setUserRefreshToken(id, (tokenRes as any).refresh_token);
         }
       }
-      apiSocket.connect(id);
+      if (isLocalXmppJid(jid)) apiSocket.connect(id);
     } catch (error: any) {
       toast.error(error?.message ?? t("toast.connectionFailed"));
     }
