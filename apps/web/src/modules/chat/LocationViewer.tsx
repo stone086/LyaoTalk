@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useLanguage } from "@/utils/i18n";
+import { mapNavigationUrls } from "@/utils/mapNavigation";
 
 export default function LocationViewer({ latitude, longitude, onClose }: {
   latitude: number;
@@ -11,6 +12,8 @@ export default function LocationViewer({ latitude, longitude, onClose }: {
   const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const [tilesUnavailable, setTilesUnavailable] = useState(false);
+  const [showNavigation, setShowNavigation] = useState(false);
+  const navigationUrls = mapNavigationUrls(latitude, longitude, /iPad|iPhone|iPod/i.test(navigator.userAgent));
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -38,6 +41,13 @@ export default function LocationViewer({ latitude, longitude, onClose }: {
         </div>
         <div ref={containerRef} className="h-[50vh] min-h-[280px] max-h-[520px] w-full overflow-hidden rounded-xl" aria-label={t("chat.locationMap")} />
         <p className="text-xs text-surface-200/70">{latitude.toFixed(6)}, {longitude.toFixed(6)}</p>
+        <button type="button" className="btn-primary self-start" onClick={() => setShowNavigation((open) => !open)} aria-expanded={showNavigation}>
+          {t("chat.shareToMaps")}
+        </button>
+        {showNavigation && <div className="flex flex-wrap gap-2">
+          <a className="btn-ghost border-default" href={navigationUrls.amap}>{t("chat.navigateAmap")}</a>
+          <a className="btn-ghost border-default" href={navigationUrls.baidu}>{t("chat.navigateBaidu")}</a>
+        </div>}
         {tilesUnavailable && <p className="text-xs text-warn">{t("chat.mapTilesUnavailable")}</p>}
       </div>
     </div>
