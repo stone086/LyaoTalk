@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, or_
+from sqlalchemy.exc import IntegrityError
 from typing import Optional
 import json
 import logging
@@ -135,7 +136,13 @@ async def subscribe(
         user_agent=payload.user_agent,
     )
     db.add(sub)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        # Another registration may claim the globally unique node between the
+        # ownership query and commit. Return a conflict instead of a 500.
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Push subscription conflict") from exc
     return {"status": "ok"}
 
 
