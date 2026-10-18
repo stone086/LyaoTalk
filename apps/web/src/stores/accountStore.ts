@@ -7,7 +7,6 @@ export interface XmppAccount {
   id: string;
   jid: string;
   domain: string;
-  wsUrl?: string;
   password?: string;
   is_enabled?: boolean;
   displayName?: string;
@@ -43,7 +42,6 @@ function dedupeAccounts(accounts: XmppAccount[]): XmppAccount[] {
       ...account,
       jid: key,
       domain: key.split("@")[1] ?? account.domain,
-      wsUrl: account.wsUrl ?? existing?.wsUrl,
       presence: account.presence ?? existing?.presence ?? "available",
       connected: account.connected ?? existing?.connected ?? false,
       manuallyOffline: account.manuallyOffline ?? existing?.manuallyOffline ?? false,
@@ -73,7 +71,6 @@ export const useAccountStore = create<AccountState>()(
             id: nextId,
             jid,
             domain: jid.split("@")[1] ?? account.domain,
-            wsUrl: account.wsUrl ?? existing?.wsUrl,
             displayName: account.displayName ?? existing?.displayName,
             avatarUrl: account.avatarUrl ?? existing?.avatarUrl,
             is_enabled: account.is_enabled ?? existing?.is_enabled ?? true,

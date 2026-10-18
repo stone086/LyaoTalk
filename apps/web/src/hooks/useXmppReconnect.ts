@@ -4,7 +4,7 @@ import { createClient, getClient, destroyClient } from "@/services/xmppAdapter";
 import { initXmppBridge } from "@/services/xmppBridge";
 import { useReconnectStore } from "@/stores/reconnectStore";
 import { authApi, setUserToken, setUserRefreshToken } from "@/services/api";
-import { isLocalXmppJid, resolveXmppWsUrl } from "@/services/xmppEndpoint";
+import { isLocalXmppAccount, requireLocalXmppAccount } from "@/services/localXmppAccount";
 import {
   superviseConnection,
   unsuperviseConnection,
@@ -43,9 +43,24 @@ export function useXmppReconnect() {
     const accounts = accountsRef.current;
     const supervisedIds = new Set<string>();
 
+    const deriveWsUrl = (): string => {
+      // Same-origin construction matches LoginPage.tsx logic so we don't
+      // accidentally reconnect to ws://localhost:5280 from a wss://prod page.
+      const sameOrigin = `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/xmpp-websocket`;
+      const configured = (import.meta.env.VITE_XMPP_WS_URL as string | undefined) ?? "";
+      if (configured) {
+        try {
+          const u = new URL(configured);
+          if (u.host === window.location.host) return configured;
+        } catch {}
+      }
+      return sameOrigin;
+    };
+
     const connectOnce = async (accountId: string): Promise<void> => {
       const account = accounts.find((a) => a.id === accountId);
       if (!account) throw new Error("Account vanished from store");
+      requireLocalXmppAccount(account.jid);
       if (useAccountStore.getState().accounts.find((item) => item.id === accountId)?.manuallyOffline) {
         throw new Error("Account is manually offline");
       }
@@ -74,7 +89,7 @@ export function useXmppReconnect() {
       const newClient = createClient({
         jid: account.jid,
         password,
-        wsUrl: await resolveXmppWsUrl(account.jid, account.wsUrl),
+        wsUrl: deriveWsUrl(),
         accountId,
         // Stability tunings — see XmppClientConfig
         keepaliveIntervalMs: 45_000,
@@ -98,7 +113,7 @@ export function useXmppReconnect() {
         setReconnecting(accountId, false);
         // Refresh user-token after reconnect so file uploads keep working
         try {
-          const tokenRes = isLocalXmppJid(account.jid) ? await authApi.getUserToken(account.jid, password).catch(() => null) : null;
+          const tokenRes = await authApi.getUserToken(account.jid, password).catch(() => null);
           if (tokenRes?.access_token) {
             setUserToken(accountId, tokenRes.access_token);
             if ((tokenRes as any).refresh_token) {
@@ -170,6 +185,10 @@ export function useXmppReconnect() {
     // Phase 1: supervise live clients and restore accounts after a reload.
     accounts.forEach((account) => {
       if (!account.is_enabled || account.manuallyOffline) return;
+      if (!isLocalXmppAccount(account.jid)) {
+        setConnected(account.id, false);
+        return;
+      }
       const client = getClient(account.id);
       if (client && !startupAttempts.current.has(account.id)) {
         attachSupervisor(account.id);
