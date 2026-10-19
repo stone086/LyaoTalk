@@ -91,7 +91,17 @@ export async function isPushSupported(): Promise<boolean> {
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
   if (!("Notification" in window)) return "denied";
-  return await Notification.requestPermission();
+  return await withTimeout(Notification.requestPermission(), "Notification permission timed out");
+}
+
+function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), 15000);
+    promise.then(
+      (value) => { window.clearTimeout(timer); resolve(value); },
+      (error) => { window.clearTimeout(timer); reject(error); },
+    );
+  });
 }
 
 export async function subscribeToPush(): Promise<boolean> {
@@ -105,7 +115,7 @@ export async function subscribeToPush(): Promise<boolean> {
   if (permission !== "granted") return false;
 
   // Wait for SW registration
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await withTimeout(navigator.serviceWorker.ready, "Service Worker registration timed out");
 
   // Fetch VAPID public key from backend
   const { data } = await api.get<{ key: string }>("/push/vapid-public-key");

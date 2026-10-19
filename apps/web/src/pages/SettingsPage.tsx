@@ -363,6 +363,8 @@ export default function SettingsPage() {
   const soundEnabled = useNotificationStore((s) => s.soundEnabled);
   const [pushSupported, setPushSupported] = useState(false);
   const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushPending, setPushPending] = useState(false);
+  const [pushResult, setPushResult] = useState<"enabled" | "failed" | null>(null);
   const [showPushInstallGuide, setShowPushInstallGuide] = useState(false);
   const pushBrowser = collectBrowserCapabilities();
 
@@ -381,6 +383,7 @@ export default function SettingsPage() {
   }, [activeAccountId]);
 
   const handlePushChange = (checked: boolean) => {
+    setPushResult(null);
     if (checked && pushBrowser.isIOS && !pushBrowser.isStandalonePwa) {
       setShowPushInstallGuide(true);
       return;
@@ -389,10 +392,12 @@ export default function SettingsPage() {
   };
 
   const handleTogglePush = async (checked: boolean) => {
+    setPushPending(true);
     try {
       if (checked) {
         const ok = await subscribeToPush();
         setPushEnabled(ok);
+        setPushResult(ok ? "enabled" : "failed");
         if (!ok) toast.error(t("toast.pushFailed"));
         else toast.success(t("toast.pushEnabled"));
       } else {
@@ -403,7 +408,10 @@ export default function SettingsPage() {
       }
     } catch {
       setPushEnabled(!checked);
+      setPushResult("failed");
       toast.error(t("toast.pushFailed"));
+    } finally {
+      setPushPending(false);
     }
   };
   const browserEnabled = useNotificationStore((s) => s.browserEnabled);
@@ -671,11 +679,14 @@ export default function SettingsPage() {
                 <input
                   type="checkbox"
                   checked={pushEnabled}
+                  disabled={pushPending}
                   onChange={(e) => handlePushChange(e.target.checked)}
                   className="w-4 h-4 accent-[#7c6af7]"
                 />
               </label>
             )}
+            {pushPending && <p role="status" className="text-xs text-surface-200">{t("settings.pushPending")}</p>}
+            {pushResult && <p role={pushResult === "failed" ? "alert" : "status"} className="text-xs text-surface-200">{t(pushResult === "failed" ? "toast.pushFailed" : "toast.pushEnabled")}</p>}
             {showPushInstallGuide && pushBrowser.isIOS && !pushBrowser.isStandalonePwa && (
               <div role="note" className="rounded-lg border border-[#7c6af7]/40 bg-[#7c6af7]/10 p-3 text-xs text-surface-200">
                 <p className="font-medium">{t("settings.iosPushGuideTitle")}</p>
