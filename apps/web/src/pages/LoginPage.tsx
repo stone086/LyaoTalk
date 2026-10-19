@@ -10,6 +10,7 @@ import toast from "react-hot-toast";
 import { Wifi, Lock, User, Eye, EyeOff, UserPlus } from "lucide-react";
 import { useLanguage } from "@/utils/i18n";
 import { requireLocalXmppAccount } from "@/services/localXmppAccount";
+import { restoreLocalAccountHistory } from "@/services/localDb";
 
 export default function LoginPage() {
   const { t } = useLanguage();
@@ -105,6 +106,11 @@ export default function LoginPage() {
       if (tokenRes?.access_token) {
         setUserToken(id, tokenRes.access_token);
         if ((tokenRes as any).refresh_token) setUserRefreshToken(id, (tokenRes as any).refresh_token);
+      }
+      try {
+        await restoreLocalAccountHistory(id, form.password);
+      } catch {
+        toast.error(t("login.localHistoryRestoreFailed"));
       }
       toast.success(`${t("login.connectedAs")}: ${jid}`);
       // apiSocket.connect(id);
