@@ -21,11 +21,25 @@ interface CachedMessage extends ChatMessage {
   cacheKey: string;
 }
 
+interface LogoutVault {
+  accountId: string;
+  salt: Uint8Array;
+  iv: Uint8Array;
+  ciphertext: ArrayBuffer;
+}
+
+interface HistorySnapshot {
+  accountId: string;
+  conversations: Conversation[];
+  messages: ChatMessage[];
+}
+
 class WGajimDB extends Dexie {
   messages!: Table<CachedMessage>;
   conversations!: Table<Conversation>;
   drafts!: Table<Draft>;
   contacts!: Table<CachedContact>;
+  logoutVaults!: Table<LogoutVault, string>;
 
   constructor() {
     super("liaot");
@@ -40,6 +54,13 @@ class WGajimDB extends Dexie {
       conversations: "id, accountId, peerJid, lastMessageAt",
       drafts: "conversationId",
       contacts: "[jid+accountId], accountId",
+    });
+    this.version(3).stores({
+      messages: "cacheKey, [conversationId+id], conversationId, timestamp, id",
+      conversations: "id, accountId, peerJid, lastMessageAt",
+      drafts: "conversationId",
+      contacts: "[jid+accountId], accountId",
+      logoutVaults: "accountId",
     });
   }
 }
@@ -129,11 +150,87 @@ export async function deleteLocalConversationData(conversationId: string) {
 
 export async function clearLocalAccountData(accountId: string) {
   const convs = await db.conversations.where("accountId").equals(accountId).toArray();
-  const convIds = convs.map((c) => c.id);
+  const convIds = [...new Set([
+    ...convs.map((c) => c.id),
+    ...Object.values(useChatStore.getState().conversations)
+      .filter((conv) => conv.accountId === accountId).map((conv) => conv.id),
+  ])];
   if (convIds.length > 0) {
     await Promise.all(convIds.map((id) => db.messages.where("conversationId").equals(id).delete()));
     await Promise.all(convIds.map((id) => db.drafts.delete(id)));
   }
   await db.conversations.where("accountId").equals(accountId).delete();
   await db.contacts.where("accountId").equals(accountId).delete();
+}
+
+async function historyKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+  const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: salt as BufferSource, iterations: 210_000, hash: "SHA-256" },
+    material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"],
+  );
+}
+
+/** Keep replayable plaintext only in a password-encrypted vault while signed out. */
+export async function sealLocalAccountHistory(accountId: string, password: string): Promise<void> {
+  const state = useChatStore.getState();
+  const cachedConversations = await db.conversations.where("accountId").equals(accountId).toArray();
+  const conversations = [...new Map([
+    ...cachedConversations,
+    ...Object.values(state.conversations).filter((conv) => conv.accountId === accountId),
+  ].map((conv) => [conv.id, conv])).values()];
+  const convIds = new Set(conversations.map((conv) => conv.id));
+  const cached = convIds.size ? await db.messages.where("conversationId").anyOf([...convIds]).toArray() : [];
+  const byId = new Map<string, ChatMessage>();
+  for (const message of cached) byId.set(`${message.conversationId}\0${message.id}`, message);
+  for (const convId of convIds) {
+    for (const message of state.messages[convId] ?? []) byId.set(`${convId}\0${message.id}`, message);
+  }
+  const messages = [...byId.values()].filter((message) =>
+    message.timestamp > (state.clearedBefore[message.conversationId] ?? 0)
+    && !state.locallyDeletedMessageIds[`${message.conversationId}\0${message.id}`]
+  ).map(({ cipherPayload: _cipherPayload, omemoEnvelope: _omemoEnvelope, ...message }) => message);
+  const snapshot: HistorySnapshot = { accountId, conversations, messages };
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await historyKey(password, salt);
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv as BufferSource }, key, new TextEncoder().encode(JSON.stringify(snapshot)),
+  );
+  await db.logoutVaults.put({ accountId, salt, iv, ciphertext });
+}
+
+/** Restore a prior same-browser session only after the account password was verified. */
+export async function restoreLocalAccountHistory(accountId: string, password: string): Promise<boolean> {
+  const vault = await db.logoutVaults.get(accountId);
+  if (!vault) return false;
+  const key = await historyKey(password, vault.salt);
+  const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: vault.iv as BufferSource }, key, vault.ciphertext);
+  const snapshot = JSON.parse(new TextDecoder().decode(plaintext)) as HistorySnapshot;
+  if (snapshot.accountId !== accountId || !Array.isArray(snapshot.conversations) || !Array.isArray(snapshot.messages)) {
+    throw new Error("Invalid local history vault");
+  }
+  const conversations = snapshot.conversations.filter((conv) => conv.accountId === accountId);
+  const convIds = new Set(conversations.map((conv) => conv.id));
+  const messages = snapshot.messages.filter((message) => convIds.has(message.conversationId));
+  await db.transaction("rw", db.conversations, db.messages, db.logoutVaults, async () => {
+    await db.conversations.bulkPut(conversations);
+    await db.messages.bulkPut(messages.map((message) => ({ ...message, cacheKey: `${message.conversationId}:${message.id}` })));
+    await db.logoutVaults.delete(accountId);
+  });
+  useChatStore.setState((state) => {
+    const nextConversations = { ...state.conversations };
+    const nextMessages = { ...state.messages };
+    for (const conv of conversations) {
+      nextConversations[conv.id] = conv;
+      const previous = nextMessages[conv.id] ?? [];
+      const byMessageId = new Map(previous.map((message) => [message.id, message]));
+      for (const message of messages.filter((item) => item.conversationId === conv.id)) {
+        if (!byMessageId.has(message.id)) byMessageId.set(message.id, message);
+      }
+      nextMessages[conv.id] = [...byMessageId.values()].sort((a, b) => a.timestamp - b.timestamp);
+    }
+    return { conversations: nextConversations, messages: nextMessages };
+  });
+  return true;
 }

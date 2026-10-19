@@ -205,6 +205,8 @@ function AccountCard({ account }: { account: XmppAccount }) {
       const { remoteRevoked } = await logoutAccount(account.id);
       toast[remoteRevoked ? "success" : "error"](remoteRevoked ? t("common.removed") : t("account.removeOffline"));
       navigate(useAccountStore.getState().accounts.length ? "/" : "/login");
+    } catch {
+      toast.error(t("nav.logoutHistoryFailed"));
     } finally {
       setRemoving(false);
     }

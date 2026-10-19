@@ -85,6 +85,8 @@ export default function Sidebar() {
       const { remoteRevoked } = await logoutAccount(activeId);
       navigate(useAccountStore.getState().activeAccountId ? "/" : "/login", { replace: true });
       toast[remoteRevoked ? "success" : "error"](remoteRevoked ? t("nav.loggedOut") : t("nav.logoutOffline"));
+    } catch {
+      toast.error(t("nav.logoutHistoryFailed"));
     } finally {
       setLoggingOut(false);
     }
