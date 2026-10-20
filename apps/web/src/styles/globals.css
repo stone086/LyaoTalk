@@ -44,13 +44,13 @@
   }
 
   :root.light {
-    /* Light theme — white panels on a cooler canvas, with defined edges */
+    /* Light theme — soft blue-gray panels with defined edges */
     --surface-50: 25 35 56;
     --surface-100: 51 67 96;
     --surface-200: 76 93 123;
     --surface-800: 225 233 244;
-    --surface-900: 255 255 255;
-    --surface-950: 239 244 250;
+    --surface-900: 244 247 251;
+    --surface-950: 231 238 247;
 
     --accent: 88 80 220;
     --accent-soft: 76 66 190;
@@ -68,7 +68,7 @@
     --hover-overlay: 28 38 60;
     --hover-overlay-strength: 0.05;
     /* Light-mode popover: match the page background, slight elevation via shadow */
-    --popover-surface: 252 253 255;
+    --popover-surface: 244 247 251;
     --popover-border: 57 74 103 / 0.36;
 
     --scrollbar-track: #d8e0ee;
@@ -111,7 +111,7 @@
     border-color: rgb(var(--border-default));
   }
   :root.light .plugin-card-active {
-    background: rgb(244 242 255);
+    background: rgb(237 234 251);
     border-color: rgb(var(--accent) / 0.55);
   }
   :root.light .text-surface-200\/30 { color: rgb(var(--surface-200) / 0.68); }
