@@ -4,7 +4,7 @@ from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -110,6 +110,16 @@ async def call_history(
         )
         for call in result.scalars()
     ]
+
+
+@router.delete("/calls/history")
+async def clear_call_history(
+    db: AsyncSession = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    await db.execute(delete(CallLog).where(CallLog.account_id == user["account_id"]))
+    await db.commit()
+    return {"status": "deleted"}
 
 
 @router.delete("/calls/log/{log_id}")
