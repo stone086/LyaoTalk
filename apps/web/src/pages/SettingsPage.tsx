@@ -112,11 +112,15 @@ function ShareQr({
           <div className="text-xs font-semibold text-surface-50">{title}</div>
           <div className="text-[11px] text-surface-200/45 leading-relaxed">{description}</div>
         </div>
-        <div className="font-mono text-[11px] text-surface-200/60 break-all">{copyText}</div>
-        <button onClick={copy} className="btn-ghost text-xs py-1.5 px-2.5 flex items-center gap-1.5 self-start">
-          {copied ? <Check size={12} /> : <Copy size={12} />}
-          {copied ? t("settings.copied") : t("common.copy")}
-        </button>
+        <div className="font-mono text-[11px] text-surface-200/60 break-all">
+          {copyText}
+          <button type="button" onClick={copy}
+            aria-label={copied ? t("settings.copied") : t("common.copy")}
+            title={copied ? t("settings.copied") : t("common.copy")}
+            className="inline-flex align-middle ml-1 rounded p-1 text-surface-200/70 hover:text-surface-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+            {copied ? <Check size={12} /> : <Copy size={12} />}
+          </button>
+        </div>
       </div>
     </div>
   );
