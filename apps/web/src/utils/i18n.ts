@@ -222,6 +222,8 @@ const enUS = {
 
     "conv.title": "Conversations",
     "conv.empty": "No conversations yet",
+    "conv.startChat": "Start a chat",
+    "conv.newAction": "New",
     "conv.noMessages": "No messages yet",
     "conv.draft": "Draft:",
     "conv.deleteConversation": "Delete conversation",
@@ -252,6 +254,9 @@ const enUS = {
 
     "settings.title": "Settings",
     "settings.subtitle": "Manage accounts and preferences",
+    "settings.groupAccount": "Account & security",
+    "settings.groupMessaging": "Messages & alerts",
+    "settings.groupAppearance": "Look & language",
     "settings.accounts": "XMPP Accounts",
     "settings.addAccount": "Add Account",
     "settings.addNewAccount": "Add new account",
@@ -721,6 +726,8 @@ const zhCN: Record<MessageKey, string> = {
 
     "conv.title": "会话",
     "conv.empty": "暂无会话",
+    "conv.startChat": "开始聊天",
+    "conv.newAction": "新建",
     "conv.noMessages": "暂无消息",
     "conv.draft": "草稿：",
     "conv.deleteConversation": "删除会话",
@@ -751,6 +758,9 @@ const zhCN: Record<MessageKey, string> = {
 
     "settings.title": "设置",
     "settings.subtitle": "管理账号与偏好配置",
+    "settings.groupAccount": "账号与安全",
+    "settings.groupMessaging": "消息与通知",
+    "settings.groupAppearance": "外观与语言",
     "settings.accounts": "XMPP 账号",
     "settings.addAccount": "添加账号",
     "settings.addNewAccount": "添加新账号",

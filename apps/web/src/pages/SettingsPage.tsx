@@ -407,6 +407,7 @@ function AccountCard({ account }: { account: XmppAccount }) {
 }
 
 export default function SettingsPage() {
+  const [settingsGroup, setSettingsGroup] = useState<"account" | "messaging" | "appearance">("account");
   const { t } = useLanguage();
   const accounts = useAccountStore((s) => s.accounts);
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
@@ -624,8 +625,22 @@ export default function SettingsPage() {
           <p className="text-sm text-surface-200/50 mt-1">{t("settings.subtitle")}</p>
         </div>
 
+        <nav className="grid grid-cols-3 gap-1 rounded-xl border border-subtle bg-surface-900/60 p-1" aria-label={t("settings.title")}>
+          {([
+            { id: "account" as const, label: t("settings.groupAccount") },
+            { id: "messaging" as const, label: t("settings.groupMessaging") },
+            { id: "appearance" as const, label: t("settings.groupAppearance") },
+          ]).map(({ id, label }) => (
+            <button key={id} type="button" onClick={() => setSettingsGroup(id)} aria-pressed={settingsGroup === id}
+              className={clsx("rounded-lg px-2 py-2.5 text-xs sm:text-sm font-medium transition-colors",
+                settingsGroup === id ? "bg-accent/15 text-accent-soft" : "text-surface-200/60 hover-surface")}>
+              {label}
+            </button>
+          ))}
+        </nav>
+
         {/* Accounts section */}
-        <section>
+        <section className={settingsGroup === "account" ? "" : "hidden"}>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-surface-200 uppercase tracking-wide">
               {t("settings.accounts")}
@@ -661,7 +676,7 @@ export default function SettingsPage() {
         </section>
 
         {/* Appearance */}
-        <section>
+        <section className={settingsGroup === "appearance" ? "" : "hidden"}>
           <h2 className="text-sm font-semibold text-surface-200 uppercase tracking-wide mb-3">
             {t("settings.appearance")}
           </h2>
@@ -713,7 +728,7 @@ export default function SettingsPage() {
         </section>
 
         {/* Notifications */}
-        <section>
+        <section className={settingsGroup === "messaging" ? "" : "hidden"}>
           <h2 className="text-sm font-semibold text-surface-200 uppercase tracking-wide mb-3">
             {t("settings.notifications")}
           </h2>
@@ -778,7 +793,7 @@ export default function SettingsPage() {
         </section>
 
         {/* Message history */}
-        <section>
+        <section className={settingsGroup === "messaging" ? "" : "hidden"}>
           <h2 className="text-sm font-semibold text-surface-200 uppercase tracking-wide mb-3">
             {t("settings.history")}
           </h2>
@@ -805,7 +820,7 @@ export default function SettingsPage() {
         </section>
 
         {/* OMEMO */}
-        <section>
+        <section className={settingsGroup === "account" ? "" : "hidden"}>
           <h2 className="text-sm font-semibold text-surface-200 uppercase tracking-wide mb-3">
             {t("settings.omemo")}
           </h2>
