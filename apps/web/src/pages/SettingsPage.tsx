@@ -5,7 +5,7 @@ import { getAccountPassword, normalizeAccountJid, setAccountPassword, useAccount
 import { createClient, destroyClient } from "@/services/xmppAdapter";
 import { getClient } from "@/services/xmppAdapter";
 import { initXmppBridge } from "@/services/xmppBridge";
-import { Trash2, Plus, Wifi, WifiOff, Copy, Check, QrCode, ImagePlus } from "lucide-react";
+import { Trash2, Plus, Wifi, WifiOff, Copy, Check, QrCode, MoreHorizontal } from "lucide-react";
 import toast from "react-hot-toast";
 import { clsx } from "clsx";
 import { applyTheme, getStoredTheme, ThemeMode } from "@/utils/theme";
@@ -96,7 +96,7 @@ function ShareQr({
   };
 
   return (
-    <div className="min-w-0 rounded-lg border-default bg-surface-800/40 p-3 flex flex-col sm:flex-row gap-3 overflow-hidden">
+    <div className="min-w-0 rounded-lg border-default bg-surface-800/40 p-3 flex flex-col gap-3 overflow-hidden">
       <div className="w-36 h-36 shrink-0 rounded-md bg-white flex items-center justify-center">
         <canvas
           ref={qrCanvasRef}
@@ -132,6 +132,10 @@ function AccountCard({ account }: { account: XmppAccount }) {
   const [connecting, setConnecting] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [avatarSaving, setAvatarSaving] = useState(false);
+  const [shareMenuOpen, setShareMenuOpen] = useState(false);
+  const [selectedShare, setSelectedShare] = useState<"contact" | "invite" | null>(null);
+  const shareMenuRef = useRef<HTMLDivElement | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const [statusText, setStatusText] = useState(account.statusText ?? "");
   const bareJid = account.jid.split("/")[0].trim().toLowerCase();
   const accountDomain = bareJid.split("@")[1] ?? account.domain;
@@ -154,6 +158,22 @@ function AccountCard({ account }: { account: XmppAccount }) {
     { value: "dnd", label: t("presence.dnd"), color: "bg-danger" },
     { value: "unavailable", label: t("presence.offline"), color: "bg-surface-200/40" },
   ];
+
+  useEffect(() => {
+    if (!shareMenuOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!shareMenuRef.current?.contains(event.target as Node)) setShareMenuOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShareMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [shareMenuOpen]);
 
   const connect = async () => {
     setConnecting(true);
@@ -246,13 +266,16 @@ function AccountCard({ account }: { account: XmppAccount }) {
   return (
     <div className="glass rounded-xl p-4 flex flex-col gap-3">
       <div className="flex items-center gap-3">
-        <Avatar name={account.displayName ?? account.jid} src={account.avatarUrl} size="md" presence={account.presence} />
-        <label className={clsx("btn-ghost text-xs flex items-center gap-1 cursor-pointer", (!account.connected || avatarSaving) && "opacity-50 pointer-events-none")}>
-          <ImagePlus size={14} /> {avatarSaving ? label("上传中", "Uploading") : label("更换头像", "Change avatar")}
-          <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only"
-            disabled={!account.connected || avatarSaving}
-            onChange={(event) => { void changeAvatar(event.target.files?.[0]); event.target.value = ""; }} />
-        </label>
+        <button type="button" onClick={() => avatarInputRef.current?.click()}
+          disabled={!account.connected || avatarSaving}
+          aria-label={label("更换头像", "Change avatar")}
+          title={label("更换头像", "Change avatar")}
+          className="shrink-0 rounded-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
+          <Avatar name={account.displayName ?? account.jid} src={account.avatarUrl} size="md" presence={account.presence} />
+        </button>
+        <input ref={avatarInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
+          disabled={!account.connected || avatarSaving}
+          onChange={(event) => { void changeAvatar(event.target.files?.[0]); event.target.value = ""; }} />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-surface-50 truncate">
             {account.displayName ?? account.jid.split("@")[0]}
@@ -264,6 +287,35 @@ function AccountCard({ account }: { account: XmppAccount }) {
             ? <span className="text-[10px] text-success font-medium flex items-center gap-1"><Wifi size={10}/> {t("account.online")}</span>
             : <span className="text-[10px] text-surface-200/40 flex items-center gap-1"><WifiOff size={10}/> {t("account.offline")}</span>
           }
+          <div ref={shareMenuRef} className="relative">
+            <button type="button" onClick={() => { setShareMenuOpen((open) => !open); setSelectedShare(null); }}
+              aria-label={label("分享选项", "Share options")}
+              aria-expanded={shareMenuOpen}
+              title={label("分享选项", "Share options")}
+              className="btn-ghost p-1.5 rounded-lg text-surface-200/70 hover:text-surface-50">
+              <MoreHorizontal size={18} />
+            </button>
+            {shareMenuOpen && (
+              <div className="absolute right-0 top-full z-30 mt-2 w-[min(21rem,calc(100vw-3rem))] rounded-xl border border-default bg-surface-900 p-2 shadow-2xl">
+                <button type="button" onClick={() => setSelectedShare("contact")}
+                  className={clsx("w-full rounded-lg px-3 py-2 text-left text-xs text-surface-50 hover:bg-surface-800", selectedShare === "contact" && "bg-surface-800")}>
+                  {label("添加我为联系人", "Add me as a contact")}
+                </button>
+                <button type="button" onClick={() => setSelectedShare("invite")}
+                  className={clsx("w-full rounded-lg px-3 py-2 text-left text-xs text-surface-50 hover:bg-surface-800", selectedShare === "invite" && "bg-surface-800")}>
+                  {label("邀请加入此服务器", "Invite to this server")}
+                </button>
+                {selectedShare === "contact" && <div className="mt-2"><ShareQr
+                  title={label("添加我为联系人", "Add me as a contact")}
+                  description={label("联系人扫描后会打开 Lyao Talk 并添加你的 XMPP 地址。", "Scan to open Lyao Talk and add this XMPP address.")}
+                  payload={contactUrl} copyText={bareJid} /></div>}
+                {selectedShare === "invite" && <div className="mt-2"><ShareQr
+                  title={label("邀请加入此服务器", "Invite to this server")}
+                  description={label("新用户扫描后打开登录页，并自动使用当前服务器域名。", "Scan to open login with this server domain.")}
+                  payload={inviteUrl} copyText={inviteUrl} /></div>}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -313,21 +365,6 @@ function AccountCard({ account }: { account: XmppAccount }) {
         >
           {t("common.apply")}
         </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <ShareQr
-          title={label("添加我为联系人", "Add me as a contact")}
-          description={label("联系人扫描后会打开 Lyao Talk 并添加你的 XMPP 地址。", "Scan to open Lyao Talk and add this XMPP address.")}
-          payload={contactUrl}
-          copyText={bareJid}
-        />
-        <ShareQr
-          title={label("邀请加入此服务器", "Invite to this server")}
-          description={label("新用户扫描后打开登录页，并自动使用当前服务器域名。", "Scan to open login with this server domain.")}
-          payload={inviteUrl}
-          copyText={inviteUrl}
-        />
       </div>
 
       <div className="flex gap-2">
