@@ -249,8 +249,8 @@ function AccountCard({ account }: { account: XmppAccount }) {
     if (!client?.connected) { toast.error(t("toast.connectionFailed")); return; }
     setAvatarSaving(true);
     try {
-      const { bytes, dataUrl } = await prepareAvatarImage(file);
-      await client.publishPepAvatar(bytes, "image/jpeg", 192, 192);
+      const { bytes, dataUrl, width, height } = await prepareAvatarImage(file);
+      await client.publishPepAvatar(bytes, "image/jpeg", width, height);
       updateAvatar(account.id, dataUrl);
       toast.success(label("头像已更新", "Avatar updated"));
     } catch (error: any) {
