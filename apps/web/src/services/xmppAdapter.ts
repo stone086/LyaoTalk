@@ -1875,21 +1875,28 @@ export class XmppClient {
         .c("pubsub", { xmlns: "http://jabber.org/protocol/pubsub" })
         .c("items", { node: "urn:xmpp:avatar:metadata" });
       this._connection.sendIQ(metaIq.tree(), (metaResult: Element) => {
-        const info = metaResult.querySelector("metadata info");
+        const info = metaResult.getElementsByTagName("info")[0];
         const hash = info?.getAttribute("id");
         const mime = info?.getAttribute("type") ?? "image/png";
         if (!hash) { resolve(null); return; }
 
-        // Then fetch data by hash
-        const dataIq = this._$iq({ type: "get", to: peerJid })
-          .c("pubsub", { xmlns: "http://jabber.org/protocol/pubsub" })
-          .c("items", { node: "urn:xmpp:avatar:data" })
-          .c("item", { id: hash });
-        this._connection.sendIQ(dataIq.tree(), (dataResult: Element) => {
-          const dataB64 = dataResult.querySelector("data")?.textContent?.trim();
-          if (!dataB64) { resolve(null); return; }
-          resolve(`data:${mime};base64,${dataB64}`);
-        }, () => resolve(null));
+        const fetchData = (itemId?: string) => {
+          if (!this._connection || !this._connected) { resolve(null); return; }
+          const dataIq = this._$iq({ type: "get", to: peerJid })
+            .c("pubsub", { xmlns: "http://jabber.org/protocol/pubsub" })
+            .c("items", { node: "urn:xmpp:avatar:data" });
+          if (itemId) dataIq.c("item", { id: itemId });
+          this._connection.sendIQ(dataIq.tree(), (dataResult: Element) => {
+            const dataB64 = dataResult.getElementsByTagName("data")[0]?.textContent?.trim();
+            if (dataB64) resolve(`data:${mime};base64,${dataB64}`);
+            else if (itemId) fetchData();
+            else resolve(null);
+          }, () => {
+            if (itemId) fetchData();
+            else resolve(null);
+          });
+        };
+        fetchData(hash);
       }, () => resolve(null));
     });
   }
