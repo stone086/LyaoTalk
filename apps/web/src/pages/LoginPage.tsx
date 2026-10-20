@@ -261,8 +261,8 @@ export default function LoginPage() {
 
   return (
     <div className="login-page min-h-screen flex items-center justify-center bg-surface-950 px-4 py-8 sm:py-12">
-      <div className="w-full max-w-md">
-        <div className="mb-6 flex flex-col items-center text-center">
+      <div className="w-full max-w-[400px]">
+        <div className="mb-5 flex flex-col items-center text-center">
           <img src="/app-logo.png" alt="LyaoTalk" className="mb-4 h-[120px] w-[120px] rounded-2xl object-cover" />
           <h1 className="text-base text-surface-100 sm:text-lg">{t("login.connectAccount")}</h1>
         </div>
@@ -271,9 +271,9 @@ export default function LoginPage() {
             {t("login.inviteHint").replace("{domain}", inviteDomain)}
           </div>
         )}
-        <div className="login-shell rounded-[28px] px-5 py-7 shadow-xl sm:px-8 sm:py-8">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
+        <div className="login-shell rounded-[28px] px-5 py-7 shadow-xl sm:flex sm:aspect-[3/2] sm:items-center sm:px-6 sm:py-6">
+          <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4 sm:gap-3">
+            <div className="flex flex-col gap-2 sm:gap-1.5">
               <label htmlFor="login-username" className="text-sm font-medium text-surface-100 sm:text-base">{t("login.username")}</label>
               <div className="login-input flex w-full items-center gap-2 rounded-xl px-4">
                 <input
@@ -293,7 +293,7 @@ export default function LoginPage() {
                 {loginDomain && <span className="shrink-0 whitespace-nowrap text-sm text-surface-100">@{loginDomain}</span>}
               </div>
             </div>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 sm:gap-1.5">
               <label htmlFor="login-password" className="text-sm font-medium text-surface-100 sm:text-base">{t("login.password")}</label>
               <div className="relative">
                 <input type={showPass ? "text" : "password"} value={form.password}
@@ -310,15 +310,15 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              <button type="submit" disabled={loading || registering} className="btn-primary h-12 rounded-xl flex items-center justify-center gap-2">
+            <div className="mt-2 grid grid-cols-2 gap-3 sm:mt-1">
+              <button type="submit" disabled={loading || registering} className="btn-primary h-12 rounded-xl flex items-center justify-center gap-2 sm:h-11">
                 {loading ? (<><span className="w-4 h-4 border-2 border-default border-t-white rounded-full animate-spin" />{t("login.connecting")}</>) : (<><Wifi size={16} />{t("login.connect")}</>)}
               </button>
               <button
                 type="button"
                 disabled={loading || registering}
                 onClick={handleRegister}
-                className="login-secondary h-12 rounded-xl text-surface-50 font-semibold flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="login-secondary h-12 rounded-xl text-surface-50 font-semibold flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed sm:h-11"
               >
                 <UserPlus size={16} />
                 {registering ? t("login.registering") : t("login.register")}
