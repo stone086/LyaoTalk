@@ -13,6 +13,7 @@ import { destroyClient } from "@/services/xmppAdapter";
 import { markIntentionalDisconnect, unsuperviseConnection } from "@/services/connectionSupervisor";
 import { useReconnectStore } from "@/stores/reconnectStore";
 import { useChatStore } from "@/stores/chatStore";
+import { safeImageSrc } from "@/utils/urlSafety";
 
 const navItems = [
   { to: "/", icon: MessageSquare, key: "nav.chats", end: true },
@@ -127,6 +128,11 @@ export default function Sidebar() {
           >
             <div className={clsx("w-full h-full rounded-xl bg-surface-800 flex items-center justify-center text-surface-200 text-xs font-semibold uppercase", acc.id !== activeId && "opacity-60")}>
               {(acc.displayName ?? acc.jid)[0]}
+              {safeImageSrc(acc.avatarUrl) && (
+                <img key={acc.avatarUrl} src={safeImageSrc(acc.avatarUrl)!} alt=""
+                  className="absolute inset-0 w-full h-full rounded-xl object-cover"
+                  onError={(event) => { event.currentTarget.style.display = "none"; }} />
+              )}
             </div>
             {(unreadByAccount[acc.id] ?? 0) > 0 && (
               <span className="absolute -left-2 -top-2 z-10 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-surface-950" aria-label={`${unreadByAccount[acc.id]} ${t("chat.unread")}`}>
