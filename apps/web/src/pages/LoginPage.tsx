@@ -295,16 +295,16 @@ export default function LoginPage() {
             </div>
             <div className="flex flex-col gap-2">
               <label htmlFor="login-password" className="text-sm font-medium text-surface-100 sm:text-base">{t("login.password")}</label>
-              <div className="flex gap-2">
+              <div className="relative">
                 <input type={showPass ? "text" : "password"} value={form.password}
                   id="login-password"
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  placeholder={t("login.password")} className="login-input min-w-0 flex-1 rounded-xl px-4 text-base text-surface-50 placeholder:text-surface-200/70" required
+                  placeholder={t("login.password")} className="login-input w-full min-w-0 rounded-xl pl-4 pr-12 text-base text-surface-50 placeholder:text-surface-200/70" required
                   autoComplete="current-password"
                   spellCheck={false}
                 />
                 <button type="button" onClick={() => setShowPass(!showPass)}
-                  className="login-eye flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-surface-100 hover:text-surface-50"
+                  className="absolute inset-y-0 right-1 flex w-10 items-center justify-center rounded-lg text-surface-100 hover:text-surface-50 focus-visible:outline-2 focus-visible:outline-accent"
                   aria-label={showPass ? t("login.hidePassword") : t("login.showPassword")}>
                   {showPass ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
