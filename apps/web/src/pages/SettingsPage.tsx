@@ -71,7 +71,7 @@ function ShareQr({
     QRCode.toCanvas(canvas, payload, {
       errorCorrectionLevel: "M",
       margin: 2,
-      width: 144,
+      width: 112,
       color: { dark: "#0f172a", light: "#ffffff" },
     })
       .then(() => {
@@ -96,8 +96,8 @@ function ShareQr({
   };
 
   return (
-    <div className="min-w-0 rounded-lg border-default bg-surface-800/40 p-3 flex flex-col gap-3 overflow-hidden">
-      <div className="w-36 h-36 shrink-0 rounded-md bg-white flex items-center justify-center">
+    <div className="min-w-0 rounded-lg border-default bg-surface-800/40 p-2 flex items-start gap-2 overflow-hidden">
+      <div className="w-28 h-28 shrink-0 rounded-md bg-white flex items-center justify-center">
         <canvas
           ref={qrCanvasRef}
           aria-label={title}
@@ -107,12 +107,9 @@ function ShareQr({
           <QrCode size={28} className="text-surface-900" />
         )}
       </div>
-      <div className="min-w-0 flex-1 flex flex-col gap-2">
-        <div>
-          <div className="text-xs font-semibold text-surface-50">{title}</div>
-          <div className="text-[11px] text-surface-200/45 leading-relaxed">{description}</div>
-        </div>
-        <div className="font-mono text-[11px] text-surface-200/60 break-all">
+      <div className="min-w-0 flex-1 flex flex-col gap-1">
+        <div className="text-[10px] text-surface-200/45 leading-snug">{description}</div>
+        <div className="font-mono text-[10px] leading-snug text-surface-200/60 break-all">
           {copyText}
           <button type="button" onClick={copy}
             aria-label={copied ? t("settings.copied") : t("common.copy")}
@@ -311,14 +308,16 @@ function AccountCard({ account }: { account: XmppAccount }) {
             </button>
             {shareMenuOpen && (
               <div className="absolute right-0 top-full z-30 mt-2 w-[min(21rem,calc(100vw-3rem))] rounded-xl border border-default bg-surface-900 p-2 shadow-2xl">
-                <button type="button" onClick={() => setSelectedShare("contact")}
-                  className={clsx("w-full rounded-lg px-3 py-2 text-left text-xs text-surface-50 hover:bg-surface-800", selectedShare === "contact" && "bg-surface-800")}>
-                  {label("添加我为联系人", "Add me as a contact")}
-                </button>
-                <button type="button" onClick={() => setSelectedShare("invite")}
-                  className={clsx("w-full rounded-lg px-3 py-2 text-left text-xs text-surface-50 hover:bg-surface-800", selectedShare === "invite" && "bg-surface-800")}>
-                  {label("邀请加入此服务器", "Invite to this server")}
-                </button>
+                <div className="flex gap-1">
+                  <button type="button" onClick={() => setSelectedShare("contact")}
+                    className={clsx("min-w-0 flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] leading-tight text-surface-50 hover:bg-surface-800", selectedShare === "contact" && "bg-surface-800")}>
+                    {label("添加我为联系人", "Add me as a contact")}
+                  </button>
+                  <button type="button" onClick={() => setSelectedShare("invite")}
+                    className={clsx("min-w-0 flex-1 rounded-lg px-2 py-1.5 text-center text-[11px] leading-tight text-surface-50 hover:bg-surface-800", selectedShare === "invite" && "bg-surface-800")}>
+                    {label("邀请加入此服务器", "Invite to this server")}
+                  </button>
+                </div>
                 {selectedShare === "contact" && <div className="mt-2"><ShareQr
                   title={label("添加我为联系人", "Add me as a contact")}
                   description={label("联系人扫描后会打开 Lyao Talk 并添加你的 XMPP 地址。", "Scan to open Lyao Talk and add this XMPP address.")}
