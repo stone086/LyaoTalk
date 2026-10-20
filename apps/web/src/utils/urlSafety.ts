@@ -29,6 +29,8 @@ const HREF_ALLOWED = /^(https?:|mailto:|tel:|xmpp:)/i;
 // EXCLUDED because SVG can carry executable script.
 const IMAGE_SRC_ALLOWED = /^(https?:|blob:)/i;
 const SAFE_DATA_IMAGE = /^data:image\/(png|jpe?g|gif|webp|x-icon|vnd\.microsoft\.icon)[;,]/i;
+const BASE64_DATA_IMAGE = /^data:(image\/(?:png|jpe?g|gif|webp|x-icon|vnd\.microsoft\.icon));base64,([A-Za-z0-9+/=]+)$/i;
+const dataImageBlobUrls = new Map<string, string>();
 
 /**
  * Sanitize a URL intended for `<a href>`. Returns the URL if safe, or null
@@ -62,6 +64,23 @@ export function safeImageSrc(url: string | null | undefined): string | null {
   // Allow data: URLs only for raster image MIME types (never SVG which can
   // contain script). The MIME type comes from the URL itself but we still
   // catch the highest-risk cases.
-  if (SAFE_DATA_IMAGE.test(trimmed)) return trimmed;
+  if (SAFE_DATA_IMAGE.test(trimmed)) {
+    // The site's CSP deliberately excludes data: images. Convert only safe
+    // raster data URLs to blob: URLs, which img-src permits.
+    if (trimmed.length > 4_000_000 || typeof URL.createObjectURL !== "function") return null;
+    const cached = dataImageBlobUrls.get(trimmed);
+    if (cached) return cached;
+    const match = BASE64_DATA_IMAGE.exec(trimmed);
+    if (!match) return null;
+    try {
+      const binary = atob(match[2]);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      const blobUrl = URL.createObjectURL(new Blob([bytes], { type: match[1].toLowerCase() }));
+      dataImageBlobUrls.set(trimmed, blobUrl);
+      return blobUrl;
+    } catch {
+      return null;
+    }
+  }
   return null;
 }
