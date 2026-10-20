@@ -7,7 +7,7 @@ import { markIntentionalDisconnect } from "@/services/connectionSupervisor";
 import { accountsApi, authApi, setUserToken, setUserRefreshToken, clearUserToken } from "@/services/api";
 import { apiSocket } from "@/services/apiSocket";
 import toast from "react-hot-toast";
-import { Wifi, Lock, User, Eye, EyeOff, UserPlus } from "lucide-react";
+import { Wifi, Eye, EyeOff, UserPlus, MessagesSquare } from "lucide-react";
 import { useLanguage } from "@/utils/i18n";
 import { requireLocalXmppAccount } from "@/services/localXmppAccount";
 import { restoreLocalAccountHistory } from "@/services/localDb";
@@ -260,31 +260,30 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-surface-950 bg-[radial-gradient(ellipse_at_top,rgba(124,106,247,0.08),transparent_60%)]">
-      <div className="w-full max-w-md px-4">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-32 h-32 rounded-3xl bg-accent/10 border border-accent/20 mb-4 overflow-hidden">
-            <img src="/lyaotalk-original-icon.png" alt="Lyao Talk" className="w-full h-full object-cover" />
+    <div className="login-page min-h-screen flex items-center justify-center bg-surface-950 px-4 py-8 sm:py-12">
+      <div className="w-full max-w-xl">
+        <div className="login-shell rounded-[28px] px-6 py-9 shadow-xl sm:px-10 sm:py-11">
+          <div className="mb-9 flex flex-col items-center text-center sm:mb-10">
+            <MessagesSquare size={40} strokeWidth={2.1} className="mb-6 text-surface-50" aria-hidden="true" />
+            <h1 className="text-3xl font-bold tracking-tight text-surface-50 sm:text-4xl">LyaoTalk</h1>
+            <p className="mt-2 text-base text-surface-100 sm:text-lg">{t("login.connectAccount")}</p>
           </div>
-        </div>
-        <div className="glass rounded-2xl p-8 shadow-2xl">
-          <h2 className="text-lg font-semibold text-surface-50 mb-6">{t("login.connectAccount")}</h2>
           {inviteDomain && (
             <div className="mb-4 rounded-xl border border-accent/20 bg-accent/10 px-3 py-2 text-xs text-surface-100">
               {t("login.inviteHint").replace("{domain}", inviteDomain)}
             </div>
           )}
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-surface-200/70 uppercase tracking-wide">{t("login.username")}</label>
-              <div className="relative">
-                <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-200/30" />
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="login-username" className="text-sm font-medium text-surface-100 sm:text-base">{t("login.username")}</label>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <input
+                  id="login-username"
                   type="text"
                   value={form.jid}
                   onChange={(e) => setForm({ ...form, jid: e.target.value.split("@")[0] })}
                   placeholder={t("login.username")}
-                  className="input-field pl-9"
+                  className="login-input min-w-0 w-full flex-1 rounded-xl px-4 text-base text-surface-50 placeholder:text-surface-200/70"
                   required
                   autoFocus
                   autoComplete="username"
@@ -292,33 +291,35 @@ export default function LoginPage() {
                   autoCorrect="off"
                   spellCheck={false}
                 />
+                {loginDomain && <span className="shrink-0 text-sm text-surface-100 sm:text-base">@{loginDomain}</span>}
               </div>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-surface-200/70 uppercase tracking-wide">{t("login.password")}</label>
-              <div className="relative">
-                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-200/30" />
+            <div className="flex flex-col gap-2">
+              <label htmlFor="login-password" className="text-sm font-medium text-surface-100 sm:text-base">{t("login.password")}</label>
+              <div className="flex gap-2">
                 <input type={showPass ? "text" : "password"} value={form.password}
+                  id="login-password"
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  placeholder="********" className="input-field pl-9 pr-10" required
+                  placeholder={t("login.password")} className="login-input min-w-0 flex-1 rounded-xl px-4 text-base text-surface-50 placeholder:text-surface-200/70" required
                   autoComplete="current-password"
                   spellCheck={false}
                 />
                 <button type="button" onClick={() => setShowPass(!showPass)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-200/30 hover:text-surface-200">
-                  {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                  className="login-eye flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-surface-100 hover:text-surface-50"
+                  aria-label={showPass ? t("login.hidePassword") : t("login.showPassword")}>
+                  {showPass ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
             </div>
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              <button type="submit" disabled={loading || registering} className="btn-primary flex items-center justify-center gap-2">
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <button type="submit" disabled={loading || registering} className="btn-primary h-12 rounded-xl flex items-center justify-center gap-2">
                 {loading ? (<><span className="w-4 h-4 border-2 border-default border-t-white rounded-full animate-spin" />{t("login.connecting")}</>) : (<><Wifi size={16} />{t("login.connect")}</>)}
               </button>
               <button
                 type="button"
                 disabled={loading || registering}
                 onClick={handleRegister}
-                className="h-12 rounded-xl border border-surface-100/20 bg-surface-900/40 text-surface-50 font-semibold flex items-center justify-center gap-2 hover:bg-surface-900/60 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="login-secondary h-12 rounded-xl text-surface-50 font-semibold flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <UserPlus size={16} />
                 {registering ? t("login.registering") : t("login.register")}
@@ -378,7 +379,7 @@ export default function LoginPage() {
             </div>
           )}
         </div>
-        <p className="text-center text-xs text-surface-200/20 mt-6">Lyao Talk · Open Source · v{__APP_VERSION__}</p>
+        <p className="text-center text-xs text-surface-200/70 mt-5">Lyao Talk · Open Source · v{__APP_VERSION__}</p>
       </div>
     </div>
   );
