@@ -7,6 +7,13 @@ src=/opt/lyaotalk-src
 releases=/opt/lyaotalk-releases
 current=/opt/lyaotalk-current
 push_module=/usr/lib/prosody-modules/mod_lyaotalk_push.lua
+service_override=/etc/systemd/system/lyaotalk-api.service.d/30-release-venv.conf
+default_venv=/opt/lyaotalk-venv
+active_venv="$default_venv"
+if [[ -f "$service_override" ]]; then
+  active_venv="$(sed -n 's|^ExecStart=\(/opt/lyaotalk-venv-[^/]*\)/bin/uvicorn .*|\1|p' "$service_override" | tail -n 1)"
+  [[ -n "$active_venv" ]] || { echo "Unexpected API venv override" >&2; exit 1; }
+fi
 sha="${1:-}"
 
 [[ "$(id -u)" -eq 0 ]] || { echo "Run as root" >&2; exit 1; }
@@ -32,10 +39,16 @@ luac -p "$target/configs/prosody/mod_lyaotalk_push.lua"
 cp -p "$push_module" "$target/.previous-push-module.lua"
 
 # A shared venv can serve either release only when package requirements match.
+release_venv="$active_venv"
+venv_changed=false
 if ! diff -q <(grep -v '^[[:space:]]*#' "$previous/apps/api/requirements.txt") \
              <(grep -v '^[[:space:]]*#' "$target/apps/api/requirements.txt") >/dev/null; then
-  echo "Python requirements changed; prepare a new venv before deployment" >&2
-  exit 1
+  release_venv="/opt/lyaotalk-venv-$sha"
+  [[ -x "$release_venv/bin/python" && -x "$release_venv/bin/alembic" && -x "$release_venv/bin/uvicorn" ]] || {
+    echo "Python requirements changed; prepare $release_venv before deployment" >&2; exit 1;
+  }
+  "$release_venv/bin/python" -m pip check
+  venv_changed=true
 fi
 
 npm --prefix "$target/apps/web" ci --no-audit --no-fund
@@ -46,16 +59,28 @@ npm --prefix "$target/apps/web" run build
 systemd-run --wait --collect --pipe \
   --property=EnvironmentFile=/etc/lyaotalk/api.env \
   --property=WorkingDirectory="$target/apps/api" \
-  /opt/lyaotalk-venv/bin/alembic upgrade head
+  "$release_venv/bin/alembic" upgrade head
 
 # Older release hosts run the API with ProtectSystem=strict but without a
 # writable private /tmp. Starlette's multipart parser rolls uploads to a
 # temporary file above 1 MiB and otherwise returns HTTP 400 before auth.
 install -d -m 755 /etc/systemd/system/lyaotalk-api.service.d
 printf '[Service]\nPrivateTmp=yes\n' > /etc/systemd/system/lyaotalk-api.service.d/20-private-tmp.conf
+previous_override="$(mktemp)"
+override_existed=false
+if [[ -f "$service_override" ]]; then
+  cp -p "$service_override" "$previous_override"
+  override_existed=true
+fi
 systemctl daemon-reload
 
 rollback() {
+  if [[ "$override_existed" == true ]]; then
+    cp -p "$previous_override" "$service_override"
+  else
+    rm -f "$service_override"
+  fi
+  systemctl daemon-reload
   ln -s "$previous" "$current.rollback"
   mv -Tf "$current.rollback" "$current"
   install -m 644 "$target/.previous-push-module.lua" "$push_module"
@@ -64,6 +89,10 @@ rollback() {
   echo "Release rollback restored $previous; inspect database migration compatibility" >&2
 }
 trap rollback ERR
+if [[ "$venv_changed" == true ]]; then
+  printf '[Service]\nExecStart=\nExecStart=%s/bin/uvicorn app.main:app --host 127.0.0.1 --port 18000 --workers 2 --proxy-headers --forwarded-allow-ips 127.0.0.1\n' "$release_venv" > "$service_override"
+  systemctl daemon-reload
+fi
 ln -s "$target" "$current.next"
 mv -Tf "$current.next" "$current"
 install -m 644 "$target/configs/prosody/mod_lyaotalk_push.lua" "$push_module"
@@ -93,4 +122,5 @@ rm -f "$probe_file"
 [[ "$probe_status" == 401 ]] || { echo "Multipart upload smoke check failed: HTTP $probe_status" >&2; exit 1; }
 
 trap - ERR
+rm -f "$previous_override"
 printf 'Deployed LyaoTalk %s; LyaoTalk services healthy\n' "$sha"
