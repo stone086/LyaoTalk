@@ -284,7 +284,7 @@ function MessageBubble({
             <MoreVertical size={13} />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-7 z-20 w-[8.5rem] rounded-lg border-default bg-surface-900 shadow-xl p-1">
+            <div className={clsx("absolute top-7 z-20 w-[8.5rem] rounded-lg border-default bg-surface-900 p-1 shadow-xl", isOwn ? "left-0" : "right-0")}>
               <button onClick={() => { onToggleStar(msg); setMenuOpen(false); }} className="w-full text-left text-xs px-2 py-1.5 hover-surface rounded flex items-center gap-2">
                 <Star size={12} /> {msg.starred ? "Unstar" : "Star"}
               </button>
