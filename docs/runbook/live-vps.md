@@ -26,7 +26,11 @@ LyaoTalk services. It updates the Prosody push module and restores the previous 
 the post-switch checks fail. The GitHub manual VPS release workflow uses the
 same deploy script.
 Python requirement changes require a separately prepared virtual environment;
-the deploy script stops before switching releases in that case.
+the deploy script expects `/opt/lyaotalk-venv-<git-sha>` with the new locked
+requirements installed and `pip check` passing. It switches the API service
+to that environment with a systemd drop-in when the release is activated, and
+restores the prior drop-in if the release checks fail. Keep the previous
+environment for rollback.
 
 ## Check and recover
 
