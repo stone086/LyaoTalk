@@ -264,7 +264,7 @@ function AccountCard({ account }: { account: XmppAccount }) {
   }
 
   return (
-    <div className="glass rounded-xl p-4 flex flex-col gap-3">
+    <div className={clsx("glass relative rounded-xl p-4 flex flex-col gap-3", shareMenuOpen && "z-20")}>
       <div className="flex items-center gap-3">
         <button type="button" onClick={() => avatarInputRef.current?.click()}
           disabled={!account.connected || avatarSaving}
