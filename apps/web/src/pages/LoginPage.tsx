@@ -7,7 +7,7 @@ import { markIntentionalDisconnect } from "@/services/connectionSupervisor";
 import { accountsApi, authApi, setUserToken, setUserRefreshToken, clearUserToken } from "@/services/api";
 import { apiSocket } from "@/services/apiSocket";
 import toast from "react-hot-toast";
-import { Wifi, Eye, EyeOff, UserPlus, MessagesSquare } from "lucide-react";
+import { Wifi, Eye, EyeOff, UserPlus } from "lucide-react";
 import { useLanguage } from "@/utils/i18n";
 import { requireLocalXmppAccount } from "@/services/localXmppAccount";
 import { restoreLocalAccountHistory } from "@/services/localDb";
@@ -264,7 +264,7 @@ export default function LoginPage() {
       <div className="w-full max-w-xl">
         <div className="login-shell rounded-[28px] px-6 py-9 shadow-xl sm:px-10 sm:py-11">
           <div className="mb-9 flex flex-col items-center text-center sm:mb-10">
-            <MessagesSquare size={40} strokeWidth={2.1} className="mb-6 text-surface-50" aria-hidden="true" />
+            <img src="/app-logo.png" alt="LyaoTalk" className="mb-6 h-20 w-20 rounded-2xl object-cover" />
             <h1 className="text-3xl font-bold tracking-tight text-surface-50 sm:text-4xl">LyaoTalk</h1>
             <p className="mt-2 text-base text-surface-100 sm:text-lg">{t("login.connectAccount")}</p>
           </div>
