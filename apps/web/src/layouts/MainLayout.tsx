@@ -61,7 +61,7 @@ export default function MainLayout() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-surface-950">
+    <div className="flex h-[100dvh] w-screen overflow-hidden bg-surface-950">
       <Sidebar />
 
       <div
