@@ -31,7 +31,8 @@ export default defineConfig({
       srcDir: "src",
       filename: "sw.ts",
       injectManifest: {
-        globPatterns: ["**/*.{js,css,html,ico,png,svg}"],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,webp}"],
+        globIgnores: ["app-logo.png", "lyaotalk-original-icon.png", "lyaotalk-wordmark.png"],
       },
       manifest: {
         name: "Lyao Talk",

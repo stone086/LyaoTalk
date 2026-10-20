@@ -263,7 +263,7 @@ export default function LoginPage() {
     <div className="login-page min-h-screen flex items-center justify-center bg-surface-950 px-4 py-8 sm:py-12">
       <div className="w-full max-w-[400px]">
         <div className="mb-5 flex flex-col items-center text-center">
-          <img src="/app-logo.png" alt="LyaoTalk" className="mb-4 h-[120px] w-[120px] rounded-2xl object-cover" />
+          <img src="/app-logo-login.webp" alt="LyaoTalk" width={120} height={120} className="mb-4 h-[120px] w-[120px] rounded-2xl object-cover" />
           <h1 className="text-base text-surface-100 sm:text-lg">{t("login.connectAccount")}</h1>
         </div>
         {inviteDomain && (
