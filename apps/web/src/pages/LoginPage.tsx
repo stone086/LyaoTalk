@@ -265,8 +265,7 @@ export default function LoginPage() {
         <div className="login-shell rounded-[28px] px-6 py-9 shadow-xl sm:px-10 sm:py-11">
           <div className="mb-9 flex flex-col items-center text-center sm:mb-10">
             <img src="/app-logo.png" alt="LyaoTalk" className="mb-6 h-20 w-20 rounded-2xl object-cover" />
-            <h1 className="text-3xl font-bold tracking-tight text-surface-50 sm:text-4xl">LyaoTalk</h1>
-            <p className="mt-2 text-base text-surface-100 sm:text-lg">{t("login.connectAccount")}</p>
+            <h1 className="text-base text-surface-100 sm:text-lg">{t("login.connectAccount")}</h1>
           </div>
           {inviteDomain && (
             <div className="mb-4 rounded-xl border border-accent/20 bg-accent/10 px-3 py-2 text-xs text-surface-100">
