@@ -304,7 +304,7 @@ export default function LoginPage() {
                   spellCheck={false}
                 />
                 <button type="button" onClick={() => setShowPass(!showPass)}
-                  className="login-eye flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-surface-100 hover:text-surface-50"
+                  className="login-eye flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-surface-100 hover:text-surface-50"
                   aria-label={showPass ? t("login.hidePassword") : t("login.showPassword")}>
                   {showPass ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
