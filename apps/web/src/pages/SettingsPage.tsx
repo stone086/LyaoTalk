@@ -160,6 +160,16 @@ function AccountCard({ account }: { account: XmppAccount }) {
   ];
 
   useEffect(() => {
+    if (!account.connected) return;
+    let cancelled = false;
+    const client = getClient(account.id);
+    void client?.fetchPepAvatar(bareJid).then((avatarUrl) => {
+      if (!cancelled && avatarUrl) updateAvatar(account.id, avatarUrl);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [account.id, account.connected, bareJid, updateAvatar]);
+
+  useEffect(() => {
     if (!shareMenuOpen) return;
     const closeOnOutsideClick = (event: PointerEvent) => {
       if (!shareMenuRef.current?.contains(event.target as Node)) setShareMenuOpen(false);
