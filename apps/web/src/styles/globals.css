@@ -105,7 +105,7 @@
     background: rgb(var(--surface-800) / 0.55);
     border: 1px solid rgb(var(--border-default));
   }
-  .login-input { height: 3.5rem; }
+  .login-input { height: 2.5rem; }
   .login-input:focus {
     outline: 2px solid rgb(var(--accent) / 0.55);
     outline-offset: 1px;
