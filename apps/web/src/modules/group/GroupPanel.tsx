@@ -224,11 +224,17 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
   );
 }
 
-export default function GroupPanel() {
+export default function GroupPanel({ requestedAction }: { requestedAction?: { action: "create" | "join" | "discover"; id: number } | null }) {
   const { t } = useLanguage();
   const [showJoin, setShowJoin] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [showDiscover, setShowDiscover] = useState(false);
+  useEffect(() => {
+    if (!requestedAction) return;
+    setShowCreate(requestedAction.action === "create");
+    setShowJoin(requestedAction.action === "join");
+    setShowDiscover(requestedAction.action === "discover");
+  }, [requestedAction]);
   const [inviteRoom, setInviteRoom] = useState<MucRoom | null>(null);
   const [joinForm, setJoinForm] = useState({ jid: "", nickname: "" });
   const [createForm, setCreateForm] = useState({

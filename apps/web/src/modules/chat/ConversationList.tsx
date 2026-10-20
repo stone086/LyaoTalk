@@ -6,7 +6,7 @@ import { useRosterStore } from "@/stores/rosterStore";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { clsx } from "clsx";
-import { MessageSquare, Trash2 } from "lucide-react";
+import { MessageSquare, Plus, Trash2 } from "lucide-react";
 import { useLanguage } from "@/utils/i18n";
 import { deleteLocalConversationData } from "@/services/localDb";
 import { messagesApi } from "@/services/api";
@@ -14,7 +14,7 @@ import toast from "react-hot-toast";
 import { isValidBareJid, normalizeBareJid } from "@/utils/helpers";
 import { useShallow } from "zustand/react/shallow";
 
-export default function ConversationList() {
+export default function ConversationList({ onStartChat }: { onStartChat?: () => void }) {
   const { lang, t } = useLanguage();
   const { conversationId } = useParams();
   const navigate = useNavigate();
@@ -65,9 +65,14 @@ export default function ConversationList() {
       {/* List */}
       <div className="flex-1 overflow-y-auto py-1">
         {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2 text-surface-200/30">
-            <MessageSquare size={24} />
-            <span className="text-xs">{t("conv.empty")}</span>
+          <div className="flex flex-col items-center justify-center h-full gap-3 px-5 text-center text-surface-200/50">
+            <MessageSquare size={30} className="text-accent-soft/70" />
+            <span className="text-sm">{t("conv.empty")}</span>
+            {onStartChat && (
+              <button type="button" onClick={onStartChat} className="btn-primary text-sm inline-flex items-center gap-1.5">
+                <Plus size={15} /> {t("conv.startChat")}
+              </button>
+            )}
           </div>
         ) : (
           filtered.map((conv) => {

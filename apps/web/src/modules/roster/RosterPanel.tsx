@@ -222,10 +222,13 @@ function GroupSection({ name, contacts, onChat, onProfile }: {
   );
 }
 
-export default function RosterPanel() {
+export default function RosterPanel({ openAddRequest = 0 }: { openAddRequest?: number }) {
   const { t } = useLanguage();
   const [query, setQuery] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  useEffect(() => {
+    if (openAddRequest > 0) setShowAdd(true);
+  }, [openAddRequest]);
   const [newJid, setNewJid] = useState("");
   const [profileContact, setProfileContact] = useState<RosterContact | null>(null);
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
