@@ -275,14 +275,14 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <label htmlFor="login-username" className="text-sm font-medium text-surface-100 sm:text-base">{t("login.username")}</label>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="login-input flex w-full items-center gap-2 rounded-xl px-4">
                 <input
                   id="login-username"
                   type="text"
                   value={form.jid}
                   onChange={(e) => setForm({ ...form, jid: e.target.value.split("@")[0] })}
                   placeholder={t("login.username")}
-                  className="login-input min-w-0 w-full flex-1 rounded-xl px-4 text-base text-surface-50 placeholder:text-surface-200/70"
+                  className="h-full min-w-0 flex-1 border-0 bg-transparent p-0 text-base text-surface-50 outline-none placeholder:text-surface-200/70"
                   required
                   autoFocus
                   autoComplete="username"
@@ -290,7 +290,7 @@ export default function LoginPage() {
                   autoCorrect="off"
                   spellCheck={false}
                 />
-                {loginDomain && <span className="shrink-0 text-sm text-surface-100 sm:text-base">@{loginDomain}</span>}
+                {loginDomain && <span className="shrink-0 whitespace-nowrap text-sm text-surface-100">@{loginDomain}</span>}
               </div>
             </div>
             <div className="flex flex-col gap-2">
