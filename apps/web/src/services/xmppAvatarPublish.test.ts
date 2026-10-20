@@ -32,3 +32,43 @@ describe("XMPP avatar publication", () => {
     await expect(client.publishPepAvatar(new Uint8Array([1]))).rejects.toThrow("Avatar data publish failed");
   });
 });
+
+describe("XMPP avatar retrieval", () => {
+  it("falls back to the latest data item when the metadata ID is unavailable", async () => {
+    const client = new XmppClient({ jid: "alice@example.test", password: "", wsUrl: "", accountId: "alice" });
+    const requests: Array<{ node?: string; itemId?: string }> = [];
+    let request: { node?: string; itemId?: string } = {};
+    const builder = {
+      c(name: string, attrs?: Record<string, string>) {
+        if (name === "items") request.node = attrs?.node;
+        if (name === "item") request.itemId = attrs?.id;
+        return builder;
+      },
+      tree() { return request; },
+    };
+    const state = client as unknown as {
+      _connected: boolean;
+      _$iq: () => typeof builder;
+      _connection: { sendIQ: (iq: { node?: string; itemId?: string }, success: (result: Element) => void) => void };
+    };
+    state._connected = true;
+    state._$iq = () => { request = {}; return builder; };
+    state._connection = {
+      sendIQ(iq, success) {
+        requests.push({ ...iq });
+        const xml = iq.node === "urn:xmpp:avatar:metadata"
+          ? '<iq><item><metadata><info id="old-hash" type="image/jpeg" /></metadata></item></iq>'
+          : iq.itemId
+            ? "<iq><items /></iq>"
+            : "<iq><item><data>YWJj</data></item></iq>";
+        success(new DOMParser().parseFromString(xml, "application/xml").documentElement);
+      },
+    };
+    await expect(client.fetchPepAvatar("alice@example.test")).resolves.toBe("data:image/jpeg;base64,YWJj");
+    expect(requests).toEqual([
+      { node: "urn:xmpp:avatar:metadata" },
+      { node: "urn:xmpp:avatar:data", itemId: "old-hash" },
+      { node: "urn:xmpp:avatar:data" },
+    ]);
+  });
+});

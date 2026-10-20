@@ -16,6 +16,7 @@ export default function LoginPage() {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const addAccount = useAccountStore((s) => s.addAccount);
+  const setConnected = useAccountStore((s) => s.setConnected);
   const currentHost = window.location.hostname.trim().toLowerCase();
   const configuredWsUrl = (import.meta.env.VITE_XMPP_WS_URL as string | undefined) ?? "";
   const wsUrl = (() => {
@@ -97,6 +98,10 @@ export default function LoginPage() {
     try {
       await withTimeout(client.connect(), 20000, t("login.connectionFailed"));
       addAccount({ id, jid, domain, displayName: jid.split("@")[0] });
+      setConnected(id, true);
+      void client.fetchPepAvatar(jid).then((avatarUrl) => {
+        if (avatarUrl) useAccountStore.getState().updateAvatar(id, avatarUrl);
+      }).catch(() => {});
       setAccountPassword(id, form.password);
       clearUserToken(id);
       if (tokenRes?.access_token) {
