@@ -22,9 +22,9 @@
     --danger: 239 68 68;
 
     /* Border tokens — visible without being harsh */
-    --border-subtle: 255 255 255 / 0.10;   /* hairline divisions */
-    --border-default: 255 255 255 / 0.16;  /* card edges, inputs */
-    --border-strong: 255 255 255 / 0.24;   /* emphasized panels */
+    --border-subtle: 255 255 255 / 0.22;   /* visible panel divisions */
+    --border-default: 255 255 255 / 0.34;  /* card edges, inputs */
+    --border-strong: 255 255 255 / 0.50;   /* emphasized panels */
 
     /* Inset / depressed surfaces (code blocks, blockquotes, mini-cards inside cards).
        In dark mode, slightly darker than the parent surface; in light mode, slightly
@@ -37,29 +37,29 @@
     --hover-overlay-strength: 0.06;
     /* Popover / floating surface (emoji picker, dropdowns, context menus) */
     --popover-surface: 32 44 70;           /* matches surface-950 in dark */
-    --popover-border: 255 255 255 / 0.18;
+    --popover-border: 255 255 255 / 0.36;
 
     --scrollbar-track: #2c3856;
     --scrollbar-thumb: #5a6c9c;
   }
 
   :root.light {
-    /* Light theme — warm off-white paper tone, easy on the eyes */
-    --surface-50: 28 38 60;      /* primary text — deep navy, not pure black */
-    --surface-100: 60 76 110;    /* secondary text */
-    --surface-200: 110 128 168;  /* tertiary text */
-    --surface-800: 234 238 246;  /* raised surfaces — slightly cooler than bg */
-    --surface-900: 240 244 250;  /* sidebar / panel background */
-    --surface-950: 246 248 252;  /* page background — warm paper, not pure white */
+    /* Light theme — white panels on a cooler canvas, with defined edges */
+    --surface-50: 25 35 56;
+    --surface-100: 51 67 96;
+    --surface-200: 76 93 123;
+    --surface-800: 225 233 244;
+    --surface-900: 255 255 255;
+    --surface-950: 239 244 250;
 
     --accent: 88 80 220;
-    --accent-soft: 102 116 244;
+    --accent-soft: 76 66 190;
     --accent-dim: 67 62 178;
 
     /* Light-mode borders — must be darker (using foreground-with-alpha) */
-    --border-subtle: 28 38 60 / 0.10;
-    --border-default: 28 38 60 / 0.16;
-    --border-strong: 28 38 60 / 0.26;
+    --border-subtle: 57 74 103 / 0.24;
+    --border-default: 57 74 103 / 0.36;
+    --border-strong: 57 74 103 / 0.54;
 
     /* Light-mode inset: slightly darker tint than the off-white background */
     --inset-surface: 218 228 244;
@@ -69,7 +69,7 @@
     --hover-overlay-strength: 0.05;
     /* Light-mode popover: match the page background, slight elevation via shadow */
     --popover-surface: 252 253 255;
-    --popover-border: 28 38 60 / 0.18;
+    --popover-border: 57 74 103 / 0.36;
 
     --scrollbar-track: #d8e0ee;
     --scrollbar-thumb: #8a9bc2;
@@ -95,6 +95,30 @@
     @apply bg-surface-800/60 backdrop-blur-md;
     border: 1px solid rgb(var(--border-default));
   }
+  :root.light .glass {
+    background: rgb(var(--surface-900));
+    box-shadow: 0 3px 12px rgb(35 52 83 / 0.08);
+  }
+
+  :root.light .app-sidebar,
+  :root.light .app-topbar {
+    background: rgb(var(--surface-900));
+  }
+  :root.light .conversation-sidebar {
+    background: rgb(231 238 248);
+  }
+  :root.light .plugin-card {
+    border-color: rgb(var(--border-default));
+  }
+  :root.light .plugin-card-active {
+    background: rgb(244 242 255);
+    border-color: rgb(var(--accent) / 0.55);
+  }
+  :root.light .text-surface-200\/30 { color: rgb(var(--surface-200) / 0.68); }
+  :root.light .text-surface-200\/40 { color: rgb(var(--surface-200) / 0.74); }
+  :root.light .text-surface-200\/50 { color: rgb(var(--surface-200) / 0.82); }
+  :root.light .text-surface-200\/60 { color: rgb(var(--surface-200) / 0.88); }
+  :root.light .input-field::placeholder { color: rgb(var(--surface-200) / 0.78); }
 
   .btn-primary {
     @apply px-4 py-2 bg-accent text-white rounded-lg font-medium

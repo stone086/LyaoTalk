@@ -34,7 +34,7 @@ export default function MainLayout() {
 
       <div
         className={clsx(
-          "min-w-0 flex-col border-r border-subtle bg-surface-900/50 md:w-64 md:flex-shrink-0",
+          "conversation-sidebar min-w-0 flex-col border-r border-subtle bg-surface-900/50 md:w-64 md:flex-shrink-0",
           !shouldHideLeftPanelOnMobile && "flex-1 md:flex-none",
           shouldHideLeftPanelOnMobile ? "hidden md:flex" : "flex"
         )}

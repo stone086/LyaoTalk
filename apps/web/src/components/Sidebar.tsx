@@ -106,7 +106,7 @@ export default function Sidebar() {
   }, []);
 
   return (
-    <aside className="w-14 flex-shrink-0 flex flex-col items-center py-3 gap-2 bg-surface-950 border-r border-subtle">
+    <aside className="app-sidebar w-14 flex-shrink-0 flex flex-col items-center py-3 gap-2 bg-surface-950 border-r border-subtle">
       {/* Logo */}
       <div className="mb-2 w-9 h-9 rounded-xl overflow-hidden border border-accent/30 select-none">
         <img src="/icon-192.png" alt="Lyao Talk" className="w-full h-full object-cover" />
