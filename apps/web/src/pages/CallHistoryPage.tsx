@@ -23,6 +23,7 @@ export default function CallHistoryPage() {
   const { t } = useLanguage();
   const [logs, setLogs] = useState<CallLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     api.get<CallLog[]>("/calls/history", { params: { limit: 100 } })
@@ -56,6 +57,20 @@ export default function CallHistoryPage() {
     }
   };
 
+  const handleClearAll = async () => {
+    if (!window.confirm(t("call.clearAllConfirm"))) return;
+    setClearing(true);
+    try {
+      await api.delete("/calls/history");
+      setLogs([]);
+      toast.success(t("call.cleared"));
+    } catch {
+      toast.error(t("call.clearFailed"));
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return "";
     const m = Math.floor(seconds / 60);
@@ -75,6 +90,16 @@ export default function CallHistoryPage() {
       <div className="px-5 py-4 border-b border-subtle flex items-center gap-2">
         <Phone size={18} className="text-accent-soft" />
         <h1 className="text-base font-semibold text-surface-50">{t("call.history")}</h1>
+        <button
+          type="button"
+          onClick={() => void handleClearAll()}
+          disabled={loading || clearing || logs.length === 0}
+          className="ml-auto flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm text-surface-200/70 hover:text-danger hover:bg-danger/10 disabled:opacity-40 disabled:cursor-not-allowed"
+          aria-label={t("call.clearAll")}
+        >
+          <Trash2 size={15} />
+          <span>{t("call.clearAll")}</span>
+        </button>
       </div>
 
       {loading ? (

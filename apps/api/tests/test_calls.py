@@ -180,3 +180,36 @@ async def test_delete_call_log_removes_only_current_account_record():
     assert resp.json()["status"] == "deleted"
     assert fake_db.deleted is call
     assert fake_db.committed is True
+
+
+@pytest.mark.anyio
+async def test_clear_call_history_deletes_only_current_account():
+    class _FakeDB:
+        def __init__(self):
+            self.statement = None
+            self.committed = False
+
+        async def execute(self, statement):
+            self.statement = statement
+
+        async def commit(self):
+            self.committed = True
+
+    fake_db = _FakeDB()
+
+    async def _fake_get_db():
+        yield fake_db
+
+    app.dependency_overrides[get_db] = _fake_get_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.delete("/calls/history", headers=_user_headers())
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "deleted"
+    compiled = fake_db.statement.compile()
+    assert "DELETE FROM call_logs WHERE call_logs.account_id" in str(compiled)
+    assert "acc-1" in compiled.params.values()
+    assert fake_db.committed is True
