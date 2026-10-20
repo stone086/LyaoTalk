@@ -27,7 +27,7 @@ scripts/compatibility_chaos_validate.sh passed static validation.
 Authenticated attachment smoke with `cjw001` and `cjw002`:
 
 ```text
-cjw001 uploaded a PNG named "真机复测-中文图片.png".
+cjw001 uploaded a PNG with a Chinese filename.
 Same-account download returned 200 image/png.
 Same-account download after simulated 10-minute age returned 200 image/png.
 cjw002 cross-account download returned 404.
