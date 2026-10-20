@@ -48,9 +48,9 @@
     --surface-50: 25 35 56;
     --surface-100: 51 67 96;
     --surface-200: 76 93 123;
-    --surface-800: 225 233 244;
-    --surface-900: 244 247 251;
-    --surface-950: 231 238 247;
+    --surface-800: 211 222 237;
+    --surface-900: 233 239 247;
+    --surface-950: 217 227 240;
 
     --accent: 88 80 220;
     --accent-soft: 76 66 190;
@@ -62,16 +62,16 @@
     --border-strong: 57 74 103 / 0.54;
 
     /* Light-mode inset: slightly darker tint than the off-white background */
-    --inset-surface: 218 228 244;
+    --inset-surface: 198 212 233;
     --inset-surface-alpha: 0.55;
     /* Light-mode hover: dark overlay since the bg is light */
     --hover-overlay: 28 38 60;
     --hover-overlay-strength: 0.05;
     /* Light-mode popover: match the page background, slight elevation via shadow */
-    --popover-surface: 244 247 251;
+    --popover-surface: 233 239 247;
     --popover-border: 57 74 103 / 0.36;
 
-    --scrollbar-track: #d8e0ee;
+    --scrollbar-track: #cbd8e9;
     --scrollbar-thumb: #8a9bc2;
   }
 
@@ -105,13 +105,13 @@
     background: rgb(var(--surface-900));
   }
   :root.light .conversation-sidebar {
-    background: rgb(231 238 248);
+    background: rgb(207 220 236);
   }
   :root.light .plugin-card {
     border-color: rgb(var(--border-default));
   }
   :root.light .plugin-card-active {
-    background: rgb(237 234 251);
+    background: rgb(225 221 247);
     border-color: rgb(var(--accent) / 0.55);
   }
   :root.light .text-surface-200\/30 { color: rgb(var(--surface-200) / 0.68); }
