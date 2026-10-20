@@ -1,25 +1,25 @@
-# OMEMO 发送与接收流程
+# OMEMO Send and Receive Flow
 
-## 发送流程
+## Sending
 
-1. UI 调用 chatService.sendOmemo()
-2. chatService 调用 OmemoCore.encryptMessage()
-3. DeviceManager 获取对方所有设备
-4. DeviceManager 获取自己其他设备
-5. SessionManager 为每个设备 ensureSession()
-6. OmemoEncryptor 生成 messageKey
-7. AES-GCM 加密正文 payload
-8. Signal session 分别加密 messageKey
-9. OmemoXml 生成标准 OMEMO XML
-10. messageSender 发送 XMPP stanza
+1. The UI calls `chatService.sendOmemo()`.
+2. `chatService` calls `OmemoCore.encryptMessage()`.
+3. `DeviceManager` retrieves all recipient devices.
+4. `DeviceManager` retrieves the sender's other devices.
+5. `SessionManager` calls `ensureSession()` for each device.
+6. `OmemoEncryptor` generates a `messageKey`.
+7. AES-GCM encrypts the message body as the payload.
+8. Each Signal session encrypts the `messageKey` for its device.
+9. `OmemoXml` generates the standard OMEMO XML.
+10. `messageSender` sends the XMPP stanza.
 
-## 接收流程
+## Receiving
 
-1. messageReceiver 收到 stanza
-2. 判断是否有 OMEMO encrypted block
-3. OmemoCore.decryptMessage()
-4. OmemoXml 解析 sid/rid/key/payload
-5. 找到 rid == 当前 deviceId 的 key
-6. SessionManager 解开 messageKey
-7. AES-GCM 解开 payload
-8. UI 显示本地明文
+1. `messageReceiver` receives the stanza.
+2. It checks for an OMEMO encrypted block.
+3. It calls `OmemoCore.decryptMessage()`.
+4. `OmemoXml` parses the `sid`, `rid`, key, and payload.
+5. It selects the key whose `rid` matches the current `deviceId`.
+6. `SessionManager` decrypts the `messageKey`.
+7. AES-GCM decrypts the payload.
+8. The UI displays the plaintext locally.
