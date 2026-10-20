@@ -129,7 +129,7 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
 
   return (
     <>
-      <header className="h-12 flex min-w-0 items-center gap-1 border-b border-subtle bg-surface-950/80 px-2 backdrop-blur-sm flex-shrink-0 relative z-20 sm:gap-2 sm:px-3">
+      <header className="app-topbar h-12 flex min-w-0 items-center gap-1 border-b border-subtle bg-surface-950/80 px-2 backdrop-blur-sm flex-shrink-0 relative z-20 sm:gap-2 sm:px-3">
         {onBackToChats && (
           <button type="button" onClick={onBackToChats} className="btn-ghost p-2 md:hidden" aria-label={t("chat.backToChats")} title={t("chat.backToChats")}>
             <ArrowLeft size={18} />
