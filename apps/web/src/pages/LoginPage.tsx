@@ -262,16 +262,16 @@ export default function LoginPage() {
   return (
     <div className="login-page min-h-screen flex items-center justify-center bg-surface-950 px-4 py-8 sm:py-12">
       <div className="w-full max-w-md">
-        <div className="login-shell rounded-[28px] px-5 py-7 shadow-xl sm:px-8 sm:py-8">
-          <div className="mb-6 flex flex-col items-center text-center">
-            <img src="/app-logo.png" alt="LyaoTalk" className="mb-4 h-[120px] w-[120px] rounded-2xl object-cover" />
-            <h1 className="text-base text-surface-100 sm:text-lg">{t("login.connectAccount")}</h1>
+        <div className="mb-6 flex flex-col items-center text-center">
+          <img src="/app-logo.png" alt="LyaoTalk" className="mb-4 h-[120px] w-[120px] rounded-2xl object-cover" />
+          <h1 className="text-base text-surface-100 sm:text-lg">{t("login.connectAccount")}</h1>
+        </div>
+        {inviteDomain && (
+          <div className="mb-4 rounded-xl border border-accent/20 bg-accent/10 px-3 py-2 text-xs text-surface-100">
+            {t("login.inviteHint").replace("{domain}", inviteDomain)}
           </div>
-          {inviteDomain && (
-            <div className="mb-4 rounded-xl border border-accent/20 bg-accent/10 px-3 py-2 text-xs text-surface-100">
-              {t("login.inviteHint").replace("{domain}", inviteDomain)}
-            </div>
-          )}
+        )}
+        <div className="login-shell rounded-[28px] px-5 py-7 shadow-xl sm:px-8 sm:py-8">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <label htmlFor="login-username" className="text-sm font-medium text-surface-100 sm:text-base">{t("login.username")}</label>
@@ -325,8 +325,9 @@ export default function LoginPage() {
               </button>
             </div>
           </form>
-          {ssoProviders && (
-            <div className="mt-4 pt-4 border-t border-subtle">
+        </div>
+        {ssoProviders && (
+            <div className="mt-4">
               <p className="text-xs text-surface-200/40 text-center mb-3">{t("login.ssoDivider")}</p>
               <div className="flex flex-col gap-2">
                 {ssoProviders.oidc && (
@@ -376,8 +377,7 @@ export default function LoginPage() {
                 </form>
               )}
             </div>
-          )}
-        </div>
+        )}
         <p className="text-center text-xs text-surface-200/70 mt-5">Lyao Talk · Open Source · v{__APP_VERSION__}</p>
       </div>
     </div>
