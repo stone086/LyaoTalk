@@ -2,7 +2,7 @@
 
 ## Repository status
 
-The new repository has a fresh Git history. The `lyaotalk` names in service paths, database schemas and systemd service names remain for runtime compatibility; branding does not imply that service names were migrated. No automatic production deploy is configured.
+The `lyaotalk` names in service paths, database schemas and systemd service names remain for runtime compatibility. Production runs on rabisuB and is updated manually; there is no automatic production deploy. See the [live VPS runbook](runbook/live-vps.md) for its current layout and recovery steps.
 
 ## CI on every push / PR
 
@@ -10,7 +10,7 @@ The new repository has a fresh Git history. The `lyaotalk` names in service path
 
 ## Fresh install — isolated VPS only
 
-Prerequisites: new Ubuntu/Debian machine reserved for Lyao Talk, DNS and HTTPS domain, backups, operator access. **Do not** run the installer on the shared LyaoTalk/Matrix production host: the installer provisions or configures system services, firewall, Prosody, database, Redis, MinIO and nginx.
+Prerequisites: new Ubuntu/Debian machine reserved for Lyao Talk, DNS and HTTPS domain, backups, operator access. **Do not** run the installer on rabisuB: the installer provisions or configures system services, firewall, Prosody, database, Redis, MinIO and nginx. Use the update procedure in the [live VPS runbook](runbook/live-vps.md) for that host.
 
 ```bash
 git clone https://github.com/stone086/LyaoTalk.git /opt/lyaotalk-bootstrap
@@ -43,6 +43,4 @@ The deploy workflow pins the initiating commit SHA, refuses a changed `origin/ma
 3. Per-account JWT revoke/password-change tests and private-file access controls.
 4. Chrome/Firefox/Safari and reconnect/resume; OMEMO real-client interoperability.
 5. PostgreSQL/Redis/Prosody/MinIO backups and isolated restore, version rollback rehearsal.
-6. Only then plan a separately approved production change window with Matrix impact review.
-
-The original LyaoTalk repository and running VPS were not changed by adding these workflows.
+6. Record the release commit, backup, health checks and rollback decision before changing production.
