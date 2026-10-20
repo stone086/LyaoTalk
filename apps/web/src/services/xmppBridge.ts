@@ -101,6 +101,9 @@ export function initXmppBridge(client: XmppClient) {
     }
     if (data.status === "connected" || data.status === "online" || data.status === "authenticated") {
       if (data.status === "connected") {
+        void client.fetchPepAvatar(ownBareJid).then((avatarUrl) => {
+          if (avatarUrl) useAccountStore.getState().updateAvatar(accountId, avatarUrl);
+        }).catch(() => {});
         void restoreXmppPush(accountId).catch((error) => {
           console.warn("[Push] XMPP registration failed", error);
         });
@@ -364,6 +367,7 @@ export function initXmppBridge(client: XmppClient) {
     if (!jid) return;
     void client.fetchPepAvatar(jid).then((avatarUrl) => {
       if (!avatarUrl) return;
+      if (jid === ownBareJid) useAccountStore.getState().updateAvatar(accountId, avatarUrl);
       const contact = useRosterStore.getState().getContact(accountId, jid);
       if (contact) useRosterStore.getState().upsertContact({ ...contact, avatarUrl });
     }).catch(() => {});

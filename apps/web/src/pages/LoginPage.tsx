@@ -30,7 +30,7 @@ export default function LoginPage() {
   const envXmppDomain = ((import.meta.env.VITE_XMPP_DOMAIN as string | undefined) ?? "").trim().toLowerCase();
 
   const [form, setForm] = useState({
-    jid: new URLSearchParams(window.location.search).get("jid") ?? "",
+    jid: (new URLSearchParams(window.location.search).get("jid") ?? "").split("@")[0],
     password: "",
   });
   const [inviteDomain] = useState(() => {
@@ -67,10 +67,6 @@ export default function LoginPage() {
       return `${username}@${effectiveXmppDomain}`;
     }
     return trimmed;
-  };
-
-  const completeJidInForm = () => {
-    setForm((prev) => ({ ...prev, jid: expandJid(prev.jid) }));
   };
 
   const withTimeout = <T,>(promise: Promise<T>, ms: number, message: string): Promise<T> => {
@@ -247,7 +243,7 @@ export default function LoginPage() {
       const requestedJid = expandJid(form.jid);
       const reg = await authApi.register({ jid: requestedJid, password: form.password });
       const effectiveJid = reg?.jid ?? requestedJid;
-      setForm((prev) => ({ ...prev, jid: effectiveJid }));
+      setForm((prev) => ({ ...prev, jid: effectiveJid.split("@")[0] }));
       toast.success(t("login.registerSuccess"));
       await connectWithCurrentForm(effectiveJid);
     } catch (err: any) {
@@ -275,15 +271,14 @@ export default function LoginPage() {
           )}
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-surface-200/70 uppercase tracking-wide">{t("login.jid")}</label>
+              <label className="text-xs font-medium text-surface-200/70 uppercase tracking-wide">{t("login.username")}</label>
               <div className="relative">
                 <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-200/30" />
                 <input
                   type="text"
                   value={form.jid}
-                  onChange={(e) => setForm({ ...form, jid: e.target.value })}
-                  onBlur={completeJidInForm}
-                  placeholder={loginDomain ? t("login.jidInvitePlaceholder").replace("{domain}", loginDomain) : "user@example.com"}
+                  onChange={(e) => setForm({ ...form, jid: e.target.value.split("@")[0] })}
+                  placeholder={t("login.username")}
                   className="input-field pl-9"
                   required
                   autoFocus
@@ -293,11 +288,6 @@ export default function LoginPage() {
                   spellCheck={false}
                 />
               </div>
-              {loginDomain && (
-                <p className="text-xs text-surface-200/45">
-                  {t("login.jidAutoCompleteHint").replace("{domain}", loginDomain)}
-                </p>
-              )}
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-medium text-surface-200/70 uppercase tracking-wide">{t("login.password")}</label>

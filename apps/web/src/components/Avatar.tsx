@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { safeImageSrc } from "@/utils/urlSafety";
 
@@ -77,6 +77,7 @@ export default function Avatar({ src, name, size = "md", presence, className }: 
   // data from XMPP vCard / PEP avatar could carry javascript:/data:image/svg+xml
   // payloads that fire on render.
   const safeSrc = safeImageSrc(src);
+  useEffect(() => setImgError(false), [safeSrc]);
   const showImg = !!safeSrc && !imgError;
   const initials = getInitials(name);
   const bg = colorFromName(name);
