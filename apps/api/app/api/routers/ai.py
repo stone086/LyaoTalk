@@ -36,11 +36,22 @@ def _provider_config() -> tuple[str, str, str]:
     return api_key, base_url, model
 
 
+# Single hard ceiling for everything we send upstream. Per-endpoint caps
+# (16 KB per summarized message, 50 context messages) still allow a multi-MB
+# prompt because nothing bounds the aggregate; this does.
+MAX_PROMPT_CHARS = 128 * 1024
+
+
 async def _chat_completion(
     system_prompt: str,
     user_prompt: str,
     temperature: float = 0.2,
 ) -> str:
+    if len(system_prompt) + len(user_prompt) > MAX_PROMPT_CHARS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Prompt too large (max {MAX_PROMPT_CHARS} characters)",
+        )
     api_key, base_url, model = _provider_config()
     payload = {
         "model": model,

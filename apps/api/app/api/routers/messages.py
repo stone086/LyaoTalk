@@ -197,6 +197,14 @@ async def clear_account_history(
     require_account_access(account_id, actor)
     conv_ids = select(Conversation.id).where(Conversation.account_id == account_id)
     message_ids = select(Message.id).where(Message.conversation_id.in_(conv_ids))
+    # Attachment grants hold an FK to the attachment rows; deleting the
+    # attachments first would violate it or leave orphaned grants.
+    attachment_ids = select(Attachment.id).where(Attachment.message_id.in_(message_ids))
+    await db.execute(
+        delete(AttachmentGrant)
+        .where(AttachmentGrant.attachment_id.in_(attachment_ids))
+        .execution_options(synchronize_session=False)
+    )
     await db.execute(
         delete(Attachment)
         .where(Attachment.message_id.in_(message_ids))

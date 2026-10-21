@@ -32,6 +32,23 @@ async def prometheus_metrics():
     )
 
 
+# CSP directives are attacker-controlled strings. Feeding them straight into
+# a metric label lets anyone create unbounded series (one per unique value)
+# and exhaust memory. Map to a fixed vocabulary instead.
+_CSP_KNOWN_DIRECTIVES = {
+    "base-uri", "child-src", "connect-src", "default-src", "font-src",
+    "form-action", "frame-ancestors", "frame-src", "img-src", "manifest-src",
+    "media-src", "object-src", "prefetch-src", "report-to", "report-uri",
+    "sandbox", "script-src", "script-src-attr", "script-src-elem",
+    "style-src", "style-src-attr", "style-src-elem", "worker-src",
+}
+
+
+def _csp_label(directive: str) -> str:
+    head = (directive or "").strip().lower().split(" ", 1)[0]
+    return head if head in _CSP_KNOWN_DIRECTIVES else "other"
+
+
 WEB_VITAL_NAMES = {"LCP", "FID", "CLS", "INP", "TTFB"}
 WEB_VITAL_RATINGS = {"good", "needs-improvement", "poor"}
 _WEB_VITALS_MAX = 5000
@@ -193,7 +210,7 @@ async def receive_csp_report(request: Request):
     # resources that an operator needs to add to the policy.
     client_ip = (request.client.host if request.client else "?")
     for r in reports:
-        metrics_registry.inc("lyaotalk_events_total", event="csp_violation", directive=r["directive"] or "unknown")
+        metrics_registry.inc("lyaotalk_events_total", event="csp_violation", directive=_csp_label(r["directive"]))
         logger.warning(
             "csp_violation",
             extra={

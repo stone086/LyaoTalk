@@ -566,19 +566,19 @@ cmd_health_gate() {
 
   # Layer 1: API liveness
   while [[ $(date +%s) -lt ${deadline} ]]; do
-    if curl -sf --max-time 3 http://127.0.0.1:8000/health >/dev/null 2>&1; then
+    if curl -sf --max-time 3 http://127.0.0.1:18000/health >/dev/null 2>&1; then
       break
     fi
     sleep ${wait_step}
   done
-  if ! curl -sf --max-time 3 http://127.0.0.1:8000/health >/dev/null 2>&1; then
+  if ! curl -sf --max-time 3 http://127.0.0.1:18000/health >/dev/null 2>&1; then
     echo "  [health] API /health not responding" >&2
     return 1
   fi
 
   # Layer 2: DB connectivity from API perspective.
   # The discovery health endpoint exercises the DB session.
-  if ! curl -sf --max-time 5 http://127.0.0.1:8000/api/discovery/health >/dev/null 2>&1; then
+  if ! curl -sf --max-time 5 http://127.0.0.1:18000/discovery/health >/dev/null 2>&1; then
     # Some installs may not expose discovery; fall back to checking DB directly via systemd
     if ! run_root systemctl is-active --quiet postgresql; then
       echo "  [health] PostgreSQL not active" >&2
@@ -588,10 +588,16 @@ cmd_health_gate() {
 
   # Layer 3: Redis
   if command -v redis-cli >/dev/null 2>&1; then
-    local redis_password="${REDIS_PASS:-${REDIS_PASSWORD:-}}"
-    if [[ -n "${redis_password}" ]]; then
-      if ! REDISCLI_AUTH="${redis_password}" redis-cli -h 127.0.0.1 ping 2>/dev/null | grep -q PONG; then
-        echo "  [health] Redis not responding to authenticated PING" >&2
+    # The API's Redis runs on a non-default port with AUTH (see
+    # /etc/lyaotalk/api.env). Read the URL as data only: the env file holds
+    # argon2 hashes containing '$', so sourcing/eval must never be used here.
+    local redis_url=""
+    if [[ -r /etc/lyaotalk/api.env ]]; then
+      redis_url="$(grep -m1 -E '^[[:space:]]*REDIS_URL=' /etc/lyaotalk/api.env | cut -d= -f2- | tr -d '\r"')" || true
+    fi
+    if [[ -n "${redis_url}" ]]; then
+      if ! redis-cli -u "${redis_url}" --no-auth-warning ping 2>/dev/null | grep -q PONG; then
+        echo "  [health] Redis not responding (see REDIS_URL in /etc/lyaotalk/api.env)" >&2
         return 1
       fi
     elif ! redis-cli -h 127.0.0.1 ping 2>/dev/null | grep -q PONG; then
@@ -625,9 +631,28 @@ cmd_health_gate() {
   return 0
 }
 
+# manage.sh manages the legacy single-directory install (/opt/lyaotalk).
+# This host uses the immutable release layout (/opt/lyaotalk-current -> /opt/lyaotalk-releases/<sha>),
+# where scripts/deploy-vps-release.sh owns update and rollback. Running the
+# legacy paths here would rsync into a non-existent tree and reset git to a
+# stale SHA, so bail out unless the operator explicitly overrides.
+require_release_layout() {
+  local what="${1:-this command}"
+  if [[ -L /opt/lyaotalk-current && ! -d "${INSTALL_DIR}/api" ]]; then
+    echo "ERROR: ${what} targets the legacy layout (${INSTALL_DIR}/api), which does not exist on this host." >&2
+    echo "       This host is managed by releases; deploy with:" >&2
+    echo "       bash ${SRC_DIR}/scripts/deploy-vps-release.sh <full-git-sha>" >&2
+    echo "       Override (dangerous): LYAOTALK_ALLOW_LEGACY_MANAGE=1 bash ${SRC_DIR}/manage.sh ..." >&2
+    [[ "${LYAOTALK_ALLOW_LEGACY_MANAGE:-0}" == "1" ]] || return 1
+    echo "WARNING: legacy manage.sh override enabled" >&2
+  fi
+  return 0
+}
+
 # Restore a prior snapshot. Used by both the auto-rollback path and the
 # manual `manage.sh rollback` command.
 cmd_rollback_to() {
+  require_release_layout "manage.sh rollback-to"
   local target=""
   local restore_db=0
   for arg in "$@"; do
@@ -774,6 +799,7 @@ cmd_rollback_to() {
 
 # Rollback to the most recent snapshot.
 cmd_rollback() {
+  require_release_layout "manage.sh rollback"
   local latest
   latest="$(ls -1dt "${SNAPSHOT_DIR}"/*/ 2>/dev/null | head -n1 || true)"
   if [[ -z "${latest}" ]]; then
@@ -818,6 +844,7 @@ cmd_list_snapshots() {
 }
 
 cmd_update_all() {
+  require_release_layout "manage.sh update-all"
   local skip_smoke=0
   local skip_snapshot=0
   local skip_rollback=0
@@ -944,7 +971,7 @@ cmd_api_health() {
   load_env
   local host="${DOMAIN:-localhost}"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsS "https://${host}/api/health" || curl -fsS "http://127.0.0.1:8000/api/health"
+    curl -fsS "https://${host}/api/health" || curl -fsS "http://127.0.0.1:18000/api/health"
   else
     echo "curl is required for api-health"
     exit 1
