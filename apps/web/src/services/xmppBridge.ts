@@ -31,6 +31,8 @@ import {
   establishSession,
 } from "@/services/omemo";
 import { OmemoStore } from "@/services/omemo/store";
+import { fingerprintFromIdentityKey } from "@/services/omemo/keys";
+import { upsertPeerDeviceTrustRecord } from "@/services/omemoTrust";
 import { cacheMessages, deleteLocalConversationData } from "./localDb";
 import { isMessageWithinRetention } from "./historyRetention";
 import { generateConversationId, isValidBareJid, normalizeBareJid, normalizeValidBareJid } from "@/utils/helpers";
@@ -1344,6 +1346,26 @@ export async function tryLibsignalEncrypt(
       const identityKey = base64ToArrayBuffer(
         bundleEl.querySelector("identityKey")?.textContent?.trim() ?? ""
       );
+      // Trust-on-first-use, then refuse to send when a known device presents a
+      // different identity key. Without this the trust panel was advisory only:
+      // a server that swapped the bundle silently became the middle of the
+      // conversation. New devices stay usable (recorded as blind_trust); only a
+      // changed fingerprint blocks, and re-verifying in Settings clears it.
+      const deviceFingerprint = fingerprintFromIdentityKey(identityKey);
+      if (deviceFingerprint) {
+        const trust = await upsertPeerDeviceTrustRecord(
+          accountId,
+          recipientJid,
+          deviceId,
+          deviceFingerprint
+        );
+        if (trust.keyChanged) {
+          throw new Error(
+            `OMEMO identity key changed for ${recipientJid} (device ${deviceId}). `
+              + "Re-verify this device in Settings -> OMEMO before sending."
+          );
+        }
+      }
       const signedPreKeyEl = bundleEl.querySelector("signedPreKeyPublic");
       const signedPreKeyId = parseInt(signedPreKeyEl?.getAttribute("signedPreKeyId") ?? "0", 10);
       const signedPreKey = base64ToArrayBuffer(signedPreKeyEl?.textContent?.trim() ?? "");

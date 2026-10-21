@@ -159,12 +159,13 @@ export async function replenishPreKeys(accountId: string): Promise<boolean> {
  * Get IdentityKey fingerprint for trust UI display.
  * Returns space-separated hex pairs in groups of 4 (common XMPP convention).
  */
-export async function getIdentityFingerprint(accountId: string, peerJid?: string): Promise<string> {
-  const store = new OmemoStore(accountId);
-  const buf = peerJid
-    ? await store.loadIdentityKey(peerJid)
-    : (await store.getIdentityKeyPair())?.pubKey;
-  if (!buf) return "";
+/**
+ * Fingerprint of a raw identity key, in the same format the trust UI shows.
+ * Pure so the send path can compare a bundle against the stored record
+ * without round-tripping through the session store.
+ */
+export function fingerprintFromIdentityKey(buf: ArrayBuffer): string {
+  if (!buf || buf.byteLength === 0) return "";
   const bytes = new Uint8Array(buf);
   // Skip the leading 0x05 prefix that libsignal includes
   const start = bytes[0] === 0x05 ? 1 : 0;
@@ -173,4 +174,13 @@ export async function getIdentityFingerprint(accountId: string, peerJid?: string
     hex.push(bytes[i].toString(16).padStart(2, "0"));
   }
   return hex.join("").replace(/(.{8})/g, "$1 ").trim();
+}
+
+export async function getIdentityFingerprint(accountId: string, peerJid?: string): Promise<string> {
+  const store = new OmemoStore(accountId);
+  const buf = peerJid
+    ? await store.loadIdentityKey(peerJid)
+    : (await store.getIdentityKeyPair())?.pubKey;
+  if (!buf) return "";
+  return fingerprintFromIdentityKey(buf);
 }

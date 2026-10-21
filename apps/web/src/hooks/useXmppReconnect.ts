@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { getAccountPassword, useAccountStore } from "@/stores/accountStore";
+import { getAccountPassword, restoreAccountPassword, useAccountStore } from "@/stores/accountStore";
 import { createClient, getClient, destroyClient } from "@/services/xmppAdapter";
 import { initXmppBridge } from "@/services/xmppBridge";
 import { useReconnectStore } from "@/stores/reconnectStore";
@@ -64,7 +64,15 @@ export function useXmppReconnect() {
       if (useAccountStore.getState().accounts.find((item) => item.id === accountId)?.manuallyOffline) {
         throw new Error("Account is manually offline");
       }
-      const password = getAccountPassword(accountId);
+      // After a reload memory is empty; unseal from the credential vault.
+      let password = getAccountPassword(accountId);
+      if (!password) {
+        try {
+          password = await restoreAccountPassword(accountId);
+        } catch {
+          password = null;
+        }
+      }
       if (!password) {
         // No runtime password — can't reconnect silently. The user must log in.
         setConnected(accountId, false);
