@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Search, Moon, Sun, PanelRight, Lock, Unlock, Phone, Video } from "lucide-react";
+import { ArrowLeft, Search, Moon, Sun, PanelRight, Lock, Unlock, Phone, Video, SquarePen } from "lucide-react";
 import { useAccountStore } from "@/stores/accountStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import GlobalSearch from "@/modules/search/GlobalSearch";
@@ -15,13 +15,14 @@ import { useRosterStore } from "@/stores/rosterStore";
 import { getClient } from "@/services/xmppAdapter";
 
 interface TopBarProps {
+  onNewChat?: () => void;
   onToggleRight?: () => void;
   showRightToggle?: boolean;
   onBackToChats?: () => void;
   compact?: boolean;
   conversationId?: string;
 }
-export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, compact = false, conversationId }: TopBarProps) {
+export default function TopBar({ onNewChat, onToggleRight, showRightToggle, onBackToChats, compact = false, conversationId }: TopBarProps) {
   const { t } = useLanguage();
   const [theme, setTheme] = useState(getStoredTheme());
   const [showSearch, setShowSearch] = useState(false);
@@ -167,8 +168,8 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
             <button type="button" role="menuitem" onClick={() => { setShowCallMenu(false); void startCall(["audio", "video"]); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover-surface"><Video size={16} />{t("chat.videoCall")}</button>
           </div>}
         </div>}
-        {!conversation && <button onClick={toggleOmemo} className="btn-ghost p-2" title={omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")}>
-          {omemoEnabled ? <Lock size={16} /> : <Unlock size={16} />}
+        {!conversation && onNewChat && <button type="button" onClick={onNewChat} className="btn-ghost p-2" title={t("conv.startChat")} aria-label={t("conv.startChat")}>
+          <SquarePen size={16} />
         </button>}
         {showRightToggle && !conversation && (
           <button onClick={onToggleRight} className="btn-ghost hidden p-2 sm:block" title={t("topbar.toggleInfo")}>
