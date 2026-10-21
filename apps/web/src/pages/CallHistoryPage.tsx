@@ -6,6 +6,8 @@ import Avatar from "@/components/Avatar";
 import { api } from "@/services/api";
 import { callManager } from "@/services/jingle";
 import { useAccountStore } from "@/stores/accountStore";
+import { useRosterStore } from "@/stores/rosterStore";
+import { normalizeBareJid } from "@/utils/helpers";
 import { useLanguage } from "@/utils/i18n";
 
 interface CallLog {
@@ -21,6 +23,8 @@ interface CallLog {
 
 export default function CallHistoryPage() {
   const { t } = useLanguage();
+  const activeAccountId = useAccountStore((s) => s.activeAccountId);
+  const contacts = useRosterStore((s) => s.contacts);
   const [logs, setLogs] = useState<CallLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearing, setClearing] = useState(false);
@@ -128,7 +132,7 @@ export default function CallHistoryPage() {
                   onClick={() => void handleRedial(log)}
                   className="min-w-0 flex-1 flex items-center gap-3 text-left"
                 >
-                  <Avatar name={log.peer_jid} size="md" />
+                  <Avatar name={log.peer_jid} src={activeAccountId ? contacts[`${activeAccountId}::${normalizeBareJid(log.peer_jid)}`]?.avatarUrl : undefined} size="md" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-surface-50 truncate">
                       {log.peer_jid.split("@")[0]}

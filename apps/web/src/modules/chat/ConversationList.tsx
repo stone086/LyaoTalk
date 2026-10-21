@@ -22,7 +22,7 @@ export default function ConversationList({ onStartChat }: { onStartChat?: () => 
   const composerDrafts = useChatStore((s) => s.composerDrafts);
   const setActive = useChatStore((s) => s.setActiveConversation);
   const deleteConversation = useChatStore((s) => s.deleteConversation);
-  const getContact = useRosterStore((s) => s.getContact);
+  const contacts = useRosterStore((s) => s.contacts);
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const accounts = useAccountStore((s) => s.accounts);
   const activeAccountJid = normalizeBareJid(accounts.find((a) => a.id === activeAccountId)?.jid ?? "");
@@ -57,7 +57,7 @@ export default function ConversationList({ onStartChat }: { onStartChat?: () => 
 
   const getConversationPresence = (accountId: string, peerJid: string, type: string) => {
     if (type !== "private") return "available";
-    return getContact(accountId, peerJid)?.presence ?? "unavailable";
+    return contacts[`${accountId}::${normalizeBareJid(peerJid)}`]?.presence ?? "unavailable";
   };
 
   return (
@@ -77,6 +77,9 @@ export default function ConversationList({ onStartChat }: { onStartChat?: () => 
         ) : (
           filtered.map((conv) => {
             const presence = getConversationPresence(conv.accountId, conv.peerJid, conv.type);
+            const avatarUrl = conv.type === "private"
+              ? contacts[`${conv.accountId}::${normalizeBareJid(conv.peerJid)}`]?.avatarUrl
+              : undefined;
             return (
             <button
               key={conv.id}
@@ -88,7 +91,7 @@ export default function ConversationList({ onStartChat }: { onStartChat?: () => 
                   : "hover-surface"
               )}
             >
-              <Avatar name={conv.title ?? conv.peerJid ?? "?"} size="sm" presence={presence as any} />
+              <Avatar name={conv.title ?? conv.peerJid ?? "?"} src={avatarUrl} size="sm" presence={presence as any} />
 
               {/* Info */}
               <div className="flex-1 min-w-0">
