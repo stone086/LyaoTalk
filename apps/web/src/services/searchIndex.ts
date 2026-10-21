@@ -20,6 +20,10 @@ const STORE_NAME = "search_index_blobs";
 let _index: MiniSearch | null = null;
 let _initialized = false;
 let _saveTimer: ReturnType<typeof setTimeout> | null = null;
+// The index is a module-level singleton, but each account has its own blob in
+// IndexedDB. Without this the in-memory index of account A answers searches
+// for account B after a switch, and saves land under the wrong key.
+let _accountId: string | null = null;
 
 interface IndexedMessage {
   id: string;
@@ -99,8 +103,20 @@ function openIndexDb(): Promise<IDBDatabase> {
  * Called once on app startup.
  */
 export async function initSearchIndex(accountId: string): Promise<void> {
-  if (_initialized) return;
+  if (_initialized && _accountId === accountId) return;
+  if (_initialized && _accountId !== accountId) {
+    // Persist whatever the previous account had indexed, then drop it from
+    // memory so the new account can never search (or overwrite) it.
+    if (_saveTimer) {
+      clearTimeout(_saveTimer);
+      _saveTimer = null;
+    }
+    if (_index && _accountId) await saveIndexToIdb(_accountId, _index);
+    _index = null;
+    _initialized = false;
+  }
   _initialized = true;
+  _accountId = accountId;
 
   // Try loading from IndexedDB first
   const persisted = await loadIndexFromIdb(accountId);
@@ -148,6 +164,7 @@ export async function initSearchIndex(accountId: string): Promise<void> {
  */
 export function indexMessage(accountId: string, conversationId: string, msg: ChatMessage): void {
   if (!_index || !msg.body) return;
+  if (_accountId && accountId && accountId !== _accountId) return;
   const docId = `${conversationId}:${msg.id}`;
   try {
     _index.add({
@@ -168,17 +185,48 @@ export function indexMessage(accountId: string, conversationId: string, msg: Cha
  */
 export function removeFromIndex(conversationId: string, messageId: string, accountId?: string): void {
   if (!_index) return;
+  if (accountId && _accountId && accountId !== _accountId) return;
   try {
     _index.remove({ id: `${conversationId}:${messageId}` } as any);
     if (accountId) scheduleSave(accountId);
   } catch { /* ignore */ }
 }
 
-function scheduleSave(accountId: string): void {
+function scheduleSave(_accountIdHint?: string): void {
+  // Always persist under the account that actually owns this index.
+  const owner = _accountId;
+  if (!owner) return;
   if (_saveTimer) clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
-    if (_index) saveIndexToIdb(accountId, _index);
+    if (_index) saveIndexToIdb(owner, _index);
   }, 5000); // batch saves every 5s
+}
+
+/**
+ * Drop one account's persisted index (plaintext message bodies) and reset the
+ * in-memory state when it belongs to that account. Call on logout.
+ */
+export async function clearSearchIndex(accountId: string): Promise<void> {
+  try {
+    const db = await openIndexDb();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      tx.objectStore(STORE_NAME).delete(accountId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch {
+    /* index cleanup is best-effort */
+  }
+  if (_accountId === accountId) {
+    if (_saveTimer) {
+      clearTimeout(_saveTimer);
+      _saveTimer = null;
+    }
+    _index = null;
+    _initialized = false;
+    _accountId = null;
+  }
 }
 
 /**

@@ -6,6 +6,7 @@ import { destroyClient } from "./xmppAdapter";
 import { markIntentionalDisconnect, unsuperviseConnection } from "./connectionSupervisor";
 import { apiSocket } from "./apiSocket";
 import { clearLocalAccountData, sealLocalAccountHistory } from "./localDb";
+import { clearSearchIndex } from "./searchIndex";
 import { revokeAllAesgcmBlobs } from "./aesgcmMedia";
 import { unsubscribeFromPush } from "./push";
 
@@ -35,6 +36,9 @@ export async function logoutAccount(accountId: string): Promise<{ remoteRevoked:
   useRosterStore.getState().clearAccountData(accountId);
   revokeAllAesgcmBlobs();
   await clearLocalAccountData(accountId).catch(() => {});
+  // The local search index holds plaintext message bodies; leaving it behind
+  // keeps them readable after sign-out and on the next account's machine.
+  await clearSearchIndex(accountId).catch(() => {});
   useAccountStore.getState().removeAccount(accountId);
   return { remoteRevoked };
 }
