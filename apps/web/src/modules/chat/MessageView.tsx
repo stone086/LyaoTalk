@@ -129,6 +129,7 @@ function MessageBubble({
   sentLabel,
   readLabel,
   activeAccountId,
+  avatarSrc,
 }: {
   msg: ChatMessage;
   replyPreview?: string;
@@ -146,6 +147,7 @@ function MessageBubble({
   sentLabel: string;
   readLabel: string;
   activeAccountId?: string | null;
+  avatarSrc?: string;
 }) {
   const { t } = useLanguage();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -179,7 +181,7 @@ function MessageBubble({
       className={clsx("flex gap-2 group", isOwn ? "flex-row-reverse" : "flex-row")}
     >
       {!isOwn && (
-        <Avatar name={msg.senderJid} size="xs" className="mt-auto mb-1" />
+        <Avatar name={msg.senderJid} src={avatarSrc} size="xs" className="mt-auto mb-1" />
       )}
       <div className={clsx("flex min-w-0 max-w-[86%] flex-col gap-1 sm:max-w-[76%]", isOwn ? "items-end" : "items-start")}>
         {!isOwn && <span className="text-[10px] text-surface-200/40 px-1">{msg.senderJid.split("@")[0]}</span>}
@@ -354,10 +356,10 @@ function MessageBubble({
   );
 }
 
-function TypingBubble({ name }: { name: string }) {
+function TypingBubble({ name, avatarSrc }: { name: string; avatarSrc?: string }) {
   return (
     <div className="flex gap-2 items-end">
-      <Avatar name={name} size="xs" />
+      <Avatar name={name} src={avatarSrc} size="xs" />
       <div className="msg-bubble-in flex items-center gap-1 py-3">
         {[0, 1, 2].map((i) => (
           <span key={i} className="w-1.5 h-1.5 rounded-full bg-surface-200/40 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
@@ -1312,6 +1314,7 @@ export default function MessageView({ conversationId }: { conversationId: string
         sentLabel={t("chat.sentSent")}
         readLabel={t("chat.sentRead")}
         activeAccountId={activeAccountId}
+        avatarSrc={conversation.type === "private" ? peerContact?.avatarUrl : undefined}
       />
     );
   };
@@ -1383,7 +1386,7 @@ export default function MessageView({ conversationId }: { conversationId: string
             </div>
           );
         })}
-        {peerIsTyping && <TypingBubble name={conversation.peerJid.split("@")[0]} />}
+        {peerIsTyping && <TypingBubble name={conversation.peerJid.split("@")[0]} avatarSrc={conversation.type === "private" ? peerContact?.avatarUrl : undefined} />}
         <div ref={messagesEndRef} />
       </div>
 

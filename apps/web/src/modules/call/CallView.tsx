@@ -15,6 +15,7 @@ import { JingleSession } from "@/services/jingle";
 import { callOutcome } from "@/services/jingle/callOutcome";
 import { groupCallManager } from "@/services/jingle/groupCall";
 import Avatar from "@/components/Avatar";
+import { useRosterStore } from "@/stores/rosterStore";
 import { useLanguage } from "@/utils/i18n";
 import { api } from "@/services/api";
 import toast from "react-hot-toast";
@@ -82,6 +83,7 @@ export default function CallView({ session, onClose }: CallViewProps) {
   const [callError, setCallError] = useState<string | null>(null);
   const stopRecordingRef = useRef<(() => Promise<Blob>) | null>(null);
   const info = session.info;
+  const peerAvatarUrl = useRosterStore((s) => s.getContact(info.accountId, info.peerJid)?.avatarUrl);
   const stopRingtoneRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -252,7 +254,7 @@ export default function CallView({ session, onClose }: CallViewProps) {
         ) : (
           <div className="flex flex-col items-center gap-6">
             <div className="scale-[2.5]">
-              <Avatar name={info.peerJid} size="xl" />
+              <Avatar name={info.peerJid} src={peerAvatarUrl} size="xl" />
             </div>
             {isIncomingRinging && (
               <p className="text-white/80 text-base mt-8 animate-pulse">

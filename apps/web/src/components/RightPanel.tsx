@@ -162,7 +162,7 @@ function InfoTab({ conversation }: { conversation: Conversation }) {
   return (
     <div className="p-4 flex flex-col gap-4">
       <div className="flex flex-col items-center gap-2 py-2">
-        <Avatar name={conversation.title ?? conversation.peerJid} size="xl" />
+        <Avatar name={conversation.title ?? conversation.peerJid} src={conversation.type === "private" ? contact?.avatarUrl : undefined} size="xl" />
         <div className="text-center">
           <p className="font-semibold text-surface-50">{conversation.title ?? conversation.peerJid}</p>
           <p className="text-xs text-surface-200/40 mt-0.5">{conversation.peerJid}</p>

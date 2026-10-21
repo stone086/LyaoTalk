@@ -11,6 +11,7 @@ import toast from "react-hot-toast";
 import { useChatStore } from "@/stores/chatStore";
 import { callManager } from "@/services/jingle";
 import Avatar from "@/components/Avatar";
+import { useRosterStore } from "@/stores/rosterStore";
 import { getClient } from "@/services/xmppAdapter";
 
 interface TopBarProps {
@@ -34,6 +35,9 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
   }, [theme]);
   const account = useAccountStore((s) => s.accounts.find((a) => a.id === s.activeAccountId));
   const conversation = useChatStore((s) => conversationId ? s.conversations[conversationId] : undefined);
+  const peerAvatarUrl = useRosterStore((s) => account && conversation?.type === "private"
+    ? s.getContact(account.id, conversation.peerJid)?.avatarUrl
+    : undefined);
   const reconnectingCount = useReconnectStore((s) => s.reconnectingAccountIds.length);
   const callMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -137,7 +141,7 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
         )}
         {conversation && !compact ? (
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <Avatar name={conversation.title || conversation.peerJid} size="sm" />
+            <Avatar name={conversation.title || conversation.peerJid} src={peerAvatarUrl} size="sm" />
             <span className="truncate text-sm font-semibold text-surface-50">{conversation.title || conversation.peerJid}</span>
           </div>
         ) : <button
