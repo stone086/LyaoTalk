@@ -513,14 +513,16 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: "liaot-chat",
+      // Message bodies are deliberately NOT persisted here.
+      //
+      // This store is written to localStorage, which is plain text readable by
+      // any script with origin access and by anyone with a profile copy. The
+      // previous shape kept the last 100 decrypted messages per conversation
+      // (plus ciphertext) there, contradicting the sealed localDb vault.
+      // MessageView reloads history per conversation from localDb, so dropping
+      // them only changes what is visible before that read completes.
       partialize: (s) => ({
         conversations: s.conversations,
-        messages: Object.fromEntries(
-          Object.entries(s.messages).map(([conversationId, list]) => [
-            conversationId,
-            list.slice(-100),
-          ])
-        ),
         composerDrafts: s.composerDrafts,
         clearedBefore: s.clearedBefore,
         retractedMessageIds: s.retractedMessageIds,
