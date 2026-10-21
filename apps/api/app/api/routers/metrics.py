@@ -3,6 +3,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from urllib.parse import urlparse
 import logging
+import secrets
 import time
 
 from app.core.rate_limit import limiter
@@ -18,14 +19,21 @@ logger = logging.getLogger("lyaotalk.csp")
     include_in_schema=False,
     response_class=PlainTextResponse,
 )
-async def prometheus_metrics():
+async def prometheus_metrics(request: Request):
     """Prometheus-compatible scrape endpoint.
 
-    Nginx should restrict `/api/metrics` to trusted Prometheus hosts. The
-    app-level toggle is a second guard for single-host deployments.
+    Nginx restricts `/api/metrics` to loopback and RFC1918 ranges. When
+    METRICS_TOKEN is set, an application-level bearer token is also required
+    so the route stays closed if the nginx rule is ever loosened.
     """
     if not settings.METRICS_ENABLED:
         raise HTTPException(status_code=404, detail="metrics disabled")
+    if settings.METRICS_TOKEN:
+        supplied = request.headers.get("authorization", "")
+        if not secrets.compare_digest(
+            supplied.strip(), f"Bearer {settings.METRICS_TOKEN}"
+        ):
+            raise HTTPException(status_code=401, detail="metrics token required")
     return PlainTextResponse(
         metrics_registry.render_prometheus(),
         media_type="text/plain; version=0.0.4; charset=utf-8",

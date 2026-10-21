@@ -244,18 +244,15 @@ async function verifyBundleSignature(bundle: OmemoBundle): Promise<boolean> {
       asArrayBuffer(bundleSignaturePayload(bundle))
     );
   } catch {
-    // continue to legacy compatibility check below
-  }
-
-  try {
-    // Legacy compatibility: older LyaoTalk builds stored a SHA-256 digest string instead of a true signature.
-    const legacyMaterial = new TextEncoder().encode(
-      `${bundle.identityKey}.${bundle.signedPreKeyPublic}.${bundle.deviceId}`
-    );
-    const digest = await crypto.subtle.digest("SHA-256", legacyMaterial);
-    const legacyB64 = toB64(new Uint8Array(digest));
-    return legacyB64 === bundle.signedPreKeySignature;
-  } catch {
+    // Fail closed.
+    //
+    // Older builds accepted a plain SHA-256 digest of
+    // `${identityKey}.${signedPreKeyPublic}.${deviceId}` as the "signature".
+    // Anyone can compute that digest, so accepting it let a malicious server
+    // swap in its own prekey and sit in the middle of the conversation. The
+    // fallback is gone: a device that still publishes a digest bundle must
+    // upgrade and republish before it can be messaged, and it shows up as an
+    // unverified device in Settings -> OMEMO rather than silently trusted.
     return false;
   }
 }

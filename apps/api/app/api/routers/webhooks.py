@@ -25,14 +25,25 @@ from app.core.rate_limit import limiter
 logger = logging.getLogger("lyaotalk.webhooks")
 from sqlalchemy import select
 from typing import Optional
+import hashlib
+import hmac
 import secrets
+import time
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.models import Webhook, Conversation, Message, gen_uuid
+from app.utils.cache import get_redis
 from app.services.audit import write_audit, get_client_ip
 from app.utils.security import get_current_admin
 
 router = APIRouter()
+
+# Replay window for signed deliveries. Senders must sign
+#   f"{timestamp}." + raw_body
+# with HMAC-SHA256 keyed on the webhook token, and a timestamp is single-use
+# inside this window.
+WEBHOOK_SIGNATURE_WINDOW_SECONDS = 300
 
 
 class WebhookCreate(BaseModel):
@@ -160,6 +171,48 @@ async def trigger_webhook(
     ):
         # Constant-error response — don't leak whether the ID was found
         raise HTTPException(401, "Invalid webhook")
+
+    # Optional signature layer. The URL token alone authenticates but cannot
+    # distinguish a replayed body from a fresh one, and any proxy that logged
+    # the URL becomes a permanent sender. When the integration signs, we verify
+    # and enforce single use of the timestamp.
+    ts_header = request.headers.get("x-lyaotalk-timestamp")
+    sig_header = request.headers.get("x-lyaotalk-signature")
+    if ts_header or sig_header:
+        if not (ts_header and sig_header):
+            raise HTTPException(401, "Incomplete webhook signature")
+        try:
+            timestamp = int(ts_header)
+        except (TypeError, ValueError):
+            raise HTTPException(401, "Invalid webhook timestamp")
+        if abs(time.time() - timestamp) > WEBHOOK_SIGNATURE_WINDOW_SECONDS:
+            raise HTTPException(401, "Webhook timestamp outside window")
+        raw_body = await request.body()
+        expected_sig = hmac.new(
+            stored_token.encode(),
+            f"{timestamp}.".encode() + raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        supplied_sig = sig_header.strip().lower().removeprefix("sha256=")
+        if not hmac.compare_digest(expected_sig, supplied_sig):
+            raise HTTPException(401, "Invalid webhook signature")
+        try:
+            redis_client = await get_redis()
+            fresh = await redis_client.set(
+                f"webhook:ts:{wh.id}:{timestamp}",
+                "1",
+                nx=True,
+                ex=WEBHOOK_SIGNATURE_WINDOW_SECONDS * 2,
+            )
+            if not fresh:
+                raise HTTPException(409, "Replayed webhook")
+        except HTTPException:
+            raise
+        except Exception:
+            # Never turn a Redis outage into a dropped webhook; log and accept.
+            logger.warning("webhook_replay_guard_unavailable id=%s", webhook_id)
+    elif settings.WEBHOOK_SIGNATURES_REQUIRED:
+        raise HTTPException(401, "Webhook signature required")
 
     # Verify the conversation still exists. Without this, a webhook whose
     # conversation was deleted will fail at Message FK insert with a 500;

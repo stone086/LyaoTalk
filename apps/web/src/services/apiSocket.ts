@@ -41,9 +41,14 @@ class ApiSocketClient {
     const wsBase = (import.meta.env.VITE_API_URL ?? "http://localhost:8000")
       .replace(/^https/, "wss")
       .replace(/^http/, "ws");
-    const url = `${wsBase}/ws/${accountId}?token=${encodeURIComponent(token)}`;
+    // Tokens in query strings land in nginx/APM access logs and browser
+    // history. A subprotocol is a header, never logged by default, and the
+    // server echoes `liaot.v1` so the browser accepts the handshake.
+    const url = `${wsBase}/ws/${accountId}`;
 
-    this.ws = new WebSocket(url);
+    this.ws = token
+      ? new WebSocket(url, ["liaot.v1", `bearer.${token}`])
+      : new WebSocket(url);
 
     this.ws.onopen = () => {
       this._connected = true;

@@ -16,8 +16,8 @@ class ConnectionManager:
     def __init__(self):
         self.connections: Dict[str, Set[WebSocket]] = {}
 
-    async def connect(self, ws: WebSocket, account_id: str):
-        await ws.accept()
+    async def connect(self, ws: WebSocket, account_id: str, subprotocol: str | None = None):
+        await ws.accept(subprotocol=subprotocol)
         if account_id not in self.connections:
             self.connections[account_id] = set()
         self.connections[account_id].add(ws)
@@ -50,8 +50,23 @@ manager = ConnectionManager()
 
 @router.websocket("/ws/{account_id}")
 async def websocket_endpoint(ws: WebSocket, account_id: str):
-    # Authenticate via token query param (WebSocket cannot use Authorization header)
-    token = ws.query_params.get("token")
+    # Authenticate through the Sec-WebSocket-Protocol header, not the URL.
+    # A token in the query string is copied into nginx/APM access logs and the
+    # browser history on every connect; headers are not logged by default.
+    # The client offers ["liaot.v1", "bearer.<jwt>"] and we echo "liaot.v1".
+    subprotocol = None
+    token = None
+    offered = (ws.headers.get("sec-websocket-protocol") or "").split(",")
+    for part in offered:
+        candidate = part.strip()
+        if candidate.startswith("bearer."):
+            token = candidate[len("bearer."):]
+            subprotocol = "liaot.v1"
+            break
+    if not token:
+        # Legacy clients still pass ?token=; accepted for now so a stale PWA
+        # keeps working, and nginx no longer logs this path.
+        token = ws.query_params.get("token")
     if not token:
         await ws.close(code=4001, reason="Missing token")
         return
@@ -77,7 +92,7 @@ async def websocket_endpoint(ws: WebSocket, account_id: str):
         await ws.close(code=4008, reason="Too many connections")
         return
 
-    await manager.connect(ws, account_id)
+    await manager.connect(ws, account_id, subprotocol)
     consecutive_timeouts = 0
     MAX_IDLE_TIMEOUTS = 6  # 6 * 30s = 3 minutes idle → disconnect
     MAX_MESSAGE_BYTES = 8 * 1024  # 8KB — clients only send pings + ack frames

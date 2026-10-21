@@ -102,6 +102,17 @@ class Settings(BaseSettings):
     # Push shared secret (for server-to-server push triggers)
     PUSH_SHARED_SECRET: str = ""
 
+    # Prometheus scrape token. Empty keeps the previous behaviour (nginx
+    # already restricts /api/metrics to loopback and RFC1918 ranges); setting
+    # it adds an application-level guard for multi-tenant or exposed setups.
+    METRICS_TOKEN: str = ""
+
+    # Inbound webhooks. When the sender supplies X-LyaoTalk-Timestamp and
+    # X-LyaoTalk-Signature we verify them and refuse replays. Setting this to
+    # true rejects unsigned calls outright, which requires every integration
+    # to be updated before flipping it.
+    WEBHOOK_SIGNATURES_REQUIRED: bool = False
+
     model_config = SettingsConfigDict(env_file=".env")
 
     @model_validator(mode="after")
