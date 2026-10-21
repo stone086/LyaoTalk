@@ -185,6 +185,11 @@ class Webhook(Base):
     name = Column(String, nullable=False)
     conversation_id = Column(String, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
     token = Column(String, nullable=False)
+    # Keys the request signature. Never part of a URL, so a leaked/logged
+    # webhook URL cannot be used to forge or tamper with a delivery.
+    signing_secret = Column(String, nullable=True)
+    previous_signing_secret = Column(String, nullable=True)
+    previous_secret_expires_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
