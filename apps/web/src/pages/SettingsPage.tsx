@@ -11,7 +11,7 @@ import { clsx } from "clsx";
 import { applyTheme, getStoredTheme, ThemeMode } from "@/utils/theme";
 import { getStoredLanguage, Language, setLanguage, useLanguage } from "@/utils/i18n";
 import { applyHistoryRetention, clearAllHistoryNow, getStoredHistoryRetentionDays, setStoredHistoryRetentionDays } from "@/services/historyRetention";
-import { getOmemoFingerprintForJid } from "@/services/omemoFingerprint";
+import { getIdentityFingerprint, initializeOmemoKeys } from "@/services/omemo";
 import { getOmemoEnabled, onOmemoEnabledChange } from "@/services/omemoSettings";
 import { useNotificationStore } from "@/stores/notificationStore";
 import { accountsApi, authApi, setUserToken, setUserRefreshToken } from "@/services/api";
@@ -499,7 +499,10 @@ export default function SettingsPage() {
     let cancelled = false;
     const run = async () => {
       const entries = await Promise.all(
-        accounts.map(async (acc) => [acc.id, await getOmemoFingerprintForJid(acc.jid, acc.id)] as const)
+        accounts.map(async (acc) => {
+          await initializeOmemoKeys(acc.id);
+          return [acc.id, await getIdentityFingerprint(acc.id)] as const;
+        })
       );
       if (!cancelled) setOmemoFingerprints(Object.fromEntries(entries));
     };
