@@ -137,7 +137,8 @@ export function initXmppBridge(client: XmppClient) {
           });
 
           console.debug("[OMEMO] publishing standard device list...");
-          await client.publishOmemoDeviceList([localDeviceId]);
+          const knownDeviceIds = await client.fetchOmemoDeviceList(ownBareJid);
+          await client.publishOmemoDeviceList([...knownDeviceIds, localDeviceId]);
           console.debug("[OMEMO] standard device list published");
 
           console.debug("[OMEMO] publishing standard bundle...");

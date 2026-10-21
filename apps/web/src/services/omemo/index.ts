@@ -68,6 +68,7 @@ import { initializeOmemoKeys, buildOwnBundle, NS_DEVICELIST, NS_BUNDLES } from "
  */
 export async function initOmemo(
   accountId: string,
+  ownJid: string,
   xmppClient: {
     publishPepNode: (node: string, item: any, itemId?: string) => Promise<void>;
     fetchPepNode: (jid: string, node: string) => Promise<any>;
@@ -75,15 +76,18 @@ export async function initOmemo(
 ): Promise<{ deviceId: number }> {
   const { deviceId } = await initializeOmemoKeys(accountId);
 
-  // Publish device list (containing just our device for now).
-  // In a multi-device setup, this list grows.
+  // Preserve the account's other advertised devices when publishing ours.
   // The XML structure is:
   //   <list xmlns="eu.siacs.conversations.axolotl">
   //     <device id="..."/>
   //   </list>
+  const existingList = await xmppClient.fetchPepNode(ownJid, NS_DEVICELIST).catch(() => null) as Element | null;
+  const existingIds = Array.from(existingList?.querySelectorAll("device") ?? [])
+    .map((device) => Number.parseInt(device.getAttribute("id") ?? "", 10))
+    .filter((id) => Number.isFinite(id) && id > 0);
   await xmppClient.publishPepNode(NS_DEVICELIST, {
     type: "devicelist",
-    deviceIds: [deviceId],
+    deviceIds: Array.from(new Set([...existingIds, deviceId])),
   });
 
   // Publish our bundle.

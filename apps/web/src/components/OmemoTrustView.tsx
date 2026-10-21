@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 import { AlertTriangle, Shield, ShieldCheck, ShieldAlert, ShieldOff, QrCode, X } from "lucide-react";
-import { getIdentityFingerprint } from "@/services/omemo";
+import { getIdentityFingerprint, initializeOmemoKeys, OmemoStore } from "@/services/omemo";
 import {
   listPeerDeviceTrustRecords,
   updatePeerDeviceTrustState,
@@ -62,9 +62,9 @@ export default function OmemoTrustView({ peerJid, onClose }: { peerJid: string; 
     if (!accountId) return;
     let cancelled = false;
     (async () => {
+      await initializeOmemoKeys(accountId);
       const own = await getIdentityFingerprint(accountId);
-      const ownDeviceRaw = localStorage.getItem(`liaot-e2ee-device:${accountId}`);
-      const ownDevice = Number(ownDeviceRaw);
+      const ownDevice = await new OmemoStore(accountId).getLocalRegistrationId();
       const peerRecords = await listPeerDeviceTrustRecords(accountId, peerJid);
       const hydrated = peerRecords.map((record) => ({
         ...record,
@@ -72,7 +72,7 @@ export default function OmemoTrustView({ peerJid, onClose }: { peerJid: string; 
       }));
       if (!cancelled) {
         setOwnFingerprint(own);
-        setOwnDeviceId(Number.isFinite(ownDevice) && ownDevice > 0 ? ownDevice : undefined);
+        setOwnDeviceId(ownDevice && ownDevice > 0 ? ownDevice : undefined);
         setDevices(hydrated);
       }
     })();
