@@ -109,7 +109,8 @@ async def service_health(db: AsyncSession = Depends(get_db)):
             secret_key=settings.MINIO_SECRET_KEY,
             secure=settings.MINIO_SECURE,
         )
-        minio_ok = bool(minio_client.bucket_exists(settings.MINIO_BUCKET))
+        # bucket_exists() is a blocking HTTP call; keep it off the event loop.
+        minio_ok = bool(await asyncio.to_thread(minio_client.bucket_exists, settings.MINIO_BUCKET))
     except Exception:
         minio_ok = False
 

@@ -258,7 +258,12 @@ async def share_attachment(
     summary="Upload attachment",
     description="Validate MIME and size, store file in MinIO, and persist metadata.",
 )
+# 100 MB per request with no ceiling means one IP can fill the bucket; nginx
+# only caps request rate at 300 r/m across all of /api/. Throttle uploads
+# specifically, per client IP, at a rate a real user never hits.
+@limiter.limit("120/hour")
 async def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     # message_id MUST use Form() so FastAPI parses it from the multipart body.
     # Without Form(), FastAPI treats it as a query parameter, which mismatches

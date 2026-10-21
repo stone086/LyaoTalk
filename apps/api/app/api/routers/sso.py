@@ -34,6 +34,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.models import Account, AccountPreference, SsoIdentity, gen_uuid
+from app.services.audit import write_audit
 from app.utils.security import create_access_token
 
 try:
@@ -148,16 +149,46 @@ async def _ensure_account(
     if not account:
         result = await db.execute(select(Account).where(Account.jid == jid))
         account = result.scalar_one_or_none()
-        # If found by JID but no SsoIdentity yet, link them
+        # If found by JID but no SsoIdentity yet, link them.
+        #
+        # A JID match is only a fallback for accounts created before SSO. If
+        # the account is already bound to a *different* identity, the JID is a
+        # collision (e.g. LDAP "zhang.san" vs "Zhang San"), not a legacy row -
+        # refuse instead of handing the account over.
         if account and provider and provider_sub:
-            db.add(SsoIdentity(
-                id=gen_uuid(),
-                account_id=account.id,
-                provider=provider,
-                provider_sub=provider_sub,
-                provider_email=provider_email or None,
-            ))
-            await db.commit()
+            linked = (await db.execute(
+                select(SsoIdentity).where(SsoIdentity.account_id == account.id)
+            )).scalars().all()
+            same = any(
+                i.provider == provider and i.provider_sub == provider_sub
+                for i in linked
+            )
+            if linked and not same:
+                logger.warning(
+                    "sso_identity_conflict jid=%s provider=%s",
+                    jid, provider,
+                )
+                await write_audit(
+                    db,
+                    actor=f"sso:{provider}",
+                    action="sso_identity_conflict",
+                    target_type="account",
+                    target_id=account.id,
+                    detail={"jid": jid, "provider": provider},
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail="This account is already linked to a different identity",
+                )
+            if not same:
+                db.add(SsoIdentity(
+                    id=gen_uuid(),
+                    account_id=account.id,
+                    provider=provider,
+                    provider_sub=provider_sub,
+                    provider_email=provider_email or None,
+                ))
+                await db.commit()
 
     # 3. Auto-provision
     if not account:
@@ -537,9 +568,12 @@ async def ldap_login(
         )
         raise HTTPException(401, "LDAP authentication failed")
 
-    # Build JID from LDAP username
+    # Build JID from LDAP username. Normalisation collapses "Zhang San" and
+    # "zhang.san" into the same localpart, so bind a short hash of the DN into
+    # the JID exactly like the OIDC path does with `sub`.
     safe_name = _sanitize_username(payload.username)
-    jid = f"{safe_name}@{settings.XMPP_DOMAIN}"
+    bind_hash = hashlib.sha256(bind_dn.encode()).hexdigest()[:8]
+    jid = f"{safe_name}_{bind_hash}@{settings.XMPP_DOMAIN}"
     account = await _ensure_account(
         db, jid, payload.username, settings.AUTO_PROVISION_LDAP,
         provider="ldap", provider_sub=bind_dn,

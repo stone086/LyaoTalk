@@ -123,4 +123,7 @@ rm -f "$probe_file"
 
 trap - ERR
 rm -f "$previous_override"
+# Keep the release window bounded: every release carries its own
+# apps/web/node_modules (~350 MB), so unpruned growth fills the disk.
+/usr/local/sbin/lyaotalk-prune-releases --apply >>/var/log/lyaotalk-prune.log 2>&1 || true
 printf 'Deployed LyaoTalk %s; LyaoTalk services healthy\n' "$sha"
