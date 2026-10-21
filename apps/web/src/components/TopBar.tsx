@@ -145,17 +145,16 @@ export default function TopBar({ onNewChat, onToggleRight, showRightToggle, onBa
             <Avatar name={conversation.title || conversation.peerJid} src={peerAvatarUrl} size="sm" />
             <span className="truncate text-sm font-semibold text-surface-50">{conversation.title || conversation.peerJid}</span>
           </div>
-        ) : <button
+        ) : compact ? <button
           onClick={() => setShowSearch(true)}
-          className={`flex min-w-0 items-center gap-2 flex-1 px-3 py-1.5 rounded-lg bg-surface-900 border-default text-surface-200/30 hover:border-default transition-colors cursor-text ${compact ? "" : "max-w-xs"}`}
+          className="flex min-w-0 items-center gap-2 flex-1 px-3 py-1.5 rounded-lg bg-surface-900 border-default text-surface-200/30 hover:border-default transition-colors cursor-text"
         >
           <Search size={13} />
           <span className="min-w-0 truncate text-xs flex-1 text-left">{t("topbar.searchPlaceholder")}</span>
           <kbd className="hidden sm:inline text-[9px] px-1.5 py-0.5 rounded bg-surface-800 text-surface-200/30 border-default">
             {t("topbar.searchShortcut")}
           </kbd>
-        </button>}
-        {!compact && !conversation && <div className="hidden flex-1 sm:block" />}
+        </button> : <div className="flex-1" />}
         {!compact && <>
         {conversation && <button type="button" onClick={() => setShowSearch(true)} className="btn-ghost p-2" title={t("topbar.searchPlaceholder")} aria-label={t("topbar.searchPlaceholder")}><Search size={16} /></button>}
         {conversation && <button type="button" onClick={toggleOmemo} className={`btn-ghost p-2 ${conversation.type === "group" ? (groupOmemoReady && groupOmemoEnabled ? "text-success" : "text-warn") : (omemoEnabled ? "text-success" : "text-warn")}`} title={conversation.type === "group" && !groupOmemoReady ? t("omemo.groupUnavailable") : conversation.type === "group" ? (groupOmemoEnabled ? t("omemo.enabled") : t("omemo.disabled")) : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-label={conversation.type === "group" && !groupOmemoReady ? t("omemo.groupUnavailable") : conversation.type === "group" ? (groupOmemoEnabled ? t("omemo.enabled") : t("omemo.disabled")) : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-pressed={conversation.type === "group" ? groupOmemoReady && groupOmemoEnabled : omemoEnabled}>{conversation.type === "group" ? (groupOmemoReady && groupOmemoEnabled ? <Lock size={16} /> : <Unlock size={16} />) : (omemoEnabled ? <Lock size={16} /> : <Unlock size={16} />)}</button>}
