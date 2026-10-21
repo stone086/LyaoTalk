@@ -160,6 +160,8 @@ export const useAccountStore = create<AccountState>()(
   )
 );
 
+import { clearCredential, openCredential, sealCredential } from "@/services/credentialVault";
+
 const PASSWORD_KEY_PREFIX = "liaot-account-password:";
 const USER_TOKEN_KEY_PREFIX = "liaot-user-token:";
 const USER_REFRESH_KEY_PREFIX = "liaot-user-refresh:";
@@ -173,14 +175,46 @@ function migrateSessionValue(prefix: string, fromId: string, toId: string) {
   sessionStorage.removeItem(fromKey);
 }
 
+// The password only needs to survive a reload so XMPP can reconnect; it must
+// not sit in a plain string store. Reads come from memory, writes go to the
+// encrypted credential vault, and a reload restores lazily on first use.
+const runtimePasswords = new Map<string, string>();
+
+function takeLegacyPassword(accountId: string): string | null {
+  // One-shot migration of values written by older builds.
+  const legacy = sessionStorage.getItem(`${PASSWORD_KEY_PREFIX}${accountId}`);
+  if (!legacy) return null;
+  runtimePasswords.set(accountId, legacy);
+  sessionStorage.removeItem(`${PASSWORD_KEY_PREFIX}${accountId}`);
+  void sealCredential(accountId, legacy).catch(() => undefined);
+  return legacy;
+}
+
 export function setAccountPassword(accountId: string, password: string) {
-  sessionStorage.setItem(`${PASSWORD_KEY_PREFIX}${accountId}`, password);
+  if (!password) return;
+  runtimePasswords.set(accountId, password);
+  sessionStorage.removeItem(`${PASSWORD_KEY_PREFIX}${accountId}`);
+  void sealCredential(accountId, password).catch(() => undefined);
 }
 
 export function getAccountPassword(accountId: string): string | null {
-  return sessionStorage.getItem(`${PASSWORD_KEY_PREFIX}${accountId}`);
+  return runtimePasswords.get(accountId) ?? takeLegacyPassword(accountId);
+}
+
+/**
+ * Restore a password sealed in the credential vault. Used by the reconnect
+ * supervisor when memory is empty (i.e. right after a page reload).
+ */
+export async function restoreAccountPassword(accountId: string): Promise<string | null> {
+  const cached = getAccountPassword(accountId);
+  if (cached) return cached;
+  const stored = await openCredential(accountId).catch(() => null);
+  if (stored) runtimePasswords.set(accountId, stored);
+  return stored;
 }
 
 export function clearAccountPassword(accountId: string) {
+  runtimePasswords.delete(accountId);
   sessionStorage.removeItem(`${PASSWORD_KEY_PREFIX}${accountId}`);
+  void clearCredential(accountId).catch(() => undefined);
 }
