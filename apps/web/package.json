@@ -22,6 +22,7 @@
     "dexie": "^4.0.10",
     "dexie-react-hooks": "^1.1.7",
     "emoji-picker-react": "^4.12.0",
+    "jsqr": "1.4.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.453.0",
     "mediabunny": "1.61.6",
