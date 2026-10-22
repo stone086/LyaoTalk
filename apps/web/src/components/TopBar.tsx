@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Search, Moon, Sun, PanelRight, Lock, Unlock, Phone, Video } from "lucide-react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, Search, Moon, Sun, PanelRight, Lock, Unlock, Phone, Video, ScanLine } from "lucide-react";
 import { useAccountStore } from "@/stores/accountStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import GlobalSearch from "@/modules/search/GlobalSearch";
@@ -14,6 +14,8 @@ import Avatar from "@/components/Avatar";
 import { useRosterStore } from "@/stores/rosterStore";
 import { getClient } from "@/services/xmppAdapter";
 
+const QrScanner = lazy(() => import("@/components/QrScanner"));
+
 interface TopBarProps {
   onToggleRight?: () => void;
   showRightToggle?: boolean;
@@ -25,6 +27,7 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
   const { t } = useLanguage();
   const [theme, setTheme] = useState(getStoredTheme());
   const [showSearch, setShowSearch] = useState(false);
+  const [showQrScanner, setShowQrScanner] = useState(false);
   const [showCallMenu, setShowCallMenu] = useState(false);
   const [omemoEnabled, setOmemoEnabledState] = useState(getOmemoEnabled());
   const [groupOmemoReady, setGroupOmemoReady] = useState(false);
@@ -178,6 +181,9 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
         {!conversation && <button onClick={toggleTheme} className="btn-ghost p-2">
           {dark ? <Sun size={16} /> : <Moon size={16} />}
         </button>}
+        {!conversation && <button type="button" onClick={() => setShowQrScanner(true)} className="btn-ghost p-2" title={t("topbar.scanQr")} aria-label={t("topbar.scanQr")}>
+          <ScanLine size={18} />
+        </button>}
         {account && !conversation && (
           <div className="hidden md:flex items-center gap-2 px-2 py-1 rounded-lg bg-surface-900 border-default select-none">
             <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center text-accent-soft text-xs uppercase font-medium">
@@ -194,6 +200,7 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
         </>}
       </header>
       {showSearch && <GlobalSearch onClose={() => setShowSearch(false)} />}
+      {showQrScanner && <Suspense fallback={null}><QrScanner onClose={() => setShowQrScanner(false)} /></Suspense>}
     </>
   );
 }
