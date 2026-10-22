@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Search, Moon, Sun, PanelRight, Lock, Unlock, Phone, Video, ScanLine } from "lucide-react";
+import { ArrowLeft, Search, Moon, Sun, PanelRight, Lock, Unlock, Phone, Video, ScanLine, SquarePen } from "lucide-react";
 import { useAccountStore } from "@/stores/accountStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import GlobalSearch from "@/modules/search/GlobalSearch";
@@ -17,13 +17,14 @@ import { getClient } from "@/services/xmppAdapter";
 const QrScanner = lazy(() => import("@/components/QrScanner"));
 
 interface TopBarProps {
+  onNewChat?: () => void;
   onToggleRight?: () => void;
   showRightToggle?: boolean;
   onBackToChats?: () => void;
   compact?: boolean;
   conversationId?: string;
 }
-export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, compact = false, conversationId }: TopBarProps) {
+export default function TopBar({ onNewChat, onToggleRight, showRightToggle, onBackToChats, compact = false, conversationId }: TopBarProps) {
   const { t } = useLanguage();
   const [theme, setTheme] = useState(getStoredTheme());
   const [showSearch, setShowSearch] = useState(false);
@@ -147,17 +148,16 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
             <Avatar name={conversation.title || conversation.peerJid} src={peerAvatarUrl} size="sm" />
             <span className="truncate text-sm font-semibold text-surface-50">{conversation.title || conversation.peerJid}</span>
           </div>
-        ) : <button
+        ) : compact ? <button
           onClick={() => setShowSearch(true)}
-          className={`flex min-w-0 items-center gap-2 flex-1 px-3 py-1.5 rounded-lg bg-surface-900 border-default text-surface-200/30 hover:border-default transition-colors cursor-text ${compact ? "" : "max-w-xs"}`}
+          className="flex min-w-0 items-center gap-2 flex-1 px-3 py-1.5 rounded-lg bg-surface-900 border-default text-surface-200/30 hover:border-default transition-colors cursor-text"
         >
           <Search size={13} />
           <span className="min-w-0 truncate text-xs flex-1 text-left">{t("topbar.searchPlaceholder")}</span>
           <kbd className="hidden sm:inline text-[9px] px-1.5 py-0.5 rounded bg-surface-800 text-surface-200/30 border-default">
             {t("topbar.searchShortcut")}
           </kbd>
-        </button>}
-        {!compact && !conversation && <div className="hidden flex-1 sm:block" />}
+        </button> : <div className="flex-1" />}
         {!compact && <>
         {conversation && <button type="button" onClick={() => setShowSearch(true)} className="btn-ghost p-2" title={t("topbar.searchPlaceholder")} aria-label={t("topbar.searchPlaceholder")}><Search size={16} /></button>}
         {conversation && <button type="button" onClick={toggleOmemo} className={`btn-ghost p-2 ${conversation.type === "group" ? (groupOmemoReady && groupOmemoEnabled ? "text-success" : "text-warn") : (omemoEnabled ? "text-success" : "text-warn")}`} title={conversation.type === "group" && !groupOmemoReady ? t("omemo.groupUnavailable") : conversation.type === "group" ? (groupOmemoEnabled ? t("omemo.enabled") : t("omemo.disabled")) : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-label={conversation.type === "group" && !groupOmemoReady ? t("omemo.groupUnavailable") : conversation.type === "group" ? (groupOmemoEnabled ? t("omemo.enabled") : t("omemo.disabled")) : omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")} aria-pressed={conversation.type === "group" ? groupOmemoReady && groupOmemoEnabled : omemoEnabled}>{conversation.type === "group" ? (groupOmemoReady && groupOmemoEnabled ? <Lock size={16} /> : <Unlock size={16} />) : (omemoEnabled ? <Lock size={16} /> : <Unlock size={16} />)}</button>}
@@ -170,8 +170,8 @@ export default function TopBar({ onToggleRight, showRightToggle, onBackToChats, 
             <button type="button" role="menuitem" onClick={() => { setShowCallMenu(false); void startCall(["audio", "video"]); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover-surface"><Video size={16} />{t("chat.videoCall")}</button>
           </div>}
         </div>}
-        {!conversation && <button onClick={toggleOmemo} className="btn-ghost p-2" title={omemoEnabled ? t("omemo.enabled") : t("omemo.disabled")}>
-          {omemoEnabled ? <Lock size={16} /> : <Unlock size={16} />}
+        {!conversation && onNewChat && <button type="button" onClick={onNewChat} className="btn-ghost p-2" title={t("conv.startChat")} aria-label={t("conv.startChat")}>
+          <SquarePen size={16} />
         </button>}
         {showRightToggle && !conversation && (
           <button onClick={onToggleRight} className="btn-ghost hidden p-2 sm:block" title={t("topbar.toggleInfo")}>
