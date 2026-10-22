@@ -7,7 +7,7 @@ import { getClient } from "@/services/xmppAdapter";
 import { deleteLocalConversationData } from "@/services/localDb";
 import { clsx } from "clsx";
 import {
-  Search, UserPlus, MoreVertical, MessageSquare,
+  UserPlus, MoreVertical, MessageSquare,
   Ban, Trash2, ChevronDown, ChevronRight, Users, Unlock, Info,
 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -224,7 +224,6 @@ function GroupSection({ name, contacts, onChat, onProfile }: {
 
 export default function RosterPanel() {
   const { t } = useLanguage();
-  const [query, setQuery] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [newJid, setNewJid] = useState("");
   const [profileContact, setProfileContact] = useState<RosterContact | null>(null);
@@ -249,8 +248,7 @@ export default function RosterPanel() {
   const filtered = useMemo(() =>
     contacts.filter((c) =>
       normalizeBareJid(c.jid) !== activeAccountJid
-      && (!query || c.jid.includes(query) || (c.name ?? "").toLowerCase().includes(query.toLowerCase()))
-    ), [contacts, query, activeAccountJid]);
+    ), [contacts, activeAccountJid]);
 
   const grouped = useMemo(() => {
     const groups: Record<string, RosterContact[]> = {
@@ -351,17 +349,6 @@ export default function RosterPanel() {
           <button onClick={() => addContact()} className="btn-primary text-xs py-1.5 px-3">{t("roster.add")}</button>
         </div>
       )}
-
-      <div className="px-3 py-2 border-b border-subtle">
-        <div className="relative">
-          <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-surface-200/30" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)}
-            placeholder={t("roster.searchPlaceholder")}
-            className="w-full pl-7 pr-3 py-1.5 text-xs bg-surface-900 rounded-lg
-                       border-default text-surface-50 placeholder:text-surface-200/30
-                       focus:outline-none focus:ring-1 focus:ring-accent/30" />
-        </div>
-      </div>
 
       <div className="flex-1 overflow-y-auto py-1">
         {Object.entries(grouped).map(([group, list]) =>

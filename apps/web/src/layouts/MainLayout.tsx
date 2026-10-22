@@ -30,6 +30,7 @@ export default function MainLayout() {
 
   const startChat = () => {
     setLeftTab("contacts");
+    navigate("/");
   };
 
   const selectTab = (tab: LeftTab) => {
@@ -73,6 +74,7 @@ export default function MainLayout() {
       <div className={clsx("min-w-0 flex-1 flex-col", shouldHideContentOnMobile ? "hidden md:flex" : "flex")}>
         <TopBar
           conversationId={conversationId}
+          onNewChat={startChat}
           onToggleRight={() => setShowRight((v) => !v)}
           showRightToggle={!!conversationId}
           onBackToChats={hasActiveConversation ? () => navigate("/") : undefined}
