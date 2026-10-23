@@ -105,7 +105,7 @@ try:
     put_url = next((e.get("url") for e in slot.iter() if e.tag.endswith("}put")), None)
     if not get_url or not put_url:
         raise RuntimeError("XMPP upload slot did not contain GET and PUT URLs")
-    if not (get_url.startswith(f"https://upload.{DOMAIN}/upload/") and put_url.startswith(f"https://upload.{DOMAIN}/upload/")):
+    if not (get_url.startswith(f"https://upload.{DOMAIN}/file_share/") and put_url.startswith(f"https://upload.{DOMAIN}/file_share/")):
         raise RuntimeError("XMPP upload slot returned an unexpected host or path")
     print("XMPP upload slot: granted")
 
