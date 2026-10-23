@@ -17,6 +17,7 @@ import json
 import socket
 import ssl
 import logging
+import os
 from pathlib import Path
 import re
 import secrets
@@ -189,7 +190,7 @@ def parse_jid(jid: str, request: Request | None = None):
     domain = domain.strip().lower()
     if not username or not domain:
         raise HTTPException(status_code=400, detail="Invalid JID")
-    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", username):
+    if not re.fullmatch(r"[\w.-]{1,64}", username) or len(username.encode("utf-8")) > 64:
         raise HTTPException(status_code=400, detail="Username contains invalid characters")
     xmpp_domain = settings.XMPP_DOMAIN.strip().lower()
     public_aliases = {
@@ -235,7 +236,7 @@ def _verify_xmpp_sasl_plain(username: str, domain: str, password: str) -> bool:
         f"<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='PLAIN'>{auth}</auth>"
     ).encode()
 
-    with socket.create_connection(("127.0.0.1", 5222), timeout=5) as raw:
+    with socket.create_connection(("127.0.0.1", int(os.getenv("XMPP_C2S_PORT", "5222"))), timeout=5) as raw:
         raw.sendall(stream)
         features = _recv_until(raw, b"</stream:features>")
 
@@ -323,6 +324,7 @@ async def issue_user_token(
     try:
         verified = await asyncio.to_thread(_verify_xmpp_sasl_plain, username, domain, password)
     except Exception:
+        logger.exception("xmpp_password_verification_unavailable")
         raise HTTPException(status_code=503, detail="Password verification unavailable")
     if not verified:
         raise HTTPException(status_code=401, detail="Invalid JID or password")

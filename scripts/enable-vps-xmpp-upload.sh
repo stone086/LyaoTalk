@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-time rabisuB migration for Prosody 0.11 XEP-0363 file uploads.
+# One-time rabisuB migration for Prosody 13 XEP-0363 file uploads.
 set -euo pipefail
 
 domain=lyaot.2-yc.com
@@ -10,9 +10,12 @@ prosody_backup="${prosody_config}.pre-http-upload-${stamp}"
 nginx_backup="/etc/lyaotalk/lyaotalk-subdomains.pre-http-upload-${stamp}"
 
 [[ "$(id -u)" -eq 0 ]] || { echo 'Run as root' >&2; exit 1; }
-[[ -f /usr/lib/prosody/modules/mod_http_upload/mod_http_upload.lua ]] || { echo 'mod_http_upload missing' >&2; exit 1; }
+[[ -f /usr/lib/prosody/modules/mod_http_file_share.lua ]] || { echo 'mod_http_file_share missing' >&2; exit 1; }
 [[ -f "$prosody_config" && -f "$nginx_config" ]] || { echo 'Expected VPS config missing' >&2; exit 1; }
 if grep -q 'Component "upload.lyaot.2-yc.com" "http_upload"' "$prosody_config"; then
+  echo "Legacy http_upload data needs explicit migration before enabling http_file_share" >&2; exit 1
+fi
+if grep -q 'Component "upload.lyaot.2-yc.com" "http_file_share"' "$prosody_config"; then
   echo 'HTTP upload already configured'; exit 0
 fi
 grep -q 'server_name upload.lyaot.2-yc.com;' "$nginx_config" || { echo 'Upload vhost missing' >&2; exit 1; }
@@ -31,13 +34,13 @@ trap rollback ERR
 cat >> "$prosody_config" <<'LUA'
 
 -- XEP-0363 HTTP upload for native XMPP clients (Conversations, Monal).
-Component "upload.lyaot.2-yc.com" "http_upload"
+Component "upload.lyaot.2-yc.com" "http_file_share"
   modules_disabled = { "s2s" }
   http_host = "upload.lyaot.2-yc.com"
   http_external_url = "https://upload.lyaot.2-yc.com/"
-  http_upload_file_size_limit = 100 * 1024 * 1024
-  http_upload_quota = 500 * 1024 * 1024
-  http_upload_expire_after = 30 * 24 * 60 * 60
+  http_file_share_size_limit = 100 * 1024 * 1024
+  http_file_share_daily_quota = 500 * 1024 * 1024
+  http_file_share_expires_after = "30 days"
 LUA
 
 python3 - "$prosody_config" <<'PY'
@@ -62,7 +65,7 @@ text = path.read_text()
 needle = '    location / { return 404; }\n}'
 if text.count(needle) != 1:
     raise SystemExit('Expected exactly one upload-vhost catch-all')
-route = '''    location ^~ /upload/ {
+route = '''    location ^~ /file_share/ {
         client_max_body_size 101m;
         proxy_pass http://127.0.0.1:5280;
         proxy_set_header Host $host;
@@ -73,7 +76,7 @@ route = '''    location ^~ /upload/ {
         add_header Content-Security-Policy "default-src 'none'; sandbox" always;
     }
 '''
-route = '''    location = /upload {
+route = '''    location = /file_share {
         proxy_pass http://127.0.0.1:5280;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
@@ -89,7 +92,7 @@ systemctl reload nginx
 systemctl is-active --quiet prosody nginx
 healthy=false
 for attempt in {1..10}; do
-  if curl -fsS --max-time 5 https://upload.lyaot.2-yc.com/upload >/dev/null; then
+  if curl -sS -o /dev/null --max-time 5 https://upload.lyaot.2-yc.com/file_share; then
     healthy=true
     break
   fi

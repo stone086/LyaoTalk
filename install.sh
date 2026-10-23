@@ -589,9 +589,21 @@ install_redis() {
 
 install_prosody() {
   step "Install Prosody XMPP server"
+  # Ubuntu 22.04's default repository still ships Prosody 0.11. Use the
+  # official signed repository so new installs get the current 13.x release.
+  local prosody_codename
+  prosody_codename="$(lsb_release -sc)"
+  wget -q "https://prosody.im/downloads/repos/${prosody_codename}/prosody.sources" \
+    -O /etc/apt/sources.list.d/prosody.sources \
+    || error "Could not configure the official Prosody package repository"
+  apt update -qq
   apt install -y -qq prosody prosody-modules lua-dbi-postgresql mercurial
-  if [[ ! -f /usr/lib/prosody/modules/mod_http_upload/mod_http_upload.lua && ! -f /usr/lib/prosody-modules/mod_http_upload/mod_http_upload.lua ]]; then
-    error "Prosody mod_http_upload is required for native XMPP client file transfers"
+  local prosody_version
+  prosody_version="$(prosodyctl about | head -1 | awk '{print $2}')"
+  [[ "${prosody_version}" == 13.* ]] \
+    || error "Prosody 13.x is required; installed ${prosody_version}"
+  if [[ ! -f /usr/lib/prosody/modules/mod_http_file_share/mod_http_file_share.lua && ! -f /usr/lib/prosody/modules/mod_http_file_share.lua ]]; then
+    error "Prosody mod_http_file_share is required for native XMPP client file transfers"
   fi
   usermod -aG prosody "${APP_USER}" || true
 

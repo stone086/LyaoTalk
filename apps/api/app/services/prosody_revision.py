@@ -4,18 +4,19 @@ The helper runs as the Prosody user and only returns a digest of file metadata.
 No password hash or account file contents cross the socket.
 """
 import json
+import os
 import re
 import socket
 
 from fastapi import HTTPException
 
-SOCKET_PATH = "/run/lyaotalk-prosody.sock"
+SOCKET_PATH = os.getenv("LYAOTALK_PROSODY_HELPER_SOCKET", "/run/lyaotalk-prosody.sock")
 
 
 def get_credential_revision(jid: str) -> str:
     try:
         username, domain = jid.split("@", 1)
-        if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", username) or not re.fullmatch(r"[A-Za-z0-9.-]{1,64}", domain):
+        if (not re.fullmatch(r"[\w.-]{1,64}", username) or len(username.encode("utf-8")) > 64) or not re.fullmatch(r"[A-Za-z0-9.-]{1,64}", domain):
             raise ValueError("invalid jid")
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
             conn.settimeout(2)
