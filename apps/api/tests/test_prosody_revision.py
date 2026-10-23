@@ -24,5 +24,8 @@ def test_internal_account_file_revision_changes_on_direct_rewrite(tmp_path, monk
     replacement.replace(account_file)
     after = helper.credential_revision("alice", "lyaot.example.org")
     assert before != after
+    unicode_account = account_dir / "mr%e5%91%a8.dat"
+    unicode_account.write_text("unicode prosody credential")
+    assert len(helper.credential_revision("mr周", "lyaot.example.org")) == 64
     with pytest.raises(ValueError):
         helper.credential_revision("../alice", "lyaot.example.org")
