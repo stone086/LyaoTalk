@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import OmemoTrustView from "./OmemoTrustView";
 import { useChatStore, Conversation, MessageAttachment } from "@/stores/chatStore";
 import { useRosterStore } from "@/stores/rosterStore";
@@ -12,6 +12,8 @@ import { clsx } from "clsx";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/utils/i18n";
 import Avatar from "@/components/Avatar";
+import { getClient } from "@/services/xmppAdapter";
+import { isTrustedXmppUploadUrl, trustedFileObjectKey } from "@/services/trustedFilesUrl";
 
 type RightTab = "info" | "members" | "files" | "starred" | "ai";
 
@@ -152,6 +154,7 @@ function MembersTab({ roomJid }: { roomJid: string }) {
 function InfoTab({ conversation }: { conversation: Conversation }) {
   const { t } = useLanguage();
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
+  const connected = useAccountStore((s) => s.accounts.find((a) => a.id === s.activeAccountId)?.connected ?? false);
   const contact = useRosterStore((s) =>
     activeAccountId ? s.getContact(activeAccountId, conversation.peerJid) : undefined
   );
@@ -159,23 +162,44 @@ function InfoTab({ conversation }: { conversation: Conversation }) {
     activeAccountId ? s.getRoom(activeAccountId, conversation.peerJid) : undefined,
   );
 
+  useEffect(() => {
+    if (conversation.type !== "private" || !activeAccountId || !connected) return;
+    const client = getClient(activeAccountId);
+    if (!client) return;
+    let cancelled = false;
+    const jid = conversation.peerJid;
+    void client.fetchPepAvatar(jid)
+      .then((avatar) => avatar || client.fetchVCardAvatar(jid))
+      .then((avatarUrl) => {
+        if (cancelled || !avatarUrl) return;
+        const latest = useRosterStore.getState().getContact(activeAccountId, jid);
+        if (latest && latest.avatarUrl !== avatarUrl) {
+          useRosterStore.getState().upsertContact({ ...latest, avatarUrl });
+        }
+      }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [activeAccountId, connected, conversation.peerJid, conversation.type]);
+
+  const presenceKnown = connected && contact?.lastSeenAt &&
+    (contact.subscription === "both" || contact.subscription === "to");
+
   return (
     <div className="p-4 flex flex-col gap-4">
       <div className="flex flex-col items-center gap-2 py-2">
-        <Avatar name={conversation.title ?? conversation.peerJid} src={conversation.type === "private" ? contact?.avatarUrl : undefined} size="xl" />
+        <Avatar name={contact?.name ?? conversation.title ?? conversation.peerJid} src={conversation.type === "private" ? contact?.avatarUrl : undefined} size="xl" />
         <div className="text-center">
-          <p className="font-semibold text-surface-50">{conversation.title ?? conversation.peerJid}</p>
+          <p className="font-semibold text-surface-50">{contact?.name ?? conversation.title ?? conversation.peerJid}</p>
           <p className="text-xs text-surface-200/40 mt-0.5">{conversation.peerJid}</p>
         </div>
         {contact && (
-          <span className={clsx("text-xs px-2 py-0.5 rounded-full", contact.presence === "available" ? "bg-success/20 text-success" : "bg-surface-800 text-surface-200/50")}>
-            {contact.presence}
+          <span className={clsx("text-xs px-2 py-0.5 rounded-full", presenceKnown && contact.presence === "available" ? "bg-success/20 text-success" : "bg-surface-800 text-surface-200/50")}>
+            {presenceKnown ? contact.presence : t("right.presenceUnknown")}
           </span>
         )}
       </div>
 
       <div className="flex flex-col gap-2">
-        {contact?.statusText && (
+        {presenceKnown && contact?.statusText && (
           <div className="glass rounded-lg p-3">
             <p className="text-xs text-surface-200/40 mb-1">{t("right.status")}</p>
             <p className="text-sm text-surface-50">{contact.statusText}</p>
@@ -196,10 +220,10 @@ function InfoTab({ conversation }: { conversation: Conversation }) {
             <OmemoTrustButton peerJid={contact.jid} />
             <MergeContactButton accountId={activeAccountId} jid={contact.jid} displayName={contact.name ?? contact.jid.split("@")[0]} />
             <ContactNotesEditor
+              key={`${activeAccountId}::${contact.jid}`}
               accountId={activeAccountId}
               jid={contact.jid}
               initialNotes={contact.notes ?? ""}
-              initialTags={contact.tags ?? []}
             />
           </>
         )}
@@ -290,39 +314,23 @@ function ContactNotesEditor({
   accountId,
   jid,
   initialNotes,
-  initialTags,
 }: {
   accountId: string;
   jid: string;
   initialNotes: string;
-  initialTags: string[];
 }) {
   const { t } = useLanguage();
   const setContactNotes = useRosterStore((s) => s.setContactNotes);
-  const setContactTags = useRosterStore((s) => s.setContactTags);
   const [notes, setNotes] = useState(initialNotes);
-  const [newTag, setNewTag] = useState("");
-  const [tags, setTags] = useState<string[]>(initialTags);
   const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setNotes(initialNotes);
+  }, [editing, initialNotes]);
 
   const saveNotes = () => {
     setContactNotes(accountId, jid, notes);
     setEditing(false);
-  };
-
-  const addTag = () => {
-    const v = newTag.trim();
-    if (!v || tags.includes(v)) return;
-    const next = [...tags, v];
-    setTags(next);
-    setContactTags(accountId, jid, next);
-    setNewTag("");
-  };
-
-  const removeTag = (tag: string) => {
-    const next = tags.filter((tg) => tg !== tag);
-    setTags(next);
-    setContactTags(accountId, jid, next);
   };
 
   return (
@@ -357,35 +365,6 @@ function ContactNotesEditor({
         </button>
       )}
 
-      <div className="border-t border-subtle pt-2 mt-1">
-        <p className="text-xs text-surface-200/40 mb-1">{t("right.tags")}</p>
-        <div className="flex flex-wrap gap-1 mb-2">
-          {tags.map((tag) => (
-            <span
-              key={tag}
-              className="text-[10px] px-2 py-0.5 rounded-full bg-accent/20 text-accent-soft flex items-center gap-1"
-            >
-              {tag}
-              <button onClick={() => removeTag(tag)} className="opacity-60 hover:opacity-100">×</button>
-            </span>
-          ))}
-          {tags.length === 0 && (
-            <span className="text-[11px] text-surface-200/30 italic">{t("right.tagsEmpty")}</span>
-          )}
-        </div>
-        <div className="flex gap-1">
-          <input
-            value={newTag}
-            onChange={(e) => setNewTag(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addTag()}
-            placeholder={t("right.addTagPlaceholder")}
-            className="flex-1 text-xs inset-surface border-default rounded px-2 py-1 text-surface-50"
-          />
-          <button onClick={addTag} className="text-xs px-2 py-1 rounded hover-surface text-surface-200/60">
-            +
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -398,7 +377,7 @@ function FileLink({ file, accountId }: { file: MessageAttachment; accountId?: st
       <FileText size={14} className="text-surface-200/50 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-xs text-surface-50 truncate">{file.fileName}</p>
-        <p className="text-[10px] text-surface-200/40">{(file.sizeBytes / 1024).toFixed(1)} KB</p>
+        {file.sizeBytes > 0 && <p className="text-[10px] text-surface-200/40">{(file.sizeBytes / 1024).toFixed(1)} KB</p>}
       </div>
     </a>
   );
@@ -408,9 +387,15 @@ function FilesTab({ conversationId }: { conversationId: string }) {
   const { t } = useLanguage();
   const messages = useChatStore((s) => s.messages[conversationId] ?? []);
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
-  const files = messages
-    .flatMap((m) => m.attachments ?? [])
-    .filter((a) => Boolean(a.downloadUrl));
+  const files = messages.flatMap((m): MessageAttachment[] => {
+    if (m.deletedAt) return [];
+    if (m.attachments?.length) return m.attachments.filter((a) => Boolean(a.downloadUrl));
+    const rawUrl = m.body.trim();
+    const objectKey = trustedFileObjectKey(rawUrl, window.location.origin);
+    if (!objectKey && !isTrustedXmppUploadUrl(rawUrl, window.location.origin)) return [];
+    const name = objectKey?.split("/").pop() || new URL(rawUrl, window.location.origin).pathname.split("/").pop() || "file";
+    return [{ id: rawUrl, fileName: name, mimeType: "application/octet-stream", sizeBytes: 0, downloadUrl: rawUrl }];
+  });
 
   const unique = Array.from(
     new Map(files.map((f) => [f.id, f])).values()
@@ -473,6 +458,13 @@ export default function RightPanel({ conversationId, onClose }: RightPanelProps)
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<RightTab>("info");
   const conversation = useChatStore((s) => s.conversations[conversationId]);
+  const activeAccountId = useAccountStore((s) => s.activeAccountId);
+  const contactName = useRosterStore((s) => {
+    if (!conversation || conversation.type !== "private" || !activeAccountId) return undefined;
+    return s.getContact(activeAccountId, conversation.peerJid)?.name;
+  });
+
+  useEffect(() => { setActiveTab("info"); }, [conversationId]);
 
   if (!conversation) return null;
 
@@ -491,7 +483,7 @@ export default function RightPanel({ conversationId, onClose }: RightPanelProps)
   return (
     <div className="absolute inset-0 z-30 flex h-full w-full flex-col border-l border-subtle bg-surface-900 md:static md:w-72 md:flex-shrink-0 md:bg-surface-900/30">
       <div className="flex items-center justify-between px-3 py-3 border-b border-subtle">
-        <span className="text-sm font-semibold text-surface-50 truncate">{conversation.title ?? conversation.peerJid}</span>
+        <span className="text-sm font-semibold text-surface-50 truncate">{contactName ?? conversation.title ?? conversation.peerJid}</span>
         <button onClick={onClose} className="p-1.5 rounded hover-surface text-surface-200/40 hover:text-surface-200" aria-label="Close panel">
           <X size={14} />
         </button>
