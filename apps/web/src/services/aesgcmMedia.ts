@@ -143,7 +143,7 @@ export async function fetchAndDecryptAesgcm(
       ciphertext = await (await privateFileBlob(parts.ciphertextUrl, opts?.accountId, opts?.signal)).arrayBuffer();
     } else {
       const remote = new URL(parts.ciphertextUrl);
-      if (remote.hostname === "upload.chat.example.net") {
+      if (remote.hostname === "upload.chat.example.net" || remote.hostname === "upload.lyaot.example.org") {
         const { remoteEncryptedBlob } = await import("./api");
         ciphertext = await (await remoteEncryptedBlob(parts.ciphertextUrl, opts?.accountId, opts?.signal)).arrayBuffer();
       } else {
