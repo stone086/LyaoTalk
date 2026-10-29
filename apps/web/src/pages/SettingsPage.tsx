@@ -418,6 +418,7 @@ export default function SettingsPage() {
   const [pushEnabled, setPushEnabled] = useState(false);
   const [pushPending, setPushPending] = useState(false);
   const [pushResult, setPushResult] = useState<"enabled" | "failed" | null>(null);
+  const [pushError, setPushError] = useState<string | null>(null);
   const [showPushInstallGuide, setShowPushInstallGuide] = useState(false);
   const pushBrowser = collectBrowserCapabilities();
 
@@ -437,6 +438,7 @@ export default function SettingsPage() {
 
   const handlePushChange = (checked: boolean) => {
     setPushResult(null);
+    setPushError(null);
     if (checked && pushBrowser.isIOS && !pushBrowser.isStandalonePwa) {
       setShowPushInstallGuide(true);
       return;
@@ -459,9 +461,10 @@ export default function SettingsPage() {
         if (ok) toast.success(t("toast.pushDisabled"));
         else toast.error(t("toast.pushFailed"));
       }
-    } catch {
+    } catch (error) {
       setPushEnabled(!checked);
       setPushResult("failed");
+      setPushError(error instanceof Error ? error.message.slice(0, 240) : "Unknown error");
       toast.error(t("toast.pushFailed"));
     } finally {
       setPushPending(false);
@@ -757,6 +760,7 @@ export default function SettingsPage() {
             )}
             {pushPending && <p role="status" className="text-xs text-surface-200">{t("settings.pushPending")}</p>}
             {pushResult && <p role={pushResult === "failed" ? "alert" : "status"} className="text-xs text-surface-200">{t(pushResult === "failed" ? "toast.pushFailed" : "toast.pushEnabled")}</p>}
+            {pushError && <p role="alert" className="break-words text-xs text-danger">{pushError}</p>}
             {showPushInstallGuide && pushBrowser.isIOS && !pushBrowser.isStandalonePwa && (
               <div role="note" className="rounded-lg border border-[#7c6af7]/40 bg-[#7c6af7]/10 p-3 text-xs text-surface-200">
                 <p className="font-medium">{t("settings.iosPushGuideTitle")}</p>
