@@ -109,7 +109,7 @@ async def test_change_password_checks_old_password_and_rotates_tokens(monkeypatc
             monkeypatch.setattr(auth_router, "_change_password_with_prosody", lambda *args: SimpleNamespace(returncode=0))
             ok = await client.post("/auth/change-password", json={"old_password": "old-secret", "new_password": "new-secret"})
         assert ok.status_code == 200
-        assert ok.json()["access_token"] and ok.json()["refresh_token"]
+        assert ok.json() == {"ok": True}
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
