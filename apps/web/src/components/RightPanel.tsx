@@ -370,13 +370,15 @@ function ContactNotesEditor({
 }
 
 function FileLink({ file, accountId }: { file: MessageAttachment; accountId?: string | null }) {
-  const url = usePrivateFileUrl(file.downloadUrl, accountId);
+  const { url, progress, details } = usePrivateFileUrl(file.downloadUrl, accountId);
   return (
     <a href={url ?? undefined} download={file.fileName} target="_blank" rel="noopener noreferrer" aria-disabled={!url}
       className="glass rounded-lg p-3 flex items-center gap-3 hover-surface">
       <FileText size={14} className="text-surface-200/50 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-xs text-surface-50 truncate">{file.fileName}</p>
+        {!url && progress !== null && <p className="text-[10px] text-surface-200/60">{progress}%</p>}
+        {!url && details && <p className="text-[10px] text-surface-200/60">{(details.loaded / 1024).toFixed(1)} / {details.total ? (details.total / 1024).toFixed(1) : "?"} KB · {(details.speed / 1024).toFixed(1)} KB/s</p>}
         {file.sizeBytes > 0 && <p className="text-[10px] text-surface-200/40">{(file.sizeBytes / 1024).toFixed(1)} KB</p>}
       </div>
     </a>

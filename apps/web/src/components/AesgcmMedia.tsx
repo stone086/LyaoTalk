@@ -11,6 +11,8 @@ import { fetchAndDecryptAesgcm } from "@/services/aesgcmMedia";
 import { useAccountStore } from "@/stores/accountStore";
 import { safeHref } from "@/utils/urlSafety";
 import { useLanguage } from "@/utils/i18n";
+import { formatFileSize } from "@/utils/helpers";
+import type { TransferDetails } from "@/services/api";
 
 interface AesgcmMediaProps {
   /** The full aesgcm:// URL including the #hex fragment */
@@ -36,6 +38,8 @@ function pickKind(name: string): "image" | "audio" | "video" | "file" {
 
 export default function AesgcmMedia({ url, fileName, plainHref }: AesgcmMediaProps) {
   const [status, setStatus] = useState<Status>({ kind: "loading" });
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadDetails, setDownloadDetails] = useState<TransferDetails | undefined>();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
@@ -45,8 +49,15 @@ export default function AesgcmMedia({ url, fileName, plainHref }: AesgcmMediaPro
     let cancelled = false;
     const ctrl = new AbortController();
     setStatus({ kind: "loading" });
+    setDownloadProgress(0);
+    setDownloadDetails(undefined);
 
-    fetchAndDecryptAesgcm(url, { signal: ctrl.signal, accountId: activeAccountId })
+    fetchAndDecryptAesgcm(url, { signal: ctrl.signal, accountId: activeAccountId, onProgress: (percent, details) => {
+      if (!cancelled) {
+        setDownloadProgress(percent);
+        if (details) setDownloadDetails(details);
+      }
+    } })
       .then((blobUrl) => {
         if (!cancelled) setStatus({ kind: "ready", blobUrl });
       })
@@ -69,9 +80,10 @@ export default function AesgcmMedia({ url, fileName, plainHref }: AesgcmMediaPro
 
   if (status.kind === "loading") {
     return (
-      <div className="flex items-center gap-2 text-xs text-surface-200/70 py-2">
-        <Loader2 size={14} className="animate-spin" />
-        <span>{t("media.decrypting", { fileName })}</span>
+      <div className="py-2 text-xs text-surface-200/70" role="progressbar" aria-label={fileName} aria-valuemin={0} aria-valuemax={100} aria-valuenow={downloadProgress}>
+        <div className="flex items-center gap-2"><Loader2 size={14} className="animate-spin" /><span>{fileName} · {downloadProgress}%</span></div>
+        {downloadDetails && <div className="mt-1">{formatFileSize(downloadDetails.loaded)} / {downloadDetails.total ? formatFileSize(downloadDetails.total) : "?"} · {formatFileSize(downloadDetails.speed)}/s</div>}
+        <div className="mt-1 h-1.5 rounded-full bg-surface-800 overflow-hidden"><div className="h-full bg-accent" style={{ width: `${downloadProgress}%` }} /></div>
       </div>
     );
   }
