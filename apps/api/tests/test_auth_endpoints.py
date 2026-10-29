@@ -5,6 +5,8 @@ from app.api.routers import auth as auth_router
 from app.core.config import settings
 from app.core.database import get_db
 from app.main import app
+from app.utils.security import get_current_user
+from types import SimpleNamespace
 
 
 @pytest.fixture(autouse=True)
@@ -88,6 +90,28 @@ async def test_register_rejects_short_password():
             json={"jid": "alice@example.com", "password": "123"},
         )
     assert resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_change_password_checks_old_password_and_rotates_tokens(monkeypatch):
+    async def current_user():
+        return {"sub": "alice@example.com", "account_id": "account-1"}
+
+    monkeypatch.setattr(auth_router, "_verify_xmpp_sasl_plain", lambda *args: False)
+    monkeypatch.setattr(auth_router, "_change_password_with_prosody", lambda *args: (_ for _ in ()).throw(AssertionError("must not change")))
+    app.dependency_overrides[get_current_user] = current_user
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            denied = await client.post("/auth/change-password", json={"old_password": "wrong", "new_password": "new-secret"})
+            assert denied.status_code == 401
+            monkeypatch.setattr(auth_router, "_verify_xmpp_sasl_plain", lambda *args: True)
+            monkeypatch.setattr(auth_router, "_change_password_with_prosody", lambda *args: SimpleNamespace(returncode=0))
+            ok = await client.post("/auth/change-password", json={"old_password": "old-secret", "new_password": "new-secret"})
+        assert ok.status_code == 200
+        assert ok.json()["access_token"] and ok.json()["refresh_token"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.anyio

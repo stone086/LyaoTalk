@@ -511,6 +511,29 @@ export default function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState({ jid: "", password: "", wsUrl: "" });
+  const [passwordForm, setPasswordForm] = useState({ old: "", next: "", confirm: "" });
+  const [passwordPending, setPasswordPending] = useState(false);
+  const handlePasswordChange = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!activeAccountId || passwordPending) return;
+    if (passwordForm.next.length < 6 || passwordForm.next !== passwordForm.confirm) {
+      toast.error(t("settings.passwordMismatch"));
+      return;
+    }
+    setPasswordPending(true);
+    try {
+      const result = await authApi.changePassword(passwordForm.old, passwordForm.next);
+      setAccountPassword(activeAccountId, passwordForm.next);
+      setUserToken(activeAccountId, result.access_token);
+      setUserRefreshToken(activeAccountId, result.refresh_token);
+      setPasswordForm({ old: "", next: "", confirm: "" });
+      toast.success(t("settings.passwordChanged"));
+    } catch {
+      toast.error(t("settings.passwordChangeFailed"));
+    } finally {
+      setPasswordPending(false);
+    }
+  };
   const [theme, setTheme] = useState<ThemeMode>(getStoredTheme());
   const [language, setLanguageState] = useState<Language>(getStoredLanguage());
   const [historyRetentionDays, setHistoryRetentionDays] = useState<number>(() => {
@@ -714,6 +737,17 @@ export default function SettingsPage() {
               accounts.map((acc) => <AccountCard key={acc.id} account={acc} />)
             )}
           </div>
+        </section>
+
+        {/* Appearance */}
+        <section className={settingsGroup === "account" && activeAccountId ? "" : "hidden"}>
+          <form onSubmit={handlePasswordChange} className="glass rounded-xl p-4 flex flex-col gap-3">
+            <h2 className="text-sm font-semibold text-surface-50">{t("settings.changePassword")}</h2>
+            <input className="input-field text-sm" type="password" autoComplete="current-password" required placeholder={t("settings.currentPassword")} value={passwordForm.old} onChange={(e) => setPasswordForm({ ...passwordForm, old: e.target.value })} />
+            <input className="input-field text-sm" type="password" autoComplete="new-password" required minLength={6} placeholder={t("settings.newPassword")} value={passwordForm.next} onChange={(e) => setPasswordForm({ ...passwordForm, next: e.target.value })} />
+            <input className="input-field text-sm" type="password" autoComplete="new-password" required placeholder={t("settings.confirmPassword")} value={passwordForm.confirm} onChange={(e) => setPasswordForm({ ...passwordForm, confirm: e.target.value })} />
+            <button type="submit" className="btn-primary text-sm" disabled={passwordPending}>{t("settings.changePassword")}</button>
+          </form>
         </section>
 
         {/* Appearance */}
