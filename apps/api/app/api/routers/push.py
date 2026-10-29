@@ -261,7 +261,7 @@ async def notify(
     ntfy_sent = False
     if ntfy_row:
         # ntfy failures must not prevent existing Web Push delivery.
-        ntfy_sent = await publish_ntfy(ntfy_row.topic)
+        ntfy_sent = await publish_ntfy(ntfy_row.topic, collapse=True)
 
     # Route using the opaque per-account node from the XEP-0357 publish IQ.
     # The publishing server's stanza `from` is its domain, not the recipient.
