@@ -96,6 +96,7 @@ class PushNotifyRequest(BaseModel):
     title: str = Field(..., max_length=256)
     body: str = Field(..., max_length=2048)
     badge: Optional[int] = Field(None, ge=0, le=99999)
+    message_id: Optional[str] = Field(None, pattern=r"^[0-9a-f]{64}$")
     secret: str = Field(..., min_length=1, max_length=512)
 
 
@@ -261,7 +262,7 @@ async def notify(
     ntfy_sent = False
     if ntfy_row:
         # ntfy failures must not prevent existing Web Push delivery.
-        ntfy_sent = await publish_ntfy(ntfy_row.topic, collapse=True)
+        ntfy_sent = await publish_ntfy(ntfy_row.topic, message_id=payload.message_id)
 
     # Route using the opaque per-account node from the XEP-0357 publish IQ.
     # The publishing server's stanza `from` is its domain, not the recipient.

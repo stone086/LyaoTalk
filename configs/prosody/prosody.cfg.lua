@@ -30,6 +30,7 @@ modules_enabled = {
   "bosh";
   "http";
   "cloud_notify";   -- XEP-0357 push relay (community module)
+  "lyaotalk_push_id"; -- stable original message key for ntfy de-duplication
   -- XEP-0215 external_services is unavailable in Ubuntu 22.04's Prosody
   -- modules package. Install a compatible module before enabling it.
   "turncredentials";  -- coturn REST credentials for older clients/modules
