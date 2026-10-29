@@ -177,6 +177,16 @@ class PushSubscription(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class NtfySubscription(Base):
+    """One private notification topic and XMPP push node per account."""
+    __tablename__ = "ntfy_subscriptions"
+
+    account_id = Column(String, ForeignKey("accounts.id", ondelete="CASCADE"), primary_key=True)
+    topic = Column(String(64), unique=True, nullable=False)
+    node = Column(String(128), unique=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class Webhook(Base):
     """Inbound webhooks for posting messages from external services."""
     __tablename__ = "webhooks"

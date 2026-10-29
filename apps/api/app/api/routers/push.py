@@ -25,7 +25,8 @@ import asyncio
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import limiter
-from app.models import PushSubscription
+from app.models import PushSubscription, NtfySubscription
+from app.services.ntfy import ntfy_ready, publish_ntfy
 from app.utils.security import get_current_user
 
 logger = logging.getLogger("lyaotalk.push")
@@ -96,6 +97,77 @@ class PushNotifyRequest(BaseModel):
     body: str = Field(..., max_length=2048)
     badge: Optional[int] = Field(None, ge=0, le=99999)
     secret: str = Field(..., min_length=1, max_length=512)
+
+
+def _ntfy_info(row: NtfySubscription) -> dict[str, str | bool]:
+    return {
+        "enabled": True,
+        "node": row.node,
+        "topic": row.topic,
+        "server": settings.NTFY_PUBLIC_URL.rstrip("/"),
+    }
+
+
+@router.get("/push/ntfy")
+async def ntfy_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    row = await db.get(NtfySubscription, current_user["account_id"])
+    return _ntfy_info(row) if row else {"enabled": False}
+
+
+@router.post("/push/ntfy")
+@limiter.limit("10/minute")
+async def ntfy_enable(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    if not ntfy_ready():
+        raise HTTPException(status_code=503, detail="ntfy is not configured")
+    account_id = current_user["account_id"]
+    row = await db.get(NtfySubscription, account_id)
+    if row is None:
+        row = NtfySubscription(
+            account_id=account_id,
+            topic=f"lt_{_secrets.token_hex(16)}",
+            node=f"ntfy_{_secrets.token_hex(16)}",
+        )
+        db.add(row)
+        try:
+            await db.commit()
+        except IntegrityError:
+            await db.rollback()
+            row = await db.get(NtfySubscription, account_id)
+            if row is None:
+                raise HTTPException(status_code=409, detail="Please retry ntfy setup")
+    return _ntfy_info(row)
+
+
+@router.delete("/push/ntfy")
+async def ntfy_disable(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    await db.execute(delete(NtfySubscription).where(NtfySubscription.account_id == current_user["account_id"]))
+    await db.commit()
+    return {"enabled": False}
+
+
+@router.post("/push/ntfy/test")
+@limiter.limit("5/minute")
+async def ntfy_test(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    row = await db.get(NtfySubscription, current_user["account_id"])
+    if row is None:
+        raise HTTPException(status_code=404, detail="ntfy is not enabled")
+    if not await publish_ntfy(row.topic):
+        raise HTTPException(status_code=502, detail="ntfy delivery failed")
+    return {"status": "sent"}
 
 
 @router.post("/push/subscribe")
@@ -183,6 +255,14 @@ async def notify(
     if not expected or not _secrets.compare_digest(payload.secret, expected):
         raise HTTPException(status_code=403, detail="Invalid push secret")
 
+    ntfy_row = (await db.execute(
+        select(NtfySubscription).where(NtfySubscription.node == payload.node)
+    )).scalar_one_or_none()
+    ntfy_sent = False
+    if ntfy_row:
+        # ntfy failures must not prevent existing Web Push delivery.
+        ntfy_sent = await publish_ntfy(ntfy_row.topic)
+
     # Route using the opaque per-account node from the XEP-0357 publish IQ.
     # The publishing server's stanza `from` is its domain, not the recipient.
     result = await db.execute(
@@ -190,7 +270,7 @@ async def notify(
     )
     subs = result.scalars().all()
     if not subs:
-        return {"status": "no_subscriptions"}
+        return {"status": "ok" if ntfy_sent else "no_subscriptions", "ntfy_sent": ntfy_sent}
 
     # Send Web Push to each subscription
     try:

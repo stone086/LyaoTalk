@@ -6,6 +6,7 @@
 
 import { getClient, XmppClient, RosterContact as AdapterContact } from "./xmppAdapter";
 import { restoreXmppPush } from "./push";
+import { restoreNtfyPush } from "./ntfy";
 import toast from "react-hot-toast";
 import { useRosterStore } from "@/stores/rosterStore";
 import { retractionMatchesMessage, useChatStore } from "@/stores/chatStore";
@@ -108,6 +109,9 @@ export function initXmppBridge(client: XmppClient) {
         }).catch(() => {});
         void restoreXmppPush(accountId).catch((error) => {
           console.warn("[Push] XMPP registration failed", error);
+        });
+        void restoreNtfyPush(accountId).catch((error) => {
+          console.warn("[ntfy] XMPP registration failed", error);
         });
         void client.fetchIceServers().then((servers) => {
           if (servers.length) callManager.setIceServers(accountId, servers);
