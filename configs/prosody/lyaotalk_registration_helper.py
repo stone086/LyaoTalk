@@ -34,7 +34,7 @@ def credential_revision(username: str, domain: str) -> str:
 def handle(conn: socket.socket) -> None:
     conn.settimeout(20)
     data = b""
-    while b"\n" not in data and len(data) <= 2048:
+    while b"\n" not in data and len(data) <= 4096:
         chunk = conn.recv(1024)
         if not chunk:
             return
@@ -59,6 +59,15 @@ def handle(conn: socket.socket) -> None:
                 capture_output=True, text=True, timeout=15, check=False,
             )
             response = {"returncode": result.returncode, "stdout": result.stdout[:2048], "stderr": result.stderr[:2048]}
+        elif action == "change_password":
+            password = request["password"]
+            if not isinstance(password, str) or not 6 <= len(password) <= 256 or any(ord(c) < 32 or ord(c) == 127 for c in password):
+                raise ValueError("invalid password")
+            result = subprocess.run(
+                ["/usr/bin/prosodyctl", "passwd", f"{username}@{domain}"],
+                input=f"{password}\n{password}\n", capture_output=True, text=True, timeout=15, check=False,
+            )
+            response = {"returncode": result.returncode, "stderr": "password update failed" if result.returncode else ""}
         else:
             raise ValueError("invalid action")
     except FileNotFoundError:
