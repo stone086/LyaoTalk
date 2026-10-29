@@ -4,6 +4,13 @@
 local hashes = require "util.hashes";
 
 module:hook("cloud_notify/push", function(event)
+  local push_info = event.push_info;
+  local node = push_info and push_info.node;
+  if type(node) ~= "string" or not node:match("^ntfy_") then return end
+  -- mod_cloud_notify marks receipts, chat states, pings and other empty
+  -- stanzas as unimportant. They are not new chat messages for ntfy.
+  if not event.important then return true end
+
   local original = event.original_stanza;
   local notification = event.notification_payload;
   if not original or original.name ~= "message" or not notification then return end
