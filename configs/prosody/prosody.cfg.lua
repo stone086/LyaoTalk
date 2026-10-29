@@ -165,7 +165,6 @@ Component "upload.XMPP_DOMAIN" "http_file_share"
 -- Push notification appserver Component (LyaoTalk custom relay)
 -- See configs/prosody/mod_lyaotalk_push.lua
 -- =====================================================
-Component "push.XMPP_DOMAIN"
-  modules_enabled = { "lyaotalk_push" }
+Component "push.XMPP_DOMAIN" "lyaotalk_push"
   lyaotalk_push_url = "http://127.0.0.1:8000/push/notify"
   lyaotalk_push_secret = "PUSH_SHARED_SECRET_PLACEHOLDER"
