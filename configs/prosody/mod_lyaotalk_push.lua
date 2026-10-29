@@ -29,6 +29,7 @@ module:hook("iq-set/host/http://jabber.org/protocol/pubsub:pubsub", function(eve
   -- Extract notification body if present (XEP-0357 §6 form)
   local item = publish:get_child("item");
   local notif = item and item:get_child("notification", "urn:xmpp:push:0");
+  local message_id = notif and notif:get_child("message-id", "urn:lyaotalk:push:1");
   local title = "New message";
   local body = "You have a new message";
 
@@ -53,6 +54,7 @@ module:hook("iq-set/host/http://jabber.org/protocol/pubsub:pubsub", function(eve
     title = title,
     body = body,
     secret = shared_secret,
+    message_id = message_id and message_id.attr.id or nil,
   });
 
   http.request(notify_url, {

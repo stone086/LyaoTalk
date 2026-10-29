@@ -7,6 +7,7 @@ src=/opt/lyaotalk-src
 releases=/opt/lyaotalk-releases
 current=/opt/lyaotalk-current
 push_module=/usr/lib/prosody-modules/mod_lyaotalk_push.lua
+push_id_module=/usr/lib/prosody-modules/mod_lyaotalk_push_id.lua
 service_override=/etc/systemd/system/lyaotalk-api.service.d/30-release-venv.conf
 default_venv=/opt/lyaotalk-venv
 active_venv="$default_venv"
@@ -35,8 +36,12 @@ rsync -a --exclude=.git --exclude=node_modules --exclude=dist --exclude=.env \
 bash -n "$target/install.sh" "$target/manage.sh" "$target/scripts/deploy-vps-release.sh"
 python3 -m compileall -q "$target/apps/api/app" "$target/configs/prosody"
 luac -p "$target/configs/prosody/mod_lyaotalk_push.lua"
+luac -p "$target/configs/prosody/mod_lyaotalk_push_id.lua"
 [[ -f "$push_module" ]] || { echo "Prosody push module missing" >&2; exit 1; }
 cp -p "$push_module" "$target/.previous-push-module.lua"
+if [[ -f "$push_id_module" ]]; then
+  cp -p "$push_id_module" "$target/.previous-push-id-module.lua"
+fi
 
 # A shared venv can serve either release only when package requirements match.
 release_venv="$active_venv"
@@ -84,6 +89,11 @@ rollback() {
   ln -s "$previous" "$current.rollback"
   mv -Tf "$current.rollback" "$current"
   install -m 644 "$target/.previous-push-module.lua" "$push_module"
+  if [[ -f "$target/.previous-push-id-module.lua" ]]; then
+    install -m 644 "$target/.previous-push-id-module.lua" "$push_id_module"
+  else
+    rm -f "$push_id_module"
+  fi
   systemctl restart prosody
   systemctl restart lyaotalk-api
   echo "Release rollback restored $previous; inspect database migration compatibility" >&2
@@ -96,6 +106,7 @@ fi
 ln -s "$target" "$current.next"
 mv -Tf "$current.next" "$current"
 install -m 644 "$target/configs/prosody/mod_lyaotalk_push.lua" "$push_module"
+install -m 644 "$target/configs/prosody/mod_lyaotalk_push_id.lua" "$push_id_module"
 systemctl restart lyaotalk-api
 systemctl restart prosody
 systemctl restart lyaotalk-prosody.socket
