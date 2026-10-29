@@ -23,19 +23,19 @@ def ntfy_ready() -> bool:
     )
 
 
-async def publish_ntfy(topic: str, *, collapse: bool = False) -> bool:
+async def publish_ntfy(topic: str, *, message_id: str | None = None) -> bool:
     """Send no sender, JID, message body, or conversation identifier."""
     if not ntfy_ready() or not topic.startswith("lt_"):
         return False
     cache = None
-    cooldown_key = "ntfy:cooldown:" + hashlib.sha256(topic.encode()).hexdigest()
-    if collapse:
+    dedup_key = "ntfy:message:" + hashlib.sha256((topic + ":" + (message_id or "")).encode()).hexdigest()
+    if message_id:
         try:
             cache = await get_redis()
-            if not await cache.set(cooldown_key, "1", ex=10, nx=True):
+            if not await cache.set(dedup_key, "1", ex=86400, nx=True):
                 return True
         except Exception as exc:
-            logger.warning("ntfy_cooldown_unavailable error=%s", type(exc).__name__)
+            logger.warning("ntfy_dedup_unavailable error=%s", type(exc).__name__)
             cache = None
     click = (settings.FRONTEND_URL or "https://2-yc.com").rstrip("/") + "/"
     try:
@@ -57,7 +57,7 @@ async def publish_ntfy(topic: str, *, collapse: bool = False) -> bool:
         logger.warning("ntfy_publish_failed error=%s", type(exc).__name__)
     if cache is not None:
         try:
-            await cache.delete(cooldown_key)
+            await cache.delete(dedup_key)
         except Exception:
             pass
     return False

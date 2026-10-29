@@ -74,7 +74,7 @@ def test_ntfy_test_requires_own_subscription(monkeypatch):
 def test_notify_dispatches_ntfy_without_web_subscription(monkeypatch):
     calls = []
 
-    async def publish(topic, *, collapse=False):
+    async def publish(topic, *, message_id=None):
         calls.append(topic)
         return False  # Failure must not turn a valid Prosody request into 500.
 
@@ -87,7 +87,7 @@ def test_notify_dispatches_ntfy_without_web_subscription(monkeypatch):
     assert calls == [row.topic]
 
 
-def test_ntfy_collapses_repeated_pushes(monkeypatch):
+def test_ntfy_deduplicates_only_matching_message_ids(monkeypatch):
     monkeypatch.setattr(ntfy.settings, "NTFY_INTERNAL_URL", "http://127.0.0.1:2586")
     monkeypatch.setattr(ntfy.settings, "NTFY_PUBLIC_URL", "https://ntfy.example.com")
     monkeypatch.setattr(ntfy.settings, "NTFY_PUBLISH_TOKEN", "test-token")
@@ -96,7 +96,7 @@ def test_ntfy_collapses_repeated_pushes(monkeypatch):
 
     class Cache:
         async def set(self, key, value, ex, nx):
-            assert ex == 10 and nx is True
+            assert ex == 86400 and nx is True
             if key in keys:
                 return False
             keys.add(key)
@@ -114,9 +114,12 @@ def test_ntfy_collapses_repeated_pushes(monkeypatch):
     monkeypatch.setattr(ntfy, "get_redis", cache)
     monkeypatch.setattr(ntfy.httpx, "AsyncClient", Client)
     topic = "lt_" + "a" * 32
-    assert asyncio.run(ntfy.publish_ntfy(topic, collapse=True))
-    assert asyncio.run(ntfy.publish_ntfy(topic, collapse=True))
-    assert sent == [1]
+    first = "a" * 64
+    second = "b" * 64
+    assert asyncio.run(ntfy.publish_ntfy(topic, message_id=first))
+    assert asyncio.run(ntfy.publish_ntfy(topic, message_id=first))
+    assert asyncio.run(ntfy.publish_ntfy(topic, message_id=second))
+    assert sent == [1, 1]
 
 
 def test_ntfy_publisher_sends_generic_content_only(monkeypatch):
