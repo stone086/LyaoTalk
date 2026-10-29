@@ -120,11 +120,7 @@ async def change_password(request: Request, data: ChangePasswordRequest, current
         raise HTTPException(status_code=503, detail="Password update unavailable")
     if result.returncode != 0:
         raise HTTPException(status_code=503, detail="Password update failed")
-    revision = await asyncio.to_thread(get_credential_revision, jid)
-    return {
-        "access_token": create_access_token(jid, role="user", account_id=current_user["account_id"], credential_revision=revision),
-        "refresh_token": create_refresh_token(jid, role="user", account_id=current_user["account_id"], credential_revision=revision),
-    }
+    return {"ok": True}
 
 
 def _change_password_with_prosody(username: str, domain: str, password: str):

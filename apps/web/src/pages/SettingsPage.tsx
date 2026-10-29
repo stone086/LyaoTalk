@@ -522,10 +522,13 @@ export default function SettingsPage() {
     }
     setPasswordPending(true);
     try {
-      const result = await authApi.changePassword(passwordForm.old, passwordForm.next);
+      const jid = accounts.find((account) => account.id === activeAccountId)?.jid;
+      if (!jid) throw new Error("Account unavailable");
+      await authApi.changePassword(passwordForm.old, passwordForm.next);
       setAccountPassword(activeAccountId, passwordForm.next);
-      setUserToken(activeAccountId, result.access_token);
-      setUserRefreshToken(activeAccountId, result.refresh_token);
+      const session = await authApi.getUserToken(jid, passwordForm.next);
+      setUserToken(activeAccountId, session.access_token);
+      if (session.refresh_token) setUserRefreshToken(activeAccountId, session.refresh_token);
       setPasswordForm({ old: "", next: "", confirm: "" });
       toast.success(t("settings.passwordChanged"));
     } catch {
