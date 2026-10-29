@@ -74,7 +74,7 @@ def test_ntfy_test_requires_own_subscription(monkeypatch):
 def test_notify_dispatches_ntfy_without_web_subscription(monkeypatch):
     calls = []
 
-    async def publish(topic):
+    async def publish(topic, *, collapse=False):
         calls.append(topic)
         return False  # Failure must not turn a valid Prosody request into 500.
 
@@ -85,6 +85,38 @@ def test_notify_dispatches_ntfy_without_web_subscription(monkeypatch):
     result = asyncio.run(push.notify(push.PushNotifyRequest(node=row.node, title="Sender", body="private message", secret="test-secret"), db=db))
     assert result == {"status": "no_subscriptions", "ntfy_sent": False}
     assert calls == [row.topic]
+
+
+def test_ntfy_collapses_repeated_pushes(monkeypatch):
+    monkeypatch.setattr(ntfy.settings, "NTFY_INTERNAL_URL", "http://127.0.0.1:2586")
+    monkeypatch.setattr(ntfy.settings, "NTFY_PUBLIC_URL", "https://ntfy.example.com")
+    monkeypatch.setattr(ntfy.settings, "NTFY_PUBLISH_TOKEN", "test-token")
+    sent = []
+    keys = set()
+
+    class Cache:
+        async def set(self, key, value, ex, nx):
+            assert ex == 10 and nx is True
+            if key in keys:
+                return False
+            keys.add(key)
+            return True
+
+    class Client:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, *args, **kwargs):
+            sent.append(1)
+            return type("Response", (), {"status_code": 200})()
+
+    async def cache(): return Cache()
+    monkeypatch.setattr(ntfy, "get_redis", cache)
+    monkeypatch.setattr(ntfy.httpx, "AsyncClient", Client)
+    topic = "lt_" + "a" * 32
+    assert asyncio.run(ntfy.publish_ntfy(topic, collapse=True))
+    assert asyncio.run(ntfy.publish_ntfy(topic, collapse=True))
+    assert sent == [1]
 
 
 def test_ntfy_publisher_sends_generic_content_only(monkeypatch):
