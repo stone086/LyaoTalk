@@ -104,45 +104,56 @@ function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
   });
 }
 
+async function pushStep<T>(stage: string, action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "UnknownError";
+    const detail = error instanceof Error ? error.message.slice(0, 180) : "Unknown browser error";
+    throw new Error(`${stage}: ${name}: ${detail}`);
+  }
+}
+
 export async function subscribeToPush(): Promise<boolean> {
-  if (!(await isPushSupported())) return false;
+  if (!(await isPushSupported())) throw new Error("Browser does not support Web Push");
 
   const accountId = selectedAccount();
   const client = accountId ? getClient(accountId) : undefined;
-  if (!accountId || !client?.connected) return false;
+  if (!accountId || !client?.connected) throw new Error("XMPP account is not connected");
 
   const permission = await requestNotificationPermission();
-  if (permission !== "granted") return false;
+  if (permission !== "granted") throw new Error(`Notification permission: ${permission}`);
 
   // Wait for SW registration
-  const registration = await withTimeout(navigator.serviceWorker.ready, "Service Worker registration timed out");
+  const registration = await pushStep("Service Worker", () => withTimeout(navigator.serviceWorker.ready, "registration timed out"));
 
   // Fetch VAPID public key from backend
-  const { data } = await api.get<{ key: string }>("/push/vapid-public-key");
-  if (!data.key) return false;
+  const { data } = await pushStep("VAPID key", () => api.get<{ key: string }>("/push/vapid-public-key"));
+  if (!data.key) throw new Error("VAPID key is empty");
 
   const applicationServerKey = urlBase64ToArrayBuffer(data.key);
 
   // Subscribe (or get existing subscription)
-  let subscription = await registration.pushManager.getSubscription();
+  let subscription = await pushStep("Read browser subscription", () => registration.pushManager.getSubscription());
   if (!subscription) {
-    subscription = await registration.pushManager.subscribe({
+    subscription = await pushStep("Create browser subscription", () => registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey,
-    });
+    }));
   }
 
   // Extract keys
-  await registerBackendSubscription(accountId, subscription);
+  await pushStep("Register server subscription", () => registerBackendSubscription(accountId, subscription));
 
   try {
     await client.setPushEnabled(true, pushNode(accountId));
-  } catch {
+  } catch (error) {
     await api.delete("/push/unsubscribe", {
       data: { endpoint: subscription.endpoint },
       headers: { "X-LyaoTalk-Account-Id": accountId },
     }).catch(() => {});
-    return false;
+    const detail = error instanceof Error ? `${error.name}: ${error.message.slice(0, 180)}` : "Unknown XMPP error";
+    throw new Error(`Enable XMPP push: ${detail}`);
   }
   localStorage.setItem(enabledKey(accountId), "1");
 

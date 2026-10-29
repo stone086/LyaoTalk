@@ -15,11 +15,11 @@ DATA_ROOT = os.environ.get("LYAOTALK_PROSODY_DATA_ROOT", "/var/lib/prosody")
 
 def _encoded_name(value: str) -> str:
     """Match Prosody internal storage's lowercase percent-encoded path names."""
-    return "".join(char.lower() if char.isalnum() and char.isascii() else f"%{ord(char):02x}" for char in value.lower())
+    return "".join(chr(byte) if 0x30 <= byte <= 0x39 or 0x61 <= byte <= 0x7a else f"%{byte:02x}" for byte in value.lower().encode("utf-8"))
 
 
 def credential_revision(username: str, domain: str) -> str:
-    if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", username):
+    if not isinstance(username, str) or (not re.fullmatch(r"[\w.-]{1,64}", username) or len(username.encode("utf-8")) > 64):
         raise ValueError("invalid username")
     if domain != DOMAIN:
         raise ValueError("invalid domain")
@@ -44,7 +44,7 @@ def handle(conn: socket.socket) -> None:
         username = request["username"]
         domain = request["domain"]
         action = request.get("action", "register")
-        if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", username):
+        if not isinstance(username, str) or (not re.fullmatch(r"[\w.-]{1,64}", username) or len(username.encode("utf-8")) > 64):
             raise ValueError("invalid username")
         if domain != DOMAIN:
             raise ValueError("invalid domain")

@@ -139,21 +139,21 @@ function ContactRow({
           {contact.name ?? contact.jid.split("@")[0]}
         </p>
         <p className="text-xs text-surface-200/40 truncate">
-          {contact.statusText ?? contact.presence}
+          {contact.pendingIncoming && !contact.isBlocked ? t("roster.pending") : contact.statusText ?? contact.presence}
         </p>
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
+      <div className="flex shrink-0 items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity"
         onClick={(e) => e.stopPropagation()}>
         {contact.pendingIncoming && !contact.isBlocked && (
           <>
             <button onClick={handleAccept}
-              className="px-2 py-1 rounded bg-success/20 text-success text-[10px] font-semibold hover:bg-success/30">
+              className="shrink-0 whitespace-nowrap px-2 py-1 rounded bg-success/20 text-success text-[10px] font-semibold hover:bg-success/30">
               {t("roster.accept")}
             </button>
             <button onClick={handleReject}
-              className="px-2 py-1 rounded bg-surface-800/60 text-surface-100 text-[10px] font-semibold hover:bg-surface-800/80">
+              className="shrink-0 whitespace-nowrap px-2 py-1 rounded bg-surface-800/60 text-surface-100 text-[10px] font-semibold hover:bg-surface-800/80">
               {t("roster.reject")}
             </button>
           </>
@@ -195,9 +195,6 @@ function ContactRow({
 
       {contact.isBlocked && (
         <span className="text-[10px] text-danger/70 flex-shrink-0">{t("roster.blocked")}</span>
-      )}
-      {!contact.isBlocked && contact.pendingIncoming && (
-        <span className="text-[10px] text-yellow-300/80 flex-shrink-0">{t("roster.pending")}</span>
       )}
     </div>
   );

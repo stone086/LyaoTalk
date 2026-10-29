@@ -528,6 +528,8 @@ export default function MessageView({ conversationId }: { conversationId: string
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [pendingFiles, setPendingFiles] = useState<UploadedFile[]>([]);
+  const [sendPending, setSendPending] = useState(false);
+  const sendInFlightRef = useRef(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const [viewingLocation, setViewingLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -862,6 +864,8 @@ export default function MessageView({ conversationId }: { conversationId: string
   };
 
   const sendMessage = useCallback(async () => {
+    // A ref blocks repeated taps immediately, before React can render a disabled button.
+    if (sendInFlightRef.current) return;
     let body = input.trim();
     const pastedLocation = parseSharedLocation(body);
     if (pastedLocation && !body.startsWith("geo:")) {
@@ -874,6 +878,9 @@ export default function MessageView({ conversationId }: { conversationId: string
       toast.error(t("chat.addContactBeforeReply"));
       return;
     }
+    sendInFlightRef.current = true;
+    setSendPending(true);
+    try {
 
     // Slash command interception
     if (body.startsWith("/")) {
@@ -1025,6 +1032,12 @@ export default function MessageView({ conversationId }: { conversationId: string
         addMessage(outgoingMessage);
         cacheMessages([outgoingMessage]).catch(() => {});
       }
+      // The text has already gone out. A later file failure must not resend it.
+      setInput("");
+      clearComposerDraft(conversationId);
+      saveDraft(conversationId, "").catch(() => {});
+      setReplyTo(null);
+      setEditingMessageId(null);
     }
     try {
       for (const file of pendingFiles) {
@@ -1047,6 +1060,8 @@ export default function MessageView({ conversationId }: { conversationId: string
         };
         addMessage(fileMessage);
         cacheMessages([fileMessage]).catch(() => {});
+        // Keep only unsent files available for retry if a later upload fails.
+        setPendingFiles((files) => files.filter((item) => item.id !== file.id));
       }
     } catch (error: any) {
       toast.error(error?.message ?? t("chat.sendFailed"));
@@ -1061,6 +1076,10 @@ export default function MessageView({ conversationId }: { conversationId: string
     setAttachmentMenuOpen(false);
     setShowEmojiPicker(false);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
+    } finally {
+      sendInFlightRef.current = false;
+      setSendPending(false);
+    }
   }, [input, pendingFiles, uploadingCount, activeAccountId, needsContactApproval, conversationId, conversation, addMessage, updateMessage, replyTo, editingMessageId, t, clearComposerDraft]);
 
   const handleAcceptContact = useCallback(() => {
@@ -1517,7 +1536,7 @@ export default function MessageView({ conversationId }: { conversationId: string
                 onBlur();
               }}
               placeholder={needsContactApproval ? t("chat.addContactBeforeReply") : t("chat.messagePlaceholder")}
-              disabled={needsContactApproval}
+              disabled={needsContactApproval || sendPending}
               rows={1}
               className="chat-composer-input block w-full bg-surface-900 border-default rounded-xl pl-3 pr-12 py-2.5 text-sm text-surface-50 placeholder:text-surface-200/25 focus:outline-none focus:ring-1 focus:ring-accent/40 resize-none min-h-[40px] max-h-[120px] disabled:opacity-60 disabled:cursor-not-allowed"
             />
@@ -1585,7 +1604,7 @@ export default function MessageView({ conversationId }: { conversationId: string
             />
           )}
           </div>
-          <button onClick={() => void sendMessage()} disabled={needsContactApproval || uploadingCount > 0 || (!input.trim() && !pendingFiles.length)} className="btn-primary flex-shrink-0 rounded-xl p-2.5" title={t("chat.send")}>
+          <button onClick={() => void sendMessage()} disabled={sendPending || needsContactApproval || uploadingCount > 0 || (!input.trim() && !pendingFiles.length)} className="btn-primary flex-shrink-0 rounded-xl p-2.5" title={t("chat.send")}>
             <Send size={16} />
           </button>
         </div>
