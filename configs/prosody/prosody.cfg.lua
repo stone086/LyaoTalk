@@ -92,7 +92,6 @@ http_cors_override = {
 }
 consider_websocket_secure = true
 consider_bosh_secure = true
-cross_domain_websocket = { "XMPP_FRONTEND_ORIGIN" }
 
 http_interfaces = { "127.0.0.1" }
 http_ports = { 5280 }
@@ -150,16 +149,15 @@ Component "conference.XMPP_DOMAIN" "muc"
   max_history_messages = 100
   muc_log_by_default = false  -- per-room MAM, not all rooms by default
 
--- Native clients discover this via service discovery on XMPP_DOMAIN.
--- Installations must supply the community mod_http_upload module for Prosody
--- 0.11; newer Prosody releases can migrate to mod_http_file_share.
-Component "upload.XMPP_DOMAIN" "http_upload"
+-- Native XMPP clients discover this XEP-0363 service via the upload component.
+-- Prosody 13 includes mod_http_file_share; its HTTP path is /file_share.
+Component "upload.XMPP_DOMAIN" "http_file_share"
   modules_disabled = { "s2s" }
   http_host = "upload.XMPP_DOMAIN"
   http_external_url = "https://upload.XMPP_DOMAIN/"
-  http_upload_file_size_limit = 100 * 1024 * 1024
-  http_upload_quota = 500 * 1024 * 1024
-  http_upload_expire_after = 30 * 24 * 60 * 60
+  http_file_share_size_limit = 100 * 1024 * 1024
+  http_file_share_daily_quota = 500 * 1024 * 1024
+  http_file_share_expires_after = "30 days"
 
 
 -- =====================================================
