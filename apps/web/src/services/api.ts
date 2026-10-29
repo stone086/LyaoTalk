@@ -403,6 +403,8 @@ export const adminApi = {
 
 // Auth
 export const authApi = {
+  changePassword: (old_password: string, new_password: string) =>
+    api.post('/auth/change-password', { old_password, new_password }).then((r) => r.data as { ok: boolean }),
   config: () =>
     api.get("/auth/config").then((r) => r.data as {
       xmpp_domain: string;

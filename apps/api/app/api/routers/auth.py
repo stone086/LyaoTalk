@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from app.utils.security import create_access_token, create_refresh_token, revoke_token
+from app.utils.security import create_access_token, create_refresh_token, revoke_token, get_current_user
 from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.core.observability import metrics_registry
@@ -98,6 +98,44 @@ class RegisterRequest(BaseModel):
 class UserTokenRequest(BaseModel):
     jid: str = Field(..., min_length=3, max_length=130)
     password: str = Field(..., min_length=1, max_length=256)
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(..., min_length=1, max_length=256)
+    new_password: str = Field(..., min_length=6, max_length=256)
+
+
+@router.post("/change-password")
+@limiter.limit("5/minute")
+async def change_password(request: Request, data: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
+    jid = current_user["sub"]
+    username, domain = parse_jid(jid)
+    if any(ord(c) < 32 or ord(c) == 127 for c in data.new_password):
+        raise HTTPException(status_code=400, detail="Password contains invalid characters")
+    if not await asyncio.to_thread(_verify_xmpp_sasl_plain, username, domain, data.old_password):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    try:
+        result = await asyncio.to_thread(_change_password_with_prosody, username, domain, data.new_password)
+    except (OSError, ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=503, detail="Password update unavailable")
+    if result.returncode != 0:
+        raise HTTPException(status_code=503, detail="Password update failed")
+    return {"ok": True}
+
+
+def _change_password_with_prosody(username: str, domain: str, password: str):
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:
+        conn.settimeout(20)
+        conn.connect("/run/lyaotalk-prosody.sock")
+        conn.sendall((json.dumps({"action": "change_password", "username": username, "domain": domain, "password": password}) + "\n").encode())
+        response = b""
+        while b"\n" not in response and len(response) < 8192:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+    result = json.loads(response.split(b"\n", 1)[0])
+    return SimpleNamespace(returncode=int(result["returncode"]))
 
 
 @router.get(
