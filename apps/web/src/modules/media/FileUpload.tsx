@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { attachmentsApi } from "@/services/api";
+import { attachmentsApi, type TransferDetails } from "@/services/api";
 import { formatFileSize } from "@/utils/helpers";
 import { clsx } from "clsx";
 import {
@@ -32,6 +32,7 @@ interface FileItem {
   file: File;
   status: UploadStatus;
   progress: number;
+  details?: TransferDetails;
   result?: UploadedFile;
   error?: string;
 }
@@ -69,15 +70,9 @@ export function FileUploadZone({ onUploaded, onCancel, messageId, accountId }: F
     setFiles((prev) => prev.map((f, i) => i === index ? { ...f, status: "uploading", progress: 0 } : f));
 
     try {
-      // Simulate progress
-      const progressInterval = setInterval(() => {
-        setFiles((prev) => prev.map((f, i) =>
-          i === index && f.progress < 90 ? { ...f, progress: f.progress + 10 } : f
-        ));
-      }, 200);
-
-      const result = await attachmentsApi.upload(item.file, messageId, accountId);
-      clearInterval(progressInterval);
+      const result = await attachmentsApi.upload(item.file, messageId, accountId, (progress, details) => {
+        setFiles((prev) => prev.map((f, i) => i === index ? { ...f, progress, details } : f));
+      });
 
       const uploaded: UploadedFile = {
         id: result.id,
@@ -134,13 +129,15 @@ export function FileUploadZone({ onUploaded, onCancel, messageId, accountId }: F
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="text-xs text-surface-200/40">{formatFileSize(item.file.size)}</span>
                   {item.status === "uploading" && (
-                    <div className="flex-1 h-1 bg-surface-800 rounded-full overflow-hidden">
+                    <div className="flex-1 h-1 bg-surface-800 rounded-full overflow-hidden" role="progressbar" aria-label={item.file.name} aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.progress}>
                       <div
                         className="h-full bg-accent rounded-full transition-all duration-200"
                         style={{ width: `${item.progress}%` }}
                       />
                     </div>
                   )}
+                  {item.status === "uploading" && <span className="text-xs text-surface-200/60">{item.progress}%</span>}
+                  {item.status === "uploading" && item.details && <span className="text-[10px] text-surface-200/60">{formatFileSize(item.details.loaded)} / {formatFileSize(item.details.total)} · {formatFileSize(item.details.speed)}/s</span>}
                   {item.status === "done" && <span className="text-xs text-success">{t("upload.uploaded")}</span>}
                   {item.status === "error" && <span className="text-xs text-danger">{item.error}</span>}
                 </div>

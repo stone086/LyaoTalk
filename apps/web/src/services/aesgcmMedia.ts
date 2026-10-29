@@ -17,6 +17,8 @@
  * (or just letting the page lifecycle handle it).
  */
 
+import type { TransferProgress } from "./api";
+
 interface AesgcmParts {
   /** https URL of the encrypted blob */
   ciphertextUrl: string;
@@ -122,13 +124,19 @@ const inflight = new Map<string, Promise<string>>();
  */
 export async function fetchAndDecryptAesgcm(
   rawUrl: string,
-  opts?: { signal?: AbortSignal; accountId?: string | null },
+  opts?: { signal?: AbortSignal; accountId?: string | null; onProgress?: TransferProgress },
 ): Promise<string> {
   const cached = blobUrlCache.get(rawUrl);
-  if (cached) return cached;
+  if (cached) {
+    opts?.onProgress?.(100);
+    return cached;
+  }
 
   const existing = inflight.get(rawUrl);
-  if (existing) return existing;
+  if (existing) return existing.then((url) => {
+    opts?.onProgress?.(100);
+    return url;
+  });
 
   const promise = (async () => {
     const parts = parseAesgcmUrl(rawUrl);
@@ -140,12 +148,12 @@ export async function fetchAndDecryptAesgcm(
     let ciphertext: ArrayBuffer;
     if (isTrustedFilesUrl(parts.ciphertextUrl, window.location.origin)) {
       const { privateFileBlob } = await import("./api");
-      ciphertext = await (await privateFileBlob(parts.ciphertextUrl, opts?.accountId, opts?.signal)).arrayBuffer();
+      ciphertext = await (await privateFileBlob(parts.ciphertextUrl, opts?.accountId, opts?.signal, opts?.onProgress)).arrayBuffer();
     } else {
       const remote = new URL(parts.ciphertextUrl);
       if (remote.hostname === "upload.chat.52nbc.com" || remote.hostname === "upload.lyaot.2-yc.com") {
         const { remoteEncryptedBlob } = await import("./api");
-        ciphertext = await (await remoteEncryptedBlob(parts.ciphertextUrl, opts?.accountId, opts?.signal)).arrayBuffer();
+        ciphertext = await (await remoteEncryptedBlob(parts.ciphertextUrl, opts?.accountId, opts?.signal, opts?.onProgress)).arrayBuffer();
       } else {
         const resp = await fetch(parts.ciphertextUrl, {
           signal: opts?.signal,
@@ -153,7 +161,31 @@ export async function fetchAndDecryptAesgcm(
           cache: "force-cache",
         });
         if (!resp.ok) throw new Error(`Download failed: HTTP ${resp.status}`);
-        ciphertext = await resp.arrayBuffer();
+        const total = Number(resp.headers.get("content-length"));
+        const started = performance.now();
+        if (!resp.body) {
+          ciphertext = await resp.arrayBuffer();
+        } else {
+          const reader = resp.body.getReader();
+          const chunks: Uint8Array[] = [];
+          let loaded = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            loaded += value.byteLength;
+            opts?.onProgress?.(total > 0 ? Math.min(99, Math.floor(loaded / total * 100)) : 0,
+              { loaded, total: total || 0, speed: loaded * 1000 / Math.max(performance.now() - started, 1) });
+          }
+          const combined = new Uint8Array(loaded);
+          let offset = 0;
+          for (const chunk of chunks) {
+            combined.set(chunk, offset);
+            offset += chunk.byteLength;
+          }
+          ciphertext = combined.buffer;
+        }
+        opts?.onProgress?.(100, { loaded: ciphertext.byteLength, total: ciphertext.byteLength, speed: ciphertext.byteLength * 1000 / Math.max(performance.now() - started, 1) });
       }
     }
 
