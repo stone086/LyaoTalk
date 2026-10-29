@@ -18,6 +18,7 @@ import { accountsApi, authApi, setUserToken, setUserRefreshToken } from "@/servi
 import Avatar from "@/components/Avatar";
 import { apiSocket } from "@/services/apiSocket";
 import { isPushSubscribed, isPushSupported, subscribeToPush, unsubscribeFromPush } from "@/services/push";
+import { disableNtfy, enableNtfy, getNtfyStatus, testNtfy, type NtfyStatus } from "@/services/ntfy";
 import { collectBrowserCapabilities } from "@/services/browserCompatibility";
 import { markIntentionalDisconnect } from "@/services/connectionSupervisor";
 import { logoutAccount } from "@/services/logoutAccount";
@@ -419,6 +420,9 @@ export default function SettingsPage() {
   const [pushPending, setPushPending] = useState(false);
   const [pushResult, setPushResult] = useState<"enabled" | "failed" | null>(null);
   const [pushError, setPushError] = useState<string | null>(null);
+  const [ntfyInfo, setNtfyInfo] = useState<NtfyStatus>({ enabled: false });
+  const [ntfyPending, setNtfyPending] = useState(false);
+  const [ntfyError, setNtfyError] = useState<string | null>(null);
   const [showPushInstallGuide, setShowPushInstallGuide] = useState(false);
   const pushBrowser = collectBrowserCapabilities();
 
@@ -435,6 +439,37 @@ export default function SettingsPage() {
     });
     return () => { cancelled = true; };
   }, [activeAccountId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setNtfyInfo({ enabled: false });
+    if (activeAccountId) {
+      getNtfyStatus(activeAccountId).then((status) => {
+        if (!cancelled) setNtfyInfo(status);
+      }).catch(() => {
+        if (!cancelled) setNtfyError(t("settings.ntfyStatusFailed"));
+      });
+    }
+    return () => { cancelled = true; };
+  }, [activeAccountId, t]);
+
+  const handleNtfyChange = async (checked: boolean) => {
+    if (!activeAccountId || ntfyPending) return;
+    setNtfyPending(true);
+    setNtfyError(null);
+    try {
+      if (checked) {
+        setNtfyInfo(await enableNtfy(activeAccountId));
+      } else if (ntfyInfo.enabled) {
+        await disableNtfy(activeAccountId, ntfyInfo.node);
+        setNtfyInfo({ enabled: false });
+      }
+    } catch (error) {
+      setNtfyError(error instanceof Error ? error.message.slice(0, 180) : t("settings.ntfyFailed"));
+    } finally {
+      setNtfyPending(false);
+    }
+  };
 
   const handlePushChange = (checked: boolean) => {
     setPushResult(null);
@@ -739,6 +774,32 @@ export default function SettingsPage() {
             {t("settings.notifications")}
           </h2>
           <div className="glass rounded-xl p-4 flex flex-col gap-3">
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <span className="flex flex-col">
+                <span className="text-sm text-surface-200">{t("settings.ntfyTitle")}</span>
+                <span className="text-xs text-surface-200/50">{t("settings.ntfyHint")}</span>
+              </span>
+              <input type="checkbox" checked={ntfyInfo.enabled} disabled={!activeAccountId || ntfyPending}
+                onChange={(event) => void handleNtfyChange(event.target.checked)}
+                className="w-4 h-4 accent-[#7c6af7]" />
+            </label>
+            {ntfyPending && <p role="status" className="text-xs text-surface-200">{t("settings.ntfyPending")}</p>}
+            {ntfyError && <p role="alert" className="break-words text-xs text-danger">{ntfyError}</p>}
+            {ntfyInfo.enabled && (
+              <div className="flex flex-col gap-2 border-t border-subtle pt-3">
+                <p className="text-xs text-surface-200/70">{t("settings.ntfyInstructions")}</p>
+                <ShareQr title={t("settings.ntfyTitle")} description={t("settings.ntfyScan")}
+                  payload={`ntfy://${new URL(ntfyInfo.server).host}/${ntfyInfo.topic}`}
+                  copyText={`${ntfyInfo.server}/${ntfyInfo.topic}`} />
+                <button type="button" className="btn-ghost self-start text-xs" disabled={ntfyPending}
+                  onClick={() => {
+                    if (!activeAccountId) return;
+                    void testNtfy(activeAccountId).then(() => toast.success(t("settings.ntfyTestSent")))
+                      .catch(() => toast.error(t("settings.ntfyFailed")));
+                  }}>{t("settings.ntfyTest")}</button>
+                <p className="text-xs text-surface-200/50">{t("settings.ntfyAndroidHint")}</p>
+              </div>
+            )}
             {(pushSupported || pushBrowser.isIOS) && (
               <label className="flex items-center justify-between cursor-pointer">
                 <div className="flex flex-col">

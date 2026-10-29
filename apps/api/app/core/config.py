@@ -102,6 +102,11 @@ class Settings(BaseSettings):
     # Push shared secret (for server-to-server push triggers)
     PUSH_SHARED_SECRET: str = ""
 
+    # Self-hosted ntfy relay. The token belongs to a write-only service user.
+    NTFY_INTERNAL_URL: str = ""
+    NTFY_PUBLIC_URL: str = ""
+    NTFY_PUBLISH_TOKEN: str = ""
+
     # Prometheus scrape token. Empty keeps the previous behaviour (nginx
     # already restricts /api/metrics to loopback and RFC1918 ranges); setting
     # it adds an application-level guard for multi-tenant or exposed setups.
