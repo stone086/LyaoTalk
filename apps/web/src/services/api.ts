@@ -1,6 +1,8 @@
 import axios from "axios";
 import { getAccountPassword, useAccountStore } from "@/stores/accountStore";
 import { trustedFileObjectKey } from "./trustedFilesUrl";
+export interface TransferDetails { loaded: number; total: number; speed: number }
+export type TransferProgress = (percent: number, details?: TransferDetails) => void;
 export const ADMIN_SESSION_EXPIRED_EVENT = "lyaotalk:admin-session-expired";
 const USER_TOKEN_KEY_PREFIX = "liaot-user-token:";
 const USER_REFRESH_KEY_PREFIX = "liaot-user-refresh:";
@@ -42,25 +44,41 @@ export function clearAdminRefreshToken() {
 }
 
 /** Download a private file through the same-origin API with an auth header. */
-export async function privateFileBlob(rawUrl: string, accountId?: string | null, signal?: AbortSignal): Promise<Blob> {
+export async function privateFileBlob(rawUrl: string, accountId?: string | null, signal?: AbortSignal, onProgress?: TransferProgress): Promise<Blob> {
   const objectKey = trustedFileObjectKey(rawUrl, window.location.origin);
   if (!objectKey || !accountId) throw new Error("Private file URL or account is unavailable");
+  const started = performance.now();
+  let lastTotal = 0;
   const response = await api.get(`/attachments/download/${objectKey}`, {
     responseType: "blob",
     headers: { "X-LyaoTalk-Account-Id": accountId },
     signal,
+    onDownloadProgress: onProgress ? (event) => {
+      lastTotal = event.total ?? 0;
+      onProgress(lastTotal ? Math.min(99, Math.floor(event.loaded / lastTotal * 100)) : 0,
+        { loaded: event.loaded, total: lastTotal, speed: event.loaded * 1000 / Math.max(performance.now() - started, 1) });
+    } : undefined,
   });
+  onProgress?.(100, { loaded: response.data.size, total: lastTotal || response.data.size, speed: response.data.size * 1000 / Math.max(performance.now() - started, 1) });
   return response.data as Blob;
 }
 
 /** Proxy ciphertext from a known federation host through our same-origin API. */
-export async function remoteEncryptedBlob(rawUrl: string, accountId?: string | null, signal?: AbortSignal): Promise<Blob> {
+export async function remoteEncryptedBlob(rawUrl: string, accountId?: string | null, signal?: AbortSignal, onProgress?: TransferProgress): Promise<Blob> {
   if (!accountId) throw new Error("Account is unavailable");
+  const started = performance.now();
+  let lastTotal = 0;
   const response = await api.post("/attachments/remote-encrypted", { url: rawUrl }, {
     responseType: "blob",
     headers: { "X-LyaoTalk-Account-Id": accountId },
     signal,
+    onDownloadProgress: onProgress ? (event) => {
+      lastTotal = event.total ?? 0;
+      onProgress(lastTotal ? Math.min(99, Math.floor(event.loaded / lastTotal * 100)) : 0,
+        { loaded: event.loaded, total: lastTotal, speed: event.loaded * 1000 / Math.max(performance.now() - started, 1) });
+    } : undefined,
   });
+  onProgress?.(100, { loaded: response.data.size, total: lastTotal || response.data.size, speed: response.data.size * 1000 / Math.max(performance.now() - started, 1) });
   return response.data as Blob;
 }
 
@@ -335,7 +353,7 @@ export const attachmentsApi = {
     api.post(`/attachments/${encodeURIComponent(attachmentId)}/share`,
       { recipient_jid: recipientJid },
       { headers: { "X-LyaoTalk-Account-Id": accountId } }).then((r) => r.data),
-  upload: async (file: File, messageId?: string, accountId?: string) => {
+  upload: async (file: File, messageId?: string, accountId?: string, onProgress?: TransferProgress) => {
     const selectedAccountId = accountId ?? useAccountStore.getState().activeAccountId;
     if (!selectedAccountId) throw new Error("Account sign-in required");
     const send = async (token: string | null) => {
@@ -344,6 +362,31 @@ export const attachmentsApi = {
       if (messageId) form.append("message_id", messageId);
       // fetch owns the multipart boundary. Axios defaults/interceptors can
       // accidentally retain JSON or an incomplete multipart Content-Type.
+      if (onProgress) {
+        return new Promise<Response>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const started = performance.now();
+          xhr.open("POST", `${API_URL}/attachments/upload`);
+          xhr.withCredentials = true;
+          if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+          onProgress(0, { loaded: 0, total: file.size, speed: 0 });
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable && event.total > 0) {
+              const loaded = Math.min(file.size, Math.floor(file.size * event.loaded / event.total));
+              onProgress(Math.min(99, Math.floor(event.loaded / event.total * 100)),
+                { loaded, total: file.size, speed: loaded * 1000 / Math.max(performance.now() - started, 1) });
+            }
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) onProgress(100,
+              { loaded: file.size, total: file.size, speed: file.size * 1000 / Math.max(performance.now() - started, 1) });
+            resolve(new Response(xhr.responseText, { status: xhr.status }));
+          };
+          xhr.onerror = () => reject(new Error("Upload network error"));
+          xhr.onabort = () => reject(new Error("Upload cancelled"));
+          xhr.send(form);
+        });
+      }
       return fetch(`${API_URL}/attachments/upload`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},

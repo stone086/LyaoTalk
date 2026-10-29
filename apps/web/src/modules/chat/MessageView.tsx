@@ -28,7 +28,8 @@ import LocationPicker from "./LocationPicker";
 import LocationViewer from "./LocationViewer";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/utils/i18n";
-import { attachmentsApi, privateFileBlob } from "@/services/api";
+import { attachmentsApi, privateFileBlob, type TransferDetails, type TransferProgress } from "@/services/api";
+import { formatFileSize } from "@/utils/helpers";
 import { encryptForAesgcm, parseAesgcmUrl, toAesgcmUrl } from "@/services/aesgcmMedia";
 import { usePrivateFileUrl } from "@/hooks/usePrivateFileUrl";
 import { isTrustedXmppUploadUrl, trustedFileObjectKey } from "@/services/trustedFilesUrl";
@@ -54,10 +55,10 @@ function parseAesgcmMediaLink(raw?: string): { href: string; fileName: string; i
   return { href, fileName, isAudio };
 }
 
-async function publishFederatedMedia(file: Blob, name: string, accountId: string): Promise<string> {
+async function publishFederatedMedia(file: Blob, name: string, accountId: string, onProgress?: TransferProgress): Promise<string> {
   const { ciphertext, fragment } = await encryptForAesgcm(file);
   const encrypted = new File([ciphertext], name, { type: "application/octet-stream" });
-  const upload = await attachmentsApi.upload(encrypted, undefined, accountId);
+  const upload = await attachmentsApi.upload(encrypted, undefined, accountId, onProgress);
   const { url } = await attachmentsApi.publishEncrypted(upload.id, accountId);
   return toAesgcmUrl(url, fragment);
 }
@@ -86,11 +87,15 @@ function AttachmentView({
   accountId?: string | null;
   onOpenImage: (src: string, alt: string) => void;
 }) {
-  const url = usePrivateFileUrl(attachment.downloadUrl, accountId);
+  const { url, progress, details } = usePrivateFileUrl(attachment.downloadUrl, accountId);
   return (
     <div className="mt-2">
       {!url ? (
-        <span className="text-xs text-surface-200/50">{attachment.fileName}</span>
+        <div className="text-xs text-surface-200/50" role={progress !== null ? "progressbar" : undefined} aria-label={attachment.fileName} aria-valuemin={progress !== null ? 0 : undefined} aria-valuemax={progress !== null ? 100 : undefined} aria-valuenow={progress ?? undefined}>
+          <span>{attachment.fileName}{progress !== null ? ` · ${progress}%` : ""}</span>
+          {details && <span className="block">{formatFileSize(details.loaded)} / {details.total ? formatFileSize(details.total) : "?"} · {formatFileSize(details.speed)}/s</span>}
+          {progress !== null && <div className="mt-1 h-1.5 rounded-full bg-surface-800 overflow-hidden"><div className="h-full bg-accent" style={{ width: `${progress}%` }} /></div>}
+        </div>
       ) : attachment.mimeType.startsWith("image/") ? (
         <ImagePreview src={url} alt={attachment.fileName} onClick={() => onOpenImage(url, attachment.fileName)} />
       ) : (
@@ -501,6 +506,34 @@ export default function MessageView({ conversationId }: { conversationId: string
   const [input, setInput] = useState("");
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const [uploadingCount, setUploadingCount] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState<Record<number, { name: string; percent: number; details?: TransferDetails }>>({});
+  const uploadProgressSerial = useRef(0);
+  const withProgress = useCallback(async <T,>(name: string, task: (report: TransferProgress) => Promise<T>): Promise<T> => {
+    const id = ++uploadProgressSerial.current;
+    let latestDetails: TransferDetails | undefined;
+    const report: TransferProgress = (percent, details) => {
+      latestDetails = details ?? latestDetails;
+      setUploadProgress((items) => ({ ...items, [id]: { name, percent, details: latestDetails } }));
+    };
+    report(0);
+    try {
+      const result = await task(report);
+      report(100);
+      window.setTimeout(() => setUploadProgress((items) => {
+        const next = { ...items };
+        delete next[id];
+        return next;
+      }), 800);
+      return result;
+    } catch (error) {
+      setUploadProgress((items) => {
+        const next = { ...items };
+        delete next[id];
+        return next;
+      });
+      throw error;
+    }
+  }, []);
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
@@ -615,7 +648,7 @@ export default function MessageView({ conversationId }: { conversationId: string
     try {
       await Promise.all(accepted.map(async (file) => {
         try {
-          const result = await attachmentsApi.upload(file, undefined, activeAccountId);
+          const result = await withProgress(file.name, (report) => attachmentsApi.upload(file, undefined, activeAccountId, report));
           setPendingFiles((pending) => [...pending, {
             id: result.id,
             name: result.file_name,
@@ -631,7 +664,7 @@ export default function MessageView({ conversationId }: { conversationId: string
     } finally {
       setUploadingCount((count) => count - accepted.length);
     }
-  }, [activeAccountId, conversation?.type, editingMessageId, t]);
+  }, [activeAccountId, conversation?.type, editingMessageId, t, withProgress]);
 
   const shareLocation = () => {
     setAttachmentMenuOpen(false);
@@ -1041,18 +1074,21 @@ export default function MessageView({ conversationId }: { conversationId: string
     }
     try {
       for (const file of pendingFiles) {
-        const original = await privateFileBlob(file.downloadUrl, activeAccountId);
-        const mediaUrl = await publishFederatedMedia(original, file.name, activeAccountId);
-        let fileEncrypted = false;
-        let fileId: string;
-        if (getOmemoEnabled()) {
-          const envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
-          if (!envelope) throw new Error("Cannot encrypt media link for this recipient");
-          fileId = client.sendOmemoMessage(peerJid, envelope, "chat");
-          fileEncrypted = true;
-        } else {
-          fileId = client.sendMessage(peerJid, mediaUrl, "chat");
-        }
+        const { mediaUrl, fileEncrypted, fileId } = await withProgress(file.name, async (report) => {
+          const original = await privateFileBlob(file.downloadUrl, activeAccountId);
+          const mediaUrl = await publishFederatedMedia(original, file.name, activeAccountId, (percent, details) => report(Math.floor(percent * 0.9), details));
+          let fileEncrypted = false;
+          let fileId: string;
+          if (getOmemoEnabled()) {
+            const envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
+            if (!envelope) throw new Error("Cannot encrypt media link for this recipient");
+            fileId = client.sendOmemoMessage(peerJid, envelope, "chat");
+            fileEncrypted = true;
+          } else {
+            fileId = client.sendMessage(peerJid, mediaUrl, "chat");
+          }
+          return { mediaUrl, fileEncrypted, fileId };
+        });
         const fileMessage: ChatMessage = {
           id: fileId, conversationId, senderJid: client.config.jid,
           body: mediaUrl, bodyType: "text", direction: "out",
@@ -1080,7 +1116,7 @@ export default function MessageView({ conversationId }: { conversationId: string
       sendInFlightRef.current = false;
       setSendPending(false);
     }
-  }, [input, pendingFiles, uploadingCount, activeAccountId, needsContactApproval, conversationId, conversation, addMessage, updateMessage, replyTo, editingMessageId, t, clearComposerDraft]);
+  }, [input, pendingFiles, uploadingCount, activeAccountId, needsContactApproval, conversationId, conversation, addMessage, updateMessage, replyTo, editingMessageId, t, clearComposerDraft, withProgress]);
 
   const handleAcceptContact = useCallback(() => {
     if (!activeAccountId || !conversation?.peerJid) return;
@@ -1280,7 +1316,7 @@ export default function MessageView({ conversationId }: { conversationId: string
       const file = item.getAsFile();
       if (!file) continue;
       try {
-        const result = await attachmentsApi.upload(file, undefined, activeAccountId ?? undefined);
+        const result = await withProgress(file.name, (report) => attachmentsApi.upload(file, undefined, activeAccountId ?? undefined, report));
         setPendingFiles((prev) => [
           ...prev,
           {
@@ -1563,22 +1599,25 @@ export default function MessageView({ conversationId }: { conversationId: string
                   // The private /files/ URL requires our API session and cannot be
                   // fetched by Conversations. Share ciphertext through a signed,
                   // unauthenticated XEP-0454 URL for both private and MUC chats.
-                  const mediaUrl = await publishFederatedMedia(file, file.name, activeAccountId);
-                  let sentEncrypted = false;
-                  let sentId: string;
-                  if (isGroup && getGroupOmemoEnabled(activeAccountId, peerJid)) {
-                    const envelope = await encryptGroupOmemoMessage(activeAccountId, peerJid, mediaUrl);
-                    if (!envelope) throw new Error("Cannot encrypt media link for every group member");
-                    sentId = client.sendOmemoMessage(peerJid, envelope, "groupchat", undefined, mediaUrl);
-                    sentEncrypted = true;
-                  } else if (!isGroup && getOmemoEnabled()) {
-                    const envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
-                    if (!envelope) throw new Error("Cannot encrypt media link for this recipient");
-                    sentId = client.sendOmemoMessage(peerJid, envelope, "chat");
-                    sentEncrypted = true;
-                  } else {
-                    sentId = client.sendMessage(peerJid, mediaUrl, isGroup ? "groupchat" : "chat");
-                  }
+                  const { mediaUrl, sentEncrypted, sentId } = await withProgress(file.name, async (report) => {
+                    const mediaUrl = await publishFederatedMedia(file, file.name, activeAccountId, (percent, details) => report(Math.floor(percent * 0.9), details));
+                    let sentEncrypted = false;
+                    let sentId: string;
+                    if (isGroup && getGroupOmemoEnabled(activeAccountId, peerJid)) {
+                      const envelope = await encryptGroupOmemoMessage(activeAccountId, peerJid, mediaUrl);
+                      if (!envelope) throw new Error("Cannot encrypt media link for every group member");
+                      sentId = client.sendOmemoMessage(peerJid, envelope, "groupchat", undefined, mediaUrl);
+                      sentEncrypted = true;
+                    } else if (!isGroup && getOmemoEnabled()) {
+                      const envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
+                      if (!envelope) throw new Error("Cannot encrypt media link for this recipient");
+                      sentId = client.sendOmemoMessage(peerJid, envelope, "chat");
+                      sentEncrypted = true;
+                    } else {
+                      sentId = client.sendMessage(peerJid, mediaUrl, isGroup ? "groupchat" : "chat");
+                    }
+                    return { mediaUrl, sentEncrypted, sentId };
+                  });
 
                   // Mirror in local store so the user sees their own voice msg
                   const localMsg: ChatMessage = {
@@ -1611,6 +1650,15 @@ export default function MessageView({ conversationId }: { conversationId: string
         <input ref={galleryInputRef} type="file" accept="image/*" multiple className="hidden" aria-hidden="true" onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; setAttachmentMenuOpen(false); void uploadSelectedFiles(files); }} />
         <input ref={fileInputRef} type="file" multiple className="hidden" aria-hidden="true" onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; setAttachmentMenuOpen(false); void uploadSelectedFiles(files); }} />
         {uploadingCount > 0 && <p className="mt-2 text-xs text-surface-200/70" role="status">{t("chat.uploadingAttachments")}</p>}
+        {Object.entries(uploadProgress).map(([id, item]) => (
+          <div key={id} className="mt-2 px-2 text-xs text-surface-200/80" role="progressbar" aria-label={item.name} aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.percent}>
+            <div className="flex justify-between gap-2"><span className="truncate">{item.name}</span><span>{item.percent}%</span></div>
+            {item.details && <div className="flex justify-between gap-2 text-surface-200/60"><span>{formatFileSize(item.details.loaded)} / {item.details.total ? formatFileSize(item.details.total) : "?"}</span><span>{formatFileSize(item.details.speed)}/s</span></div>}
+            <div className="mt-1 h-1.5 rounded-full bg-surface-800 overflow-hidden">
+              <div className="h-full bg-accent transition-[width] duration-150" style={{ width: `${item.percent}%` }} />
+            </div>
+          </div>
+        ))}
         {attachmentMenuOpen && (
           <div
             className="popover-surface absolute bottom-[calc(100%+0.5rem)] left-2 z-30 grid max-h-[min(65dvh,28rem)] w-[min(20rem,calc(100%-1rem))] grid-cols-3 gap-x-2 gap-y-3 overflow-y-auto rounded-2xl p-3"

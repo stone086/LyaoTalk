@@ -22,6 +22,7 @@ function setupAccounts() {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   sessionStorage.clear();
 });
 
@@ -38,6 +39,46 @@ describe("API account session isolation", () => {
     expect(uploaded.name).toBe(file.name);
     expect(uploaded.size).toBe(file.size);
     expect(uploaded.type).toBe(file.type);
+  });
+
+  it("reports real upload bytes and completes only after the server responds", async () => {
+    setupAccounts();
+    const progress: number[] = [];
+    const sizes: Array<[number, number]> = [];
+    let uploaded: FormData | undefined;
+    let authorization: string | undefined;
+    class UploadRequest {
+      upload: { onprogress?: (event: { lengthComputable: boolean; loaded: number; total: number }) => void } = {};
+      onload?: () => void;
+      onerror?: () => void;
+      onabort?: () => void;
+      status = 200;
+      responseText = JSON.stringify({ id: "image-1" });
+      withCredentials = false;
+      open(method: string, url: string) {
+        expect([method, url]).toEqual(["POST", "/api/attachments/upload"]);
+      }
+      setRequestHeader(name: string, value: string) {
+        if (name === "Authorization") authorization = value;
+      }
+      send(form: FormData) {
+        uploaded = form;
+        this.upload.onprogress?.({ lengthComputable: true, loaded: 5, total: 10 });
+        this.upload.onprogress?.({ lengthComputable: true, loaded: 10, total: 10 });
+        expect(progress).toEqual([0, 50, 99]);
+        this.onload?.();
+      }
+    }
+    vi.stubGlobal("XMLHttpRequest", UploadRequest);
+    const file = new File(["image data"], "photo.jpg", { type: "image/jpeg" });
+    expect((await attachmentsApi.upload(file, undefined, "bob", (percent, details) => {
+      progress.push(percent);
+      if (details) sizes.push([details.loaded, details.total]);
+    })).id).toBe("image-1");
+    expect(authorization).toBe("Bearer bob-access");
+    expect((uploaded?.get("file") as File).name).toBe("photo.jpg");
+    expect(progress).toEqual([0, 50, 99, 100]);
+    expect(sizes).toEqual([[0, file.size], [Math.floor(file.size / 2), file.size], [file.size, file.size], [file.size, file.size]]);
   });
 
   it("does not attach or revoke another account token on login 401", async () => {
