@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { useChatStore, ChatMessage, MessageAttachment } from "@/stores/chatStore";
@@ -573,6 +573,8 @@ export default function MessageView({ conversationId }: { conversationId: string
   const messageNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const isNearBottomRef = useRef(true);
+  const pinnedConversationRef = useRef("");
+  const lastMessageHeightRef = useRef(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLDivElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -868,12 +870,31 @@ export default function MessageView({ conversationId }: { conversationId: string
     };
   }, [activeAccountId, conversationId, conversation?.peerJid, addMessage]);
 
+  useLayoutEffect(() => {
+    const c = containerRef.current;
+    if (!c || messages.length > 300) return;
+    if (pinnedConversationRef.current !== conversationId) {
+      pinnedConversationRef.current = conversationId;
+      isNearBottomRef.current = true;
+    }
+    if (isNearBottomRef.current) c.scrollTop = c.scrollHeight;
+    lastMessageHeightRef.current = c.scrollHeight;
+  }, [conversationId, messages.length, peerIsTyping]);
+
   useEffect(() => {
     const c = containerRef.current;
-    if (!c) return;
-    if (!isNearBottomRef.current) return;
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, peerIsTyping]);
+    if (!c || messages.length > 300) return;
+    const observer = new ResizeObserver(() => {
+      const wasNearBottom = lastMessageHeightRef.current - c.scrollTop - c.clientHeight < 200;
+      if (isNearBottomRef.current || wasNearBottom) {
+        c.scrollTop = c.scrollHeight;
+        isNearBottomRef.current = true;
+      }
+      lastMessageHeightRef.current = c.scrollHeight;
+    });
+    c.querySelectorAll("[data-mid]").forEach((item) => observer.observe(item));
+    return () => observer.disconnect();
+  }, [conversationId, messages.length]);
 
   useEffect(() => {
     if (!showEmojiPicker) return;
@@ -1816,3 +1837,4 @@ export default function MessageView({ conversationId }: { conversationId: string
     </div>
   );
 }
+
