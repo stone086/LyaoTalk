@@ -213,8 +213,11 @@ export const useChatStore = create<ChatState>()(
 
       clearAllHistory: () =>
         set((s) => {
+          const clearedAt = Date.now();
           const nextConversations: Record<string, Conversation> = {};
+          const clearedBefore = { ...s.clearedBefore };
           Object.entries(s.conversations).forEach(([id, conv]) => {
+            clearedBefore[id] = clearedAt;
             nextConversations[id] = {
               ...conv,
               lastMessage: undefined,
@@ -227,6 +230,7 @@ export const useChatStore = create<ChatState>()(
             retractedMessageIds: {},
             locallyDeletedMessageIds: {},
             pendingRetractions: {},
+            clearedBefore,
             conversations: nextConversations,
           };
         }),
