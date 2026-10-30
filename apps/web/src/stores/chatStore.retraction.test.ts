@@ -21,6 +21,18 @@ beforeEach(() => {
 });
 
 describe("message retraction", () => {
+  it("does not restore cleared history when MAM replays it", () => {
+    useChatStore.setState({ conversations: { [conversationId]: {
+      id: conversationId, accountId: "alice", peerJid: "bob@example.com",
+      title: "Bob", type: "private", unreadCount: 0, pinned: false,
+    } } });
+    const oldMessage = original({ timestamp: Date.now() - 1000 });
+    useChatStore.getState().addMessage(oldMessage);
+    useChatStore.getState().clearAllHistory();
+    expect(useChatStore.getState().clearedBefore[conversationId]).toBeGreaterThan(oldMessage.timestamp);
+    useChatStore.getState().addMessage(oldMessage);
+    expect(useChatStore.getState().messages[conversationId]).toBeUndefined();
+  });
   it("removes content and keeps a tombstone when an archive replays the original", () => {
     const store = useChatStore.getState();
     store.addMessage(original());
