@@ -148,6 +148,6 @@ def test_ntfy_publisher_sends_generic_content_only(monkeypatch):
 
     monkeypatch.setattr(ntfy.httpx, "AsyncClient", Client)
     assert asyncio.run(ntfy.publish_ntfy("lt_" + "a" * 32))
-    assert sent[0][1] == "You have a new message"
+    assert sent[0][1] == "你有新消息"
     assert sent[0][2]["Click"] == "https://example.com/"
     assert not asyncio.run(ntfy.publish_ntfy("someone-elses-topic"))
