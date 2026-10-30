@@ -42,7 +42,7 @@ async def publish_ntfy(topic: str, *, message_id: str | None = None) -> bool:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(
                 f"{settings.NTFY_INTERNAL_URL.rstrip('/')}/{topic}",
-                content="You have a new message",
+                content="你有新消息",
                 headers={
                     "Authorization": f"Bearer {settings.NTFY_PUBLISH_TOKEN}",
                     "Title": "LyaoTalk",
