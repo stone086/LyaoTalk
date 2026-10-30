@@ -35,7 +35,7 @@ export default defineConfig({
         // bundle competes with the first page load on slow connections and
         // can leave the app on a blank shell before the entry module arrives.
         // Runtime requests still cache scripts and styles after they load.
-        globPatterns: ["**/*.{html,ico,png,svg,webp}"],
+        globPatterns: ["index.html"],
         globIgnores: ["app-logo.png", "lyaotalk-original-icon.png", "lyaotalk-wordmark.png"],
       },
       manifest: {
