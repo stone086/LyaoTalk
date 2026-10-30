@@ -52,7 +52,7 @@ export default function VirtualMessageList({
       className="flex-1"
       data={messages}
       followOutput={(atBottom) => (atBottom ? "smooth" : false)}
-      initialTopMostItemIndex={Math.max(messages.length - 1, 0)}
+      initialTopMostItemIndex={{ index: Math.max(messages.length - 1, 0), align: "end" }}
       startReached={() => {
         if (hasMore && !loadingOlder) onLoadOlder();
       }}
@@ -110,3 +110,4 @@ function dateLabel(timestamp: number, todayLabel: string, yesterdayLabel: string
   if (isSameDay(date, yesterday)) return yesterdayLabel;
   return format(date, "yyyy-MM-dd");
 }
+
