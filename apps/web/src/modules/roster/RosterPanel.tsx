@@ -54,12 +54,17 @@ function ContactRow({
     deleteLocalConversationData(convId).catch(() => {});
   };
 
-  const handleRemove = () => {
+  const handleRemove = async () => {
     if (!activeAccountId) return;
     const client = getClient(activeAccountId);
-    client?.removeContact(contact.jid);
-    removeContact(activeAccountId, contact.jid);
-    toast.success(t("roster.contactRemoved"));
+    try {
+      if (!client) throw new Error("XMPP is disconnected");
+      await client.removeContact(contact.jid);
+      removeContact(activeAccountId, contact.jid);
+      toast.success(t("roster.contactRemoved"));
+    } catch {
+      toast.error(t("roster.removeFailed"));
+    }
   };
 
   const handleAccept = () => {
@@ -184,7 +189,7 @@ function ContactRow({
                   <Ban size={12} /> {t("roster.block")}
                 </button>
               )}
-              <button onClick={() => { handleRemove(); setMenuOpen(false); }}
+              <button onClick={() => { void handleRemove(); setMenuOpen(false); }}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-danger hover-surface">
                 <Trash2 size={12} /> {t("roster.remove")}
               </button>
