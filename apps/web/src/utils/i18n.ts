@@ -412,6 +412,7 @@ const enUS = {
 
     "roster.title": "Contacts",
     "roster.contactRemoved": "Contact removed",
+    "roster.removeFailed": "Could not remove contact. Check the connection and try again.",
     "roster.block": "Block",
     "roster.unblock": "Unblock",
     "roster.remove": "Remove",
@@ -934,6 +935,7 @@ const zhCN: Record<MessageKey, string> = {
 
     "roster.title": "联系人",
     "roster.contactRemoved": "联系人已移除",
+    "roster.removeFailed": "移除联系人失败，请检查连接后重试。",
     "roster.block": "拉黑",
     "roster.unblock": "解除拉黑",
     "roster.remove": "移除",

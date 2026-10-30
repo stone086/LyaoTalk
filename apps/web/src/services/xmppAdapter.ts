@@ -825,7 +825,7 @@ export class XmppClient {
       this._$iq({ type: "get" }).c("query", { xmlns: "jabber:iq:roster" }).tree(),
       (stanza: Element) => {
         const contacts = this._parseRosterStanza(stanza);
-        this.emit("roster.updated", { accountId: this.config.accountId, contacts });
+        this.emit("roster.updated", { accountId: this.config.accountId, contacts, full: true });
       },
     );
   }
@@ -1019,14 +1019,19 @@ export class XmppClient {
     );
   }
 
-  removeContact(jid: string) {
-    if (!this._connection) return;
+  async removeContact(jid: string): Promise<void> {
+    if (!this._connection || !this.connected) throw new Error("XMPP is disconnected");
+    await new Promise<void>((resolve, reject) => {
+      this._connection!.sendIQ(
+        this._$iq({ type: "set" })
+          .c("query", { xmlns: "jabber:iq:roster" })
+          .c("item", { jid, subscription: "remove" }).tree(),
+        () => resolve(),
+        () => reject(new Error("Server rejected contact removal")),
+        10000,
+      );
+    });
     this._connection.send(this._$pres({ to: jid, type: "unsubscribe" }));
-    this._connection.send(
-      this._$iq({ type: "set" })
-        .c("query", { xmlns: "jabber:iq:roster" })
-        .c("item", { jid, subscription: "remove" })
-    );
   }
 
   /**

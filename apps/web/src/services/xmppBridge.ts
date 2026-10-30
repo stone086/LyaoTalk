@@ -214,11 +214,23 @@ export function initXmppBridge(client: XmppClient) {
   // Roster updates -> RosterStore
   client.on("roster.updated", (data: any) => {
     const { contacts }: { contacts: AdapterContact[] } = data;
+    if (data.full) {
+      const serverJids = new Set(contacts.map((c) => normalizeBareJid(c.jid)));
+      for (const local of useRosterStore.getState().listContacts(accountId)) {
+        if (!serverJids.has(local.jid) && !local.pendingIncoming) {
+          useRosterStore.getState().removeContact(accountId, local.jid);
+        }
+      }
+    }
     contacts.forEach((c) => {
       if (!c.jid) return;
       const normalizedJid = normalizeBareJid(c.jid);
       if (!isValidBareJid(normalizedJid)) return;
       if (normalizedJid === ownBareJid) return;
+      if (c.subscription === "remove") {
+        useRosterStore.getState().removeContact(accountId, normalizedJid);
+        return;
+      }
       const existing = useRosterStore.getState().getContact(accountId, normalizedJid);
       useRosterStore.getState().upsertContact({
         accountId,
