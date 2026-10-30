@@ -46,6 +46,12 @@ function deriveSameOriginWsUrl(configured?: string): string {
 const MENTION_NOTIFY_KEY = "liaot-notify-mention";
 const DENSITY_KEY = "liaot-message-density";
 const HISTORY_RETENTION_OPTIONS = [0, 1, 3, 7, 30];
+
+function PlatformTitle({ title, platform, color }: { title: string; platform: string; color: string }) {
+  const start = title.indexOf(platform);
+  if (start < 0) return <>{title}</>;
+  return <>{title.slice(0, start)}<span className={color}>{platform}</span>{title.slice(start + platform.length)}</>;
+}
 type MessageDensity = "comfortable" | "compact";
 
 function ShareQr({
@@ -813,7 +819,7 @@ export default function SettingsPage() {
           <div className="glass rounded-xl p-4 flex flex-col gap-3">
             <label className="flex items-center justify-between gap-3 cursor-pointer">
               <span className="flex flex-col">
-                <span className="text-sm text-surface-200">{t("settings.ntfyTitle")}</span>
+                <span className="text-sm text-surface-200"><PlatformTitle title={t("settings.ntfyTitle")} platform={t("settings.ntfyPlatform")} color="text-success" /></span>
                 <span className="text-xs text-surface-200/50">{t("settings.ntfyHint")}</span>
               </span>
               <input type="checkbox" checked={ntfyInfo.enabled} disabled={!activeAccountId || ntfyPending}
@@ -844,7 +850,7 @@ export default function SettingsPage() {
             {(pushSupported || pushBrowser.isIOS) && (
               <label className="flex items-center justify-between cursor-pointer">
                 <div className="flex flex-col">
-                  <span className="text-sm text-surface-200">{t("settings.notifyPush")}</span>
+                  <span className="text-sm text-surface-200"><PlatformTitle title={t("settings.notifyPush")} platform={t("settings.pushPlatform")} color="text-danger" /></span>
                   <span className="text-xs text-surface-200/40">
                     {pushBrowser.isIOS && !pushBrowser.isStandalonePwa
                       ? t("settings.iosPushInstallHint")
