@@ -583,6 +583,7 @@ export default function MessageView({ conversationId }: { conversationId: string
   useEffect(() => { setPendingDelete(null); }, [conversationId]);
 
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
+  const accountConnected = useAccountStore((s) => s.accounts.find((account) => account.id === s.activeAccountId)?.connected ?? false);
   const conversation = useChatStore((s) => s.conversations[conversationId]);
   const upsertRoom = useGroupStore((s) => s.upsertRoom);
   const peerContact = useRosterStore((s) =>
@@ -603,6 +604,22 @@ export default function MessageView({ conversationId }: { conversationId: string
   const messageMap = new Map<string, ChatMessage>(messages.map((m) => [m.id, m]));
   const { peerIsTyping, onInputChange, onBlur } = useTypingIndicator(conversation?.peerJid ?? "");
   const { fetchHistory, loading: mamLoading, hasMore } = useMAM(conversation?.peerJid ?? "", conversationId);
+  const recentMamQueryRef = useRef("");
+
+  useEffect(() => {
+    if (!accountConnected || !activeAccountId || !conversation?.peerJid || conversation.type !== "private") {
+      recentMamQueryRef.current = "";
+      return;
+    }
+    const key = `${activeAccountId}:${conversationId}`;
+    if (recentMamQueryRef.current === key) return;
+    const client = getClient(activeAccountId);
+    if (!client?.connected) return;
+    recentMamQueryRef.current = key;
+    // Offline delivery and local cache can each miss a stanza. Reconcile the
+    // newest archive page even when this conversation already has messages.
+    client.fetchMAM(conversation.peerJid, { latest: true, limit: 100 });
+  }, [accountConnected, activeAccountId, conversation?.peerJid, conversation?.type, conversationId]);
   const forwardCandidates = allConversations
     .filter((c) => c.accountId === activeAccountId && c.id !== conversationId)
     .sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));

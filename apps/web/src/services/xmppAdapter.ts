@@ -1537,7 +1537,7 @@ export class XmppClient {
     );
   }
 
-  fetchMAM(targetJid: string, options: { before?: string; limit?: number; start?: number; type?: "chat" | "groupchat" } = {}) {
+  fetchMAM(targetJid: string, options: { before?: string; latest?: boolean; limit?: number; start?: number; type?: "chat" | "groupchat" } = {}) {
     if (!this._connection) return;
     const queryId = crypto.randomUUID();
     const limit = options.limit ?? 30;
@@ -1555,6 +1555,7 @@ export class XmppClient {
       .c("max").t(String(limit));
 
     if (options.before) iq.up().c("before").t(options.before);
+    else if (options.latest) iq.up().c("before");
 
     const mamHandler = this._connection.addHandler((stanza: Element) => {
       const result = stanza.querySelector("result");
