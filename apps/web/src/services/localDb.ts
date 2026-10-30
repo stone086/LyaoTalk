@@ -1,6 +1,8 @@
 import Dexie, { Table } from "dexie";
 import type { ChatMessage, Conversation } from "@/stores/chatStore";
 import { useChatStore } from "@/stores/chatStore";
+import { useRosterStore } from "@/stores/rosterStore";
+import { generateConversationId } from "@/utils/helpers";
 
 interface Draft {
   conversationId: string;
@@ -69,6 +71,76 @@ export const db = new WGajimDB();
 
 export function openLocalDb() {
   return db;
+}
+
+/** Preserve this device's contacts and conversations when a legacy local ID is replaced by the API ID. */
+export async function migrateLocalAccountId(oldId: string, newId: string): Promise<void> {
+  if (oldId === newId) return;
+  const oldConversations = await db.conversations.where("accountId").equals(oldId).toArray();
+  const oldContacts = await db.contacts.where("accountId").equals(oldId).toArray();
+  const chat = useChatStore.getState();
+  const allConversations = new Map<string, Conversation>();
+  for (const conv of [...oldConversations, ...Object.values(chat.conversations)]) {
+    if (conv.accountId === oldId) allConversations.set(conv.id, conv);
+  }
+  const idMap = new Map<string, string>();
+  for (const conv of allConversations.values()) {
+    idMap.set(conv.id, conv.type === "private" ? generateConversationId(newId, conv.peerJid) : conv.id.replace(`${oldId}:`, `${newId}:`));
+  }
+  await db.transaction("rw", db.conversations, db.messages, db.drafts, db.contacts, async () => {
+    for (const conv of allConversations.values()) {
+      const nextId = idMap.get(conv.id)!;
+      if (!await db.conversations.get(nextId)) await db.conversations.put({ ...conv, id: nextId, accountId: newId });
+      const messages = await db.messages.where("conversationId").equals(conv.id).toArray();
+      for (const message of messages) {
+        const cacheKey = `${nextId}:${message.id}`;
+        if (!await db.messages.get(cacheKey)) await db.messages.put({ ...message, conversationId: nextId, cacheKey });
+      }
+      const draft = await db.drafts.get(conv.id);
+      if (draft && !await db.drafts.get(nextId)) await db.drafts.put({ ...draft, conversationId: nextId });
+    }
+    for (const contact of oldContacts) {
+      if (!await db.contacts.get([contact.jid, newId])) await db.contacts.put({ ...contact, accountId: newId });
+    }
+  });
+  const roster = useRosterStore.getState().contacts;
+  const contacts = { ...roster };
+  for (const contact of Object.values(roster)) {
+    if (contact.accountId !== oldId) continue;
+    const key = `${newId}::${contact.jid}`;
+    if (!contacts[key]) contacts[key] = { ...contact, accountId: newId };
+  }
+  useRosterStore.setState({ contacts });
+  const rekey = <T,>(values: Record<string, T>, separator = "") => {
+    const next = { ...values };
+    for (const [oldConvId, newConvId] of idMap) {
+      for (const [key, value] of Object.entries(values)) {
+        if (key !== oldConvId && !(separator && key.startsWith(`${oldConvId}${separator}`))) continue;
+        const newKey = newConvId + key.slice(oldConvId.length);
+        if (!(newKey in next)) next[newKey] = value;
+      }
+    }
+    return next;
+  };
+  const conversations = { ...chat.conversations };
+  for (const conv of allConversations.values()) {
+    const nextId = idMap.get(conv.id)!;
+    if (!conversations[nextId]) conversations[nextId] = { ...conv, id: nextId, accountId: newId };
+  }
+  const messages = rekey(chat.messages);
+  for (const [oldConvId, newConvId] of idMap) {
+    if (messages[newConvId]) messages[newConvId] = messages[newConvId].map((message) => ({ ...message, conversationId: newConvId }));
+  }
+  useChatStore.setState({
+    conversations,
+    messages,
+    composerDrafts: rekey(chat.composerDrafts),
+    clearedBefore: rekey(chat.clearedBefore),
+    retractedMessageIds: rekey(chat.retractedMessageIds, "\u0000"),
+    locallyDeletedMessageIds: rekey(chat.locallyDeletedMessageIds, "\u0000"),
+    pendingRetractions: rekey(chat.pendingRetractions, "\u0000"),
+    activeConversationId: chat.activeConversationId ? idMap.get(chat.activeConversationId) ?? chat.activeConversationId : null,
+  });
 }
 
 // Helper functions

@@ -10,7 +10,7 @@ import toast from "react-hot-toast";
 import { Wifi, Eye, EyeOff, UserPlus } from "lucide-react";
 import { useLanguage } from "@/utils/i18n";
 import { requireLocalXmppAccount } from "@/services/localXmppAccount";
-import { restoreLocalAccountHistory } from "@/services/localDb";
+import { migrateLocalAccountId, restoreLocalAccountHistory } from "@/services/localDb";
 
 export default function LoginPage() {
   const { t } = useLanguage();
@@ -97,6 +97,10 @@ export default function LoginPage() {
     initXmppBridge(client);
     try {
       await withTimeout(client.connect(), 20000, t("login.connectionFailed"));
+      if (existing && existing.id !== id) {
+        await restoreLocalAccountHistory(existing.id, form.password).catch(() => false);
+        await migrateLocalAccountId(existing.id, id);
+      }
       addAccount({ id, jid, domain, displayName: jid.split("@")[0] });
       setConnected(id, true);
       void client.fetchPepAvatar(jid).then((avatarUrl) => {
@@ -165,10 +169,11 @@ export default function LoginPage() {
             if (!r.ok) throw new Error("SSO code exchange failed");
             return r.json();
           })
-          .then((data: { access_token: string; refresh_token?: string; jid: string; account_id?: string }) => {
+          .then(async (data: { access_token: string; refresh_token?: string; jid: string; account_id?: string }) => {
             const jid = normalizeAccountJid(data.jid);
             const existing = useAccountStore.getState().accounts.find((a) => normalizeAccountJid(a.jid) === jid);
             const id = data.account_id ?? existing?.id ?? crypto.randomUUID();
+            if (existing && existing.id !== id) await migrateLocalAccountId(existing.id, id);
             useAccountStore.getState().addAccount({
               id, jid,
               domain: jid.split("@")[1] ?? "",
@@ -203,6 +208,7 @@ export default function LoginPage() {
       const jid = normalizeAccountJid(data.jid);
       const existing = useAccountStore.getState().accounts.find((a) => normalizeAccountJid(a.jid) === jid);
       const id = data.account_id ?? existing?.id ?? crypto.randomUUID();
+      if (existing && existing.id !== id) await migrateLocalAccountId(existing.id, id);
       useAccountStore.getState().addAccount({
         id, jid,
         domain: jid.split("@")[1] ?? "",
