@@ -38,7 +38,7 @@ function selectedAccount(): string | null {
 export async function restoreXmppPush(accountId: string): Promise<void> {
   if (localStorage.getItem(enabledKey(accountId)) !== "1") return;
   if (!(await isPushSupported())) return;
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await getReadyServiceWorker();
   const subscription = await registration.pushManager.getSubscription();
   const client = getClient(accountId);
   if (!subscription || !client?.connected) return;
@@ -94,14 +94,26 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   return await withTimeout(Notification.requestPermission(), "Notification permission timed out");
 }
 
-function withTimeout<T>(promise: Promise<T>, message: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 15000): Promise<T> {
   return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(message)), 15000);
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
     promise.then(
       (value) => { window.clearTimeout(timer); resolve(value); },
       (error) => { window.clearTimeout(timer); reject(error); },
     );
   });
+}
+
+async function getReadyServiceWorker(): Promise<ServiceWorkerRegistration> {
+  // The PWA updater runs in the background. On a freshly installed iOS Home
+  // Screen app it may still be starting when the user taps the push switch.
+  const registration = await withTimeout(
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }),
+    "registration timed out",
+    60000,
+  );
+  if (registration.active) return registration;
+  return withTimeout(navigator.serviceWorker.ready, "activation timed out", 60000);
 }
 
 async function pushStep<T>(stage: string, action: () => Promise<T>): Promise<T> {
@@ -125,7 +137,7 @@ export async function subscribeToPush(): Promise<boolean> {
   if (permission !== "granted") throw new Error(`Notification permission: ${permission}`);
 
   // Wait for SW registration
-  const registration = await pushStep("Service Worker", () => withTimeout(navigator.serviceWorker.ready, "registration timed out"));
+  const registration = await pushStep("Service Worker", getReadyServiceWorker);
 
   // Fetch VAPID public key from backend
   const { data } = await pushStep("VAPID key", () => api.get<{ key: string }>("/push/vapid-public-key"));
@@ -164,7 +176,7 @@ export async function unsubscribeFromPush(targetAccountId?: string): Promise<boo
   const accountId = targetAccountId ?? selectedAccount();
   if (!accountId) return false;
   if (!("serviceWorker" in navigator)) return false;
-  const registration = await navigator.serviceWorker.ready;
+  const registration = await getReadyServiceWorker();
   const subscription = await registration.pushManager.getSubscription();
   if (!subscription) {
     localStorage.removeItem(enabledKey(accountId));
@@ -195,7 +207,7 @@ export async function isPushSubscribed(): Promise<boolean> {
   if (!accountId || localStorage.getItem(enabledKey(accountId)) !== "1") return false;
   if (!(await isPushSupported())) return false;
   try {
-    const registration = await navigator.serviceWorker.ready;
+    const registration = await getReadyServiceWorker();
     const subscription = await registration.pushManager.getSubscription();
     return subscription !== null;
   } catch {
