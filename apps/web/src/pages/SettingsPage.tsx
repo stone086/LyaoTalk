@@ -825,9 +825,13 @@ export default function SettingsPage() {
             {ntfyInfo.enabled && (
               <div className="flex flex-col gap-2 border-t border-subtle pt-3">
                 <p className="text-xs text-surface-200/70">{t("settings.ntfyInstructions")}</p>
-                <ShareQr title={t("settings.ntfyTitle")} description={t("settings.ntfyScan")}
-                  payload={`ntfy://${new URL(ntfyInfo.server).host}/${ntfyInfo.topic}`}
-                  copyText={`${ntfyInfo.server}/${ntfyInfo.topic}`} />
+                <div className="flex items-center gap-2 rounded-lg border-default bg-surface-800/40 p-3">
+                  <span className="min-w-0 flex-1 break-all font-mono text-sm text-surface-100">{ntfyInfo.topic}</span>
+                  <button type="button" className="btn-ghost shrink-0 p-2" aria-label={t("common.copy")}
+                    onClick={() => void navigator.clipboard.writeText(ntfyInfo.topic).then(() => toast.success(t("settings.copied"))).catch(() => toast.error(t("settings.copyFailed")))}>
+                    <Copy size={16} />
+                  </button>
+                </div>
                 <button type="button" className="btn-ghost self-start text-xs" disabled={ntfyPending}
                   onClick={() => {
                     if (!activeAccountId) return;

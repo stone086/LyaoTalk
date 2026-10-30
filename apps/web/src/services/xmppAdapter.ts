@@ -821,8 +821,12 @@ export class XmppClient {
 
   private _requestRoster() {
     if (!this._connection) return;
-    this._connection.send(
-      this._$iq({ type: "get" }).c("query", { xmlns: "jabber:iq:roster" })
+    this._connection.sendIQ(
+      this._$iq({ type: "get" }).c("query", { xmlns: "jabber:iq:roster" }).tree(),
+      (stanza: Element) => {
+        const contacts = this._parseRosterStanza(stanza);
+        this.emit("roster.updated", { accountId: this.config.accountId, contacts });
+      },
     );
   }
 
