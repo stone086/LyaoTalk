@@ -664,6 +664,11 @@ export default function MessageView({ conversationId }: { conversationId: string
     conversation?.type === "group"
     || peerDomain.startsWith("conference.")
     || peerDomain.includes(".conference.");
+  useEffect(() => {
+    if (conversation && isMucPeer && conversation.type !== "group") {
+      useChatStore.getState().upsertConversation({ ...conversation, type: "group" });
+    }
+  }, [conversation, isMucPeer]);
   const needsContactApproval = Boolean(
     conversation?.type === "private"
       && !isMucPeer
@@ -678,7 +683,7 @@ export default function MessageView({ conversationId }: { conversationId: string
 
   const uploadSelectedFiles = useCallback(async (files: File[]) => {
     if (!files.length || !activeAccountId) return;
-    if (conversation?.type === "group" || editingMessageId) {
+    if (editingMessageId) {
       toast.error(t("chat.attachDirectOnly"));
       return;
     }
@@ -707,7 +712,7 @@ export default function MessageView({ conversationId }: { conversationId: string
     } finally {
       setUploadingCount((count) => count - accepted.length);
     }
-  }, [activeAccountId, conversation?.type, editingMessageId, t, withProgress]);
+  }, [activeAccountId, editingMessageId, t, withProgress]);
 
   const shareLocation = () => {
     setAttachmentMenuOpen(false);
@@ -1019,11 +1024,11 @@ export default function MessageView({ conversationId }: { conversationId: string
     const peerJid = conversation?.peerJid ?? conversationId;
     const isExternalPeer = peerJid.split("/")[0].split("@")[1]?.toLowerCase() !== client.config.jid.split("@")[1]?.split("/")[0].toLowerCase();
     if (pendingFiles.length) {
-      if (isExternalPeer && !getOmemoEnabled()) {
+      if (!isMucPeer && isExternalPeer && !getOmemoEnabled()) {
         toast.error(t("media.enableOmemoForFederation"));
         return;
       }
-      if (conversation?.type === "group" || editingMessageId) {
+      if (editingMessageId) {
         toast.error("File sharing is available for direct chats only");
         return;
       }
@@ -1032,7 +1037,7 @@ export default function MessageView({ conversationId }: { conversationId: string
     let sentEncrypted = false;
     try {
       let outboundBody = body;
-      if (body && conversation?.type === "group" && getGroupOmemoEnabled(activeAccountId, peerJid)) {
+      if (body && isMucPeer && getGroupOmemoEnabled(activeAccountId, peerJid)) {
         const envelope = await encryptGroupOmemoMessage(activeAccountId, peerJid, body);
         if (!envelope) throw new Error("Cannot encrypt for every group member");
         id = client.sendOmemoMessage(
@@ -1043,7 +1048,7 @@ export default function MessageView({ conversationId }: { conversationId: string
           body
         );
         sentEncrypted = true;
-      } else if (body && conversation?.type === "private" && getOmemoEnabled()) {
+      } else if (body && !isMucPeer && getOmemoEnabled()) {
         const peerJid = conversation?.peerJid ?? conversationId;
         // Try libsignal-based OMEMO first (XEP-0384, interop with Conversations/Gajim).
         // Fall back to legacy custom-protocol OMEMO if peer hasn't published a bundle.
@@ -1081,7 +1086,7 @@ export default function MessageView({ conversationId }: { conversationId: string
         id = body ? client.sendMessage(
           conversation?.peerJid ?? conversationId,
           outboundBody,
-          conversation?.type === "group" ? "groupchat" : "chat",
+          isMucPeer ? "groupchat" : "chat",
           editingMessageId
             ? { replaceId: editingMessageId }
             : (replyTo ? { replyToId: replyTo.id, replyToJid: replyTo.senderJid } : undefined)
@@ -1141,13 +1146,27 @@ export default function MessageView({ conversationId }: { conversationId: string
           const mediaUrl = await publishFederatedMedia(original, file.name, activeAccountId, (percent, details) => report(Math.floor(percent * 0.9), details));
           let fileEncrypted = false;
           let fileId: string;
-          if (getOmemoEnabled()) {
-            const envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
-            if (!envelope) throw new Error("Cannot encrypt media link for this recipient");
-            fileId = client.sendOmemoMessage(peerJid, envelope, "chat");
+          if (isMucPeer && getGroupOmemoEnabled(activeAccountId, peerJid)) {
+            const envelope = await encryptGroupOmemoMessage(activeAccountId, peerJid, mediaUrl);
+            if (!envelope) throw new Error("Cannot encrypt media link for every group member");
+            fileId = client.sendOmemoMessage(peerJid, envelope, "groupchat", undefined, mediaUrl);
             fileEncrypted = true;
+          } else if (!isMucPeer && getOmemoEnabled()) {
+            let envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
+            if (!envelope) {
+              const legacy = await encryptOmemoEnvelopeForPeer(activeAccountId, peerJid, mediaUrl);
+              if (legacy.usedPeerKey) envelope = legacy.envelope;
+            }
+            if (envelope) {
+              fileId = client.sendOmemoMessage(peerJid, envelope, "chat");
+              fileEncrypted = true;
+            } else {
+              if (!window.confirm(t("omemo.sendPlaintextConfirm"))) throw new Error(t("media.sendCancelled"));
+              fileId = client.sendMessage(peerJid, mediaUrl, "chat");
+              toast(t("omemo.sentPlaintext"));
+            }
           } else {
-            fileId = client.sendMessage(peerJid, mediaUrl, "chat");
+            fileId = client.sendMessage(peerJid, mediaUrl, isMucPeer ? "groupchat" : "chat");
           }
           return { mediaUrl, fileEncrypted, fileId };
         });
@@ -1178,7 +1197,7 @@ export default function MessageView({ conversationId }: { conversationId: string
       sendInFlightRef.current = false;
       setSendPending(false);
     }
-  }, [input, pendingFiles, uploadingCount, activeAccountId, needsContactApproval, conversationId, conversation, addMessage, updateMessage, replyTo, editingMessageId, t, clearComposerDraft, withProgress]);
+  }, [input, pendingFiles, uploadingCount, activeAccountId, needsContactApproval, conversationId, conversation, isMucPeer, addMessage, updateMessage, replyTo, editingMessageId, t, clearComposerDraft, withProgress]);
 
   const handleAcceptContact = useCallback(() => {
     if (!activeAccountId || !conversation?.peerJid) return;
@@ -1655,7 +1674,7 @@ export default function MessageView({ conversationId }: { conversationId: string
                 if (!client?.connected) throw new Error(t("chat.notConnected"));
                 try {
                   const peerJid = conversation?.peerJid ?? conversationId;
-                  const isGroup = conversation?.type === "group";
+                  const isGroup = isMucPeer;
                   const isExternal = peerJid.split("/")[0].split("@")[1]?.toLowerCase() !== client.config.jid.split("@")[1]?.split("/")[0].toLowerCase();
                   if (!isGroup && isExternal && !getOmemoEnabled()) throw new Error(t("media.enableOmemoForFederation"));
                   // The private /files/ URL requires our API session and cannot be
@@ -1671,10 +1690,19 @@ export default function MessageView({ conversationId }: { conversationId: string
                       sentId = client.sendOmemoMessage(peerJid, envelope, "groupchat", undefined, mediaUrl);
                       sentEncrypted = true;
                     } else if (!isGroup && getOmemoEnabled()) {
-                      const envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
-                      if (!envelope) throw new Error("Cannot encrypt media link for this recipient");
-                      sentId = client.sendOmemoMessage(peerJid, envelope, "chat");
-                      sentEncrypted = true;
+                      let envelope = await tryLibsignalEncrypt(activeAccountId, peerJid, mediaUrl);
+                      if (!envelope) {
+                        const legacy = await encryptOmemoEnvelopeForPeer(activeAccountId, peerJid, mediaUrl);
+                        if (legacy.usedPeerKey) envelope = legacy.envelope;
+                      }
+                      if (envelope) {
+                        sentId = client.sendOmemoMessage(peerJid, envelope, "chat");
+                        sentEncrypted = true;
+                      } else {
+                        if (!window.confirm(t("omemo.sendPlaintextConfirm"))) throw new Error(t("media.sendCancelled"));
+                        sentId = client.sendMessage(peerJid, mediaUrl, "chat");
+                        toast(t("omemo.sentPlaintext"));
+                      }
                     } else {
                       sentId = client.sendMessage(peerJid, mediaUrl, isGroup ? "groupchat" : "chat");
                     }

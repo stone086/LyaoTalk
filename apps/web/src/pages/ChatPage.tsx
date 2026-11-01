@@ -73,7 +73,7 @@ export default function ChatPage() {
 
   return (
     <>
-      <MessageView conversationId={conversationId} />
+      <MessageView key={conversationId} conversationId={conversationId} />
       {activeCall && <CallView session={activeCall} onClose={() => setActiveCall(null)} />}
       {activeGroupCall && <GroupCallView groupCall={activeGroupCall} onClose={() => setActiveGroupCall(null)} />}
     </>
