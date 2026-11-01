@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Globe, Server, Users, ArrowRight, Loader } from "lucide-react";
 import { api } from "@/services/api";
 import { useChatStore } from "@/stores/chatStore";
 import { useAccountStore } from "@/stores/accountStore";
+import { useGroupStore } from "@/stores/groupStore";
+import { getClient } from "@/services/xmppAdapter";
+import { generateConversationId } from "@/utils/helpers";
 import { useLanguage } from "@/utils/i18n";
 import toast from "react-hot-toast";
 
@@ -22,33 +26,88 @@ interface ServerHealth {
 
 export default function DiscoveryPage() {
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const [groups, setGroups] = useState<PublicGroup[]>([]);
   const [health, setHealth] = useState<ServerHealth | null>(null);
   const [loading, setLoading] = useState(true);
+  const [discoveryError, setDiscoveryError] = useState("");
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
+  const accounts = useAccountStore((s) => s.accounts);
+  const activeAccount = accounts.find((account) => account.id === activeAccountId);
+  const conferenceService = useMemo(() => {
+    const domain = activeAccount?.domain || activeAccount?.jid.split("@")[1];
+    return domain ? `conference.${domain}` : "";
+  }, [activeAccount?.domain, activeAccount?.jid]);
 
   useEffect(() => {
-    Promise.all([
-      api.get<PublicGroup[]>("/discovery/groups").then((r) => setGroups(r.data)).catch(() => {}),
-      api.get<ServerHealth>("/discovery/health").then((r) => setHealth(r.data)).catch(() => {}),
-    ]).finally(() => setLoading(false));
+    let cancelled = false;
+    setLoading(true);
+    setDiscoveryError("");
+    const client = activeAccountId ? getClient(activeAccountId) : undefined;
+    if (!client?.connected || !conferenceService) {
+      setGroups([]);
+      setDiscoveryError(t("chat.notConnected"));
+      setLoading(false);
+      return;
+    }
+    client.discoverRooms(conferenceService)
+      .then((rooms) => {
+        if (!cancelled) setGroups(rooms.map((room) => ({
+          jid: room.jid,
+          name: room.name || room.jid.split("@")[0],
+        })));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGroups([]);
+          setDiscoveryError(t("group.discoverFailed"));
+        }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeAccountId, activeAccount?.connected, conferenceService, t]);
+
+  useEffect(() => {
+    api.get<ServerHealth>("/discovery/health")
+      .then((response) => setHealth(response.data))
+      .catch(() => {});
   }, []);
 
-  const handleJoinGroup = (group: PublicGroup) => {
+  const handleJoinGroup = async (group: PublicGroup) => {
     if (!activeAccountId) return;
-    // Create a group conversation entry so user can start chatting
+    const client = getClient(activeAccountId);
+    if (!client?.connected) {
+      toast.error(t("chat.notConnected"));
+      return;
+    }
+    const nickname = activeAccount?.jid.split("@")[0] || "user";
+    useGroupStore.getState().upsertRoom({
+      accountId: activeAccountId,
+      jid: group.jid,
+      name: group.name,
+      nickname,
+      isPublic: true,
+      joinState: "joining",
+    });
+    const conversationId = generateConversationId(activeAccountId, group.jid);
     useChatStore.getState().upsertConversation({
-      id: `group-${group.jid}`,
+      id: conversationId,
       accountId: activeAccountId,
       type: "group",
       peerJid: group.jid,
       title: group.name,
       unreadCount: 0,
-      lastMessage: "",
-      lastMessageAt: Date.now(),
       pinned: false,
     });
-    toast.success(`Joined ${group.name}`);
+    try {
+      await client.joinRoom(group.jid, nickname);
+      void client.publishMucBookmark({ jid: group.jid, name: group.name, nickname, autojoin: true })
+        .catch(() => toast.error(t("group.bookmarkSyncFailed")));
+      navigate(`/chat/${conversationId}`);
+      toast.success(t("group.joined"));
+    } catch (error: any) {
+      toast.error(error?.message ?? t("group.joinFailed"));
+    }
   };
 
   const formatUptime = (seconds: number) => {
@@ -90,7 +149,9 @@ export default function DiscoveryPage() {
       <h2 className="text-sm font-medium text-surface-500 uppercase tracking-wider mb-3">
         {t("discovery.publicGroups")}
       </h2>
-      {groups.length === 0 ? (
+      {discoveryError ? (
+        <p className="text-surface-400 text-sm">{discoveryError}</p>
+      ) : groups.length === 0 ? (
         <p className="text-surface-400 text-sm">{t("discovery.noGroups")}</p>
       ) : (
         <div className="space-y-2">
