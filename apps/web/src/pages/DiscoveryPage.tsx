@@ -20,8 +20,8 @@ interface PublicGroup {
 interface ServerHealth {
   uptime_seconds: number;
   version: string;
-  accounts: number;
-  latency_ms: number;
+  user_count: number;
+  avg_response_ms: number;
 }
 
 export default function DiscoveryPage() {
@@ -133,15 +133,15 @@ export default function DiscoveryPage() {
 
       {/* Server health badge */}
       {health && (
-        <div className="bg-surface-50 rounded-lg p-4 mb-6 flex flex-wrap items-center gap-2 text-sm">
+        <div className="bg-surface-800/60 rounded-lg p-4 mb-6 flex flex-wrap items-center gap-2 text-sm">
           <Server className="w-4 h-4 text-green-600 shrink-0" />
           <span>v{health.version}</span>
           <span className="text-surface-400">·</span>
           <span>{t("discovery.uptime")}: {formatUptime(health.uptime_seconds)}</span>
           <span className="text-surface-400">·</span>
-          <span>{health.accounts} {t("discovery.users")}</span>
+          <span>{health.user_count} {t("discovery.users")}</span>
           <span className="text-surface-400">·</span>
-          <span>{health.latency_ms}ms</span>
+          <span>{health.avg_response_ms}ms</span>
         </div>
       )}
 
@@ -158,7 +158,7 @@ export default function DiscoveryPage() {
           {groups.map((group) => (
             <div
               key={group.jid}
-              className="flex items-center gap-3 p-3 rounded-lg border border-surface-200 hover:bg-surface-50 transition-colors"
+              className="flex items-center gap-3 p-3 rounded-lg border border-surface-200 hover:bg-surface-800/60 transition-colors"
             >
               <Users className="w-5 h-5 text-primary shrink-0" />
               <div className="flex-1 min-w-0">

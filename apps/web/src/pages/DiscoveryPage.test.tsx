@@ -14,7 +14,9 @@ const { discoverRooms, joinRoom, publishMucBookmark, navigate, upsertRoom, upser
 
 vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
 vi.mock("@/utils/i18n", () => ({ useLanguage: () => ({ t: translate }) }));
-vi.mock("@/services/api", () => ({ api: { get: vi.fn(async () => ({ data: null })) } }));
+vi.mock("@/services/api", () => ({ api: { get: vi.fn(async () => ({
+  data: { version: "2.3.6", uptime_seconds: 3600, user_count: 4, avg_response_ms: 12 },
+})) } }));
 vi.mock("@/stores/accountStore", () => ({
   useAccountStore: (selector: (state: unknown) => unknown) => selector({
     activeAccountId: "account-1",
@@ -49,7 +51,12 @@ describe("public group discovery", () => {
 
     expect(discoverRooms).toHaveBeenCalledWith("conference.example.org");
     expect(element.textContent).toContain("public-room");
+    expect(element.textContent).toContain("4 discovery.users");
+    expect(element.textContent).toContain("12ms");
     expect(api.get).not.toHaveBeenCalledWith("/discovery/groups");
+    const groupCard = element.querySelector(".hover\\:bg-surface-800\\/60");
+    expect(groupCard).not.toBeNull();
+    expect(element.querySelector(".hover\\:bg-surface-50")).toBeNull();
 
     const joinButton = element.querySelector<HTMLButtonElement>("button[title='discovery.join']");
     expect(joinButton).not.toBeNull();
