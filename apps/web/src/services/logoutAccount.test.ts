@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import "fake-indexeddb/auto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useAccountStore } from "@/stores/accountStore";
 import { authApi, getUserToken, setUserRefreshToken, setUserToken } from "./api";

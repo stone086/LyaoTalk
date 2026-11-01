@@ -9,12 +9,13 @@
  *
  * Here it is sealed with AES-GCM under a non-extractable CryptoKey that lives
  * in IndexedDB. The key material is never exposed to JavaScript, so storage
- * dumps no longer contain the password.
+ * dumps no longer contain the credential. Remembered Web accounts use a
+ * revocable device token instead of the main account password.
  *
  * Residual risk, deliberately documented rather than papered over: same-origin
  * JavaScript can ask the browser to decrypt while the tab is open, so an XSS
- * can still recover the plaintext at runtime. Closing that requires replacing
- * password auth with a token-based XMPP credential (SASL EXTERNAL / SASL2).
+ * can still recover the plaintext at runtime. Device revocation limits the
+ * lifetime of a token stolen this way.
  */
 
 const DB_NAME = "liaot-credential-vault";

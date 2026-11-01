@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import QRCode from "qrcode";
-import { getAccountPassword, normalizeAccountJid, setAccountPassword, useAccountStore, XmppAccount, PresenceType } from "@/stores/accountStore";
+import { clearAccountPassword, getAccountPassword, normalizeAccountJid, setAccountPassword, useAccountStore, XmppAccount, PresenceType } from "@/stores/accountStore";
 import { createClient, destroyClient } from "@/services/xmppAdapter";
 import { getClient } from "@/services/xmppAdapter";
 import { initXmppBridge } from "@/services/xmppBridge";
@@ -14,7 +14,7 @@ import { applyHistoryRetention, clearAllHistoryNow, getStoredHistoryRetentionDay
 import { getIdentityFingerprint, initializeOmemoKeys } from "@/services/omemo";
 import { getOmemoEnabled, onOmemoEnabledChange } from "@/services/omemoSettings";
 import { useNotificationStore } from "@/stores/notificationStore";
-import { accountsApi, authApi, setUserToken, setUserRefreshToken } from "@/services/api";
+import { accountsApi, authApi, devicesApi, RememberedDevice, setUserToken, setUserRefreshToken } from "@/services/api";
 import Avatar from "@/components/Avatar";
 import { apiSocket } from "@/services/apiSocket";
 import { isPushSubscribed, isPushSupported, subscribeToPush, unsubscribeFromPush } from "@/services/push";
@@ -413,6 +413,78 @@ function AccountCard({ account }: { account: XmppAccount }) {
   );
 }
 
+function DeviceManager({ accountId }: { accountId: string }) {
+  const { t } = useLanguage();
+  const [devices, setDevices] = useState<RememberedDevice[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+  const currentId = localStorage.getItem(`lyaotalk:device-id:${accountId}`);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    devicesApi.list(accountId).then((result) => {
+      if (!cancelled) { setDevices(result.devices); setError(false); }
+    }).catch(() => { if (!cancelled) setError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [accountId]);
+
+  const revoke = async (id: string) => {
+    setRevokingId(id);
+    try {
+      await devicesApi.revoke(accountId, id);
+      setDevices((current) => current.filter((device) => device.id !== id));
+      if (id === currentId) {
+        await clearAccountPassword(accountId);
+        localStorage.removeItem(`lyaotalk:device-id:${accountId}`);
+      }
+    } catch {
+      toast.error(t("settings.deviceRevokeFailed"));
+    } finally {
+      setRevokingId(null);
+    }
+  };
+  const revokeAll = async () => {
+    setRevokingId("all");
+    try {
+      await devicesApi.revokeAll(accountId);
+      await clearAccountPassword(accountId);
+      localStorage.removeItem(`lyaotalk:device-id:${accountId}`);
+      setDevices([]);
+    } catch {
+      toast.error(t("settings.deviceRevokeFailed"));
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  return (
+    <div className="glass rounded-xl p-4 mt-4">
+      <h3 className="text-sm font-semibold text-surface-50 mb-2">{t("settings.rememberedDevices")}</h3>
+      <p className="text-xs text-surface-200 mb-3">{t("settings.deviceExpiryHint")}</p>
+      {loading && <p className="text-sm text-surface-200">{t("settings.deviceLoading")}</p>}
+      {error && <p className="text-sm text-danger">{t("settings.deviceLoadFailed")}</p>}
+      {!loading && !error && devices.length === 0 && <p className="text-sm text-surface-200">{t("settings.noRememberedDevices")}</p>}
+      <div className="flex flex-col gap-2">
+        {devices.map((device) => (
+          <div key={device.id} className="flex items-center justify-between gap-3 py-2 border-b border-subtle">
+            <div className="min-w-0">
+              <p className="text-sm text-surface-50 truncate">{device.name} {device.id === currentId ? `(${t("settings.thisDevice")})` : ""}</p>
+              <p className="text-xs text-surface-200">{t("settings.deviceLastUsed")}: {new Date(device.accessed * 1000).toLocaleString()}</p>
+            </div>
+            <button type="button" className="btn-ghost text-sm" disabled={revokingId === device.id}
+              onClick={() => void revoke(device.id)}>{t("settings.deviceRevoke")}</button>
+          </div>
+        ))}
+      </div>
+      {devices.length > 0 && <button type="button" className="btn-ghost text-sm mt-3"
+        disabled={revokingId !== null} onClick={() => void revokeAll()}>{t("settings.deviceRevokeAll")}</button>}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [settingsGroup, setSettingsGroup] = useState<"account" | "messaging" | "appearance">("account");
   const { t } = useLanguage();
@@ -531,7 +603,8 @@ export default function SettingsPage() {
       const jid = accounts.find((account) => account.id === activeAccountId)?.jid;
       if (!jid) throw new Error("Account unavailable");
       await authApi.changePassword(passwordForm.old, passwordForm.next);
-      setAccountPassword(activeAccountId, passwordForm.next);
+      await setAccountPassword(activeAccountId, passwordForm.next, false);
+      localStorage.removeItem(`lyaotalk:device-id:${activeAccountId}`);
       const session = await authApi.getUserToken(jid, passwordForm.next);
       setUserToken(activeAccountId, session.access_token);
       if (session.refresh_token) setUserRefreshToken(activeAccountId, session.refresh_token);
@@ -632,7 +705,7 @@ export default function SettingsPage() {
       password: form.password,
       displayName: jid.split("@")[0],
     });
-    setAccountPassword(id, form.password);
+    await setAccountPassword(id, form.password);
     try {
       const client = createClient({
         jid,
@@ -746,6 +819,7 @@ export default function SettingsPage() {
               accounts.map((acc) => <AccountCard key={acc.id} account={acc} />)
             )}
           </div>
+          {activeAccountId && <DeviceManager accountId={activeAccountId} />}
         </section>
 
         {/* Appearance */}

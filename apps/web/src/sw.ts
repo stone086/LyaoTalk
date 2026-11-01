@@ -41,6 +41,11 @@ registerRoute(
 );
 
 registerRoute(
+  ({ url }) => url.pathname.startsWith("/map/tiles/"),
+  new NetworkOnly()
+);
+
+registerRoute(
   ({ request }) => request.destination === "image",
   new CacheFirst({
     cacheName: "images-runtime",

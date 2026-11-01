@@ -332,6 +332,9 @@ export class XmppClient {
       const conn = new Strophe.Connection(this.config.wsUrl, {
         enableStreamManagement: true,
         streamManagement: { requestResume: true },
+        ...(this.config.password.startsWith("secret-token:")
+          ? { mechanisms: [Strophe.SASLOAuthBearer] }
+          : {}),
       });
       this._connection = conn;
 

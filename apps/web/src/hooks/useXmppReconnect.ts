@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "react";
-import { getAccountPassword, restoreAccountPassword, useAccountStore } from "@/stores/accountStore";
+import { clearAccountPassword, getAccountPassword, restoreAccountPassword, setAccountPassword, useAccountStore } from "@/stores/accountStore";
+import { openCredential } from "@/services/credentialVault";
 import { createClient, getClient, destroyClient } from "@/services/xmppAdapter";
 import { initXmppBridge } from "@/services/xmppBridge";
 import { useReconnectStore } from "@/stores/reconnectStore";
-import { authApi, setUserToken, setUserRefreshToken } from "@/services/api";
+import { authApi, devicesApi, setUserToken, setUserRefreshToken } from "@/services/api";
 import { isLocalXmppAccount, requireLocalXmppAccount } from "@/services/localXmppAccount";
 import {
   superviseConnection,
@@ -121,11 +122,59 @@ export function useXmppReconnect() {
         setReconnecting(accountId, false);
         // Refresh user-token after reconnect so file uploads keep working
         try {
-          const tokenRes = await authApi.getUserToken(account.jid, password).catch(() => null);
+          const tokenRes = await (password.startsWith("secret-token:")
+            ? authApi.deviceLogin(password)
+            : authApi.getUserToken(account.jid, password)).catch(() => null);
           if (tokenRes?.access_token) {
             setUserToken(accountId, tokenRes.access_token);
+            if ("new_device_token" in tokenRes && typeof tokenRes.new_device_token === "string") {
+              await setAccountPassword(accountId, tokenRes.new_device_token, true);
+            }
+            if ("device_id" in tokenRes && typeof tokenRes.device_id === "string") {
+              localStorage.setItem(`lyaotalk:device-id:${accountId}`, tokenRes.device_id);
+            }
             if ((tokenRes as any).refresh_token) {
               setUserRefreshToken(accountId, (tokenRes as any).refresh_token);
+            }
+            if (!password.startsWith("secret-token:") &&
+                (await openCredential(accountId).catch(() => null)) === password) {
+              let issuedDevice: { id: string; token: string } | null = null;
+              let switchedToDevice = false;
+              try {
+                issuedDevice = await devicesApi.issue(accountId, "LyaoTalk Web", password);
+                switchedToDevice = true;
+                const deviceClient = createClient({
+                  jid: account.jid, password: issuedDevice.token, wsUrl: deriveWsUrl(), accountId,
+                });
+                initXmppBridge(deviceClient);
+                await deviceClient.connect();
+                const deviceSession = await authApi.deviceLogin(issuedDevice.token);
+                await authApi.logout(tokenRes.refresh_token, accountId);
+                setUserToken(accountId, deviceSession.access_token);
+                setUserRefreshToken(accountId, deviceSession.refresh_token);
+                await setAccountPassword(accountId, issuedDevice.token, true);
+                localStorage.setItem(`lyaotalk:device-id:${accountId}`, issuedDevice.id);
+                attachSupervisor(accountId);
+              } catch {
+                if (issuedDevice) void devicesApi.revoke(accountId, issuedDevice.id).catch(() => {});
+                await setAccountPassword(accountId, password, true).catch(() => {});
+                if (switchedToDevice) {
+                  try {
+                    const passwordClient = createClient({
+                      jid: account.jid, password, wsUrl: deriveWsUrl(), accountId,
+                    });
+                    initXmppBridge(passwordClient);
+                    await passwordClient.connect();
+                    attachSupervisor(accountId);
+                    const restored = await authApi.getUserToken(account.jid, password);
+                    setUserToken(accountId, restored.access_token);
+                    if (restored.refresh_token) setUserRefreshToken(accountId, restored.refresh_token);
+                  } catch {
+                    setConnected(accountId, false);
+                  }
+                }
+                // Keep the existing remembered login until migration succeeds.
+              }
             }
           }
         } catch {
@@ -133,6 +182,13 @@ export function useXmppReconnect() {
         }
       } catch (err) {
         setConnected(accountId, false);
+        if (password.startsWith("secret-token:") && err instanceof Error &&
+            err.message.startsWith("Authentication failed")) {
+          await clearAccountPassword(accountId).catch(() => {});
+          localStorage.removeItem(`lyaotalk:device-id:${accountId}`);
+          unsuperviseConnection(accountId);
+          setReconnecting(accountId, false);
+        }
         // setReconnecting stays true while supervisor keeps trying
         throw err;
       }
@@ -164,8 +220,8 @@ export function useXmppReconnect() {
       supervisedIds.add(accountId);
     };
 
-    // A reload destroys all in-memory clients but keeps account credentials in
-    // sessionStorage. Start those accounts again before a supervisor exists.
+    // A browser restart clears runtime passwords. Restore the sealed credential
+    // before deciding whether this account needs an interactive login.
     // A new browser session has no password and correctly requires login.
     const startRestoredAccount = (accountId: string) => {
       if (startupAttempts.current.has(accountId)) return;
@@ -173,11 +229,18 @@ export function useXmppReconnect() {
       startupAttempts.current.set(accountId, progress);
       const retry = async () => {
         const current = useAccountStore.getState().accounts.find((a) => a.id === accountId);
-        if (!current?.is_enabled || current.manuallyOffline || !getAccountPassword(accountId)) {
+        if (!current?.is_enabled || current.manuallyOffline) {
           startupAttempts.current.delete(accountId);
           return;
         }
         try {
+          if (!await restoreAccountPassword(accountId)) {
+            startupAttempts.current.delete(accountId);
+            setConnected(accountId, false);
+            setReconnecting(accountId, false);
+            return;
+          }
+          if (startupAttempts.current.get(accountId) !== progress) return;
           await attemptConnect(accountId);
           startupAttempts.current.delete(accountId);
         } catch {
@@ -200,7 +263,7 @@ export function useXmppReconnect() {
       const client = getClient(account.id);
       if (client && !startupAttempts.current.has(account.id)) {
         attachSupervisor(account.id);
-      } else if (getAccountPassword(account.id)) {
+      } else {
         startRestoredAccount(account.id);
       }
     });
@@ -224,9 +287,21 @@ export function useXmppReconnect() {
         }
       });
     }, 5000);
+    const deviceRenewTimer = setInterval(() => {
+      accounts.forEach((account) => {
+        const token = getAccountPassword(account.id);
+        if (!token?.startsWith("secret-token:") || !getClient(account.id)?.connected) return;
+        void authApi.deviceLogin(token).then(async (session) => {
+          setUserToken(account.id, session.access_token);
+          setUserRefreshToken(account.id, session.refresh_token);
+          if (session.new_device_token) await setAccountPassword(account.id, session.new_device_token, true);
+        }).catch(() => {});
+      });
+    }, 12 * 60 * 60 * 1000);
 
     return () => {
       clearInterval(stateTimer);
+      clearInterval(deviceRenewTimer);
       window.removeEventListener("lyaotalk:reconnect-account", onManualReconnect);
       supervisedIds.forEach((id) => unsuperviseConnection(id));
     };

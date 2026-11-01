@@ -666,6 +666,13 @@ install_prosody() {
   # Install Lyao Talk push relay module
   mkdir -p /usr/lib/prosody-modules/mod_lyaotalk_push
   cp configs/prosody/mod_lyaotalk_push.lua /usr/lib/prosody-modules/mod_lyaotalk_push/mod_lyaotalk_push.lua
+  install -m 644 configs/prosody/mod_lyaotalk_device_api.lua /usr/lib/prosody-modules/mod_lyaotalk_device_api.lua
+  install -m 644 configs/prosody/mod_lyaotalk_device_sessions.lua /usr/lib/prosody-modules/mod_lyaotalk_device_sessions.lua
+  install -d -m 750 /etc/lyaotalk
+  chown root:prosody /etc/lyaotalk
+  printf '%s\n' "$DEVICE_AUTH_SECRET" > /etc/lyaotalk/device-auth-secret
+  chown root:prosody /etc/lyaotalk/device-auth-secret
+  chmod 640 /etc/lyaotalk/device-auth-secret
 
   # Inject PUSH_SHARED_SECRET into prosody config
   if [ -n "${PUSH_SHARED_SECRET:-}" ]; then
@@ -920,6 +927,7 @@ deploy_api() {
     rm -f "$VAPID_PEM_FILE"
   fi
   PUSH_SHARED_SECRET="${PUSH_SHARED_SECRET:-$(openssl rand -hex 24)}"
+  DEVICE_AUTH_SECRET="${DEVICE_AUTH_SECRET:-$(openssl rand -hex 32)}"
 
   if [[ -z "${ADMIN_PASS_HASH:-}" && -n "${ADMIN_PASS:-}" ]]; then
     ADMIN_PASS_HASH="$(.venv/bin/python -c "from argon2 import PasswordHasher; import sys; print(PasswordHasher().hash(sys.argv[1]))" "${ADMIN_PASS}")"
@@ -953,6 +961,7 @@ VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
 VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
 VAPID_EMAIL=admin@${DOMAIN}
 PUSH_SHARED_SECRET=${PUSH_SHARED_SECRET}
+DEVICE_AUTH_SECRET=${DEVICE_AUTH_SECRET}
 TURN_SECRET=${TURN_SECRET}
 FRONTEND_URL=${FRONTEND_URL:-https://${DOMAIN}}
 OIDC_ENABLED=${OIDC_ENABLED:-false}
@@ -1836,10 +1845,11 @@ main() {
   install_redis
   # Pre-generate shared secrets so prosody, coturn and api all get the same values.
   PUSH_SHARED_SECRET="${PUSH_SHARED_SECRET:-$(openssl rand -hex 24)}"
+  DEVICE_AUTH_SECRET="${DEVICE_AUTH_SECRET:-$(openssl rand -hex 32)}"
   TURN_SECRET="${TURN_SECRET:-$(openssl rand -hex 32)}"
   LDAP_URL="${LDAP_URL:-${LDAP_SERVER:-}}"
   PROMETHEUS_ALLOW_CIDR="${PROMETHEUS_ALLOW_CIDR:-}"
-  export PUSH_SHARED_SECRET TURN_SECRET
+  export PUSH_SHARED_SECRET DEVICE_AUTH_SECRET TURN_SECRET
 
   install_prosody
   install_minio

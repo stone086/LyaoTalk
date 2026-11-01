@@ -29,6 +29,9 @@ class _TokenStore:
         self.values[key] = value
         return True
 
+    def delete(self, key):
+        return self.values.pop(key, None) is not None
+
 
 @pytest.fixture(autouse=True)
 def isolated_auth_backend(monkeypatch):

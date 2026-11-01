@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => {
   const reconnecting = vi.fn();
   const connect = vi.fn().mockResolvedValue(undefined);
   const client = { connect, config: { accountId: "restored" } };
-  return { connected, reconnecting, connect, client,
+  return { connected, reconnecting, connect, client, coldStart: false,
     createClient: vi.fn(() => client), supervise: vi.fn(), getToken: vi.fn().mockResolvedValue(null) };
 });
 
@@ -25,7 +25,8 @@ vi.mock("@/stores/accountStore", () => {
   };
   return {
     useAccountStore: Object.assign((selector: (s: typeof state) => unknown) => selector(state), { getState: () => state }),
-    getAccountPassword: (id: string) => id === "restored" || id === "external" ? "runtime-password" : null,
+    getAccountPassword: (id: string) => !mocks.coldStart && (id === "restored" || id === "external") ? "runtime-password" : null,
+    restoreAccountPassword: vi.fn(async (id: string) => id === "restored" ? "runtime-password" : null),
   };
 });
 vi.mock("@/stores/reconnectStore", () => ({ useReconnectStore: (selector: (s: { setReconnecting: typeof mocks.reconnecting }) => unknown) => selector({ setReconnecting: mocks.reconnecting }) }));
@@ -39,9 +40,19 @@ import { useAccountStore } from "@/stores/accountStore";
 
 function Harness() { useXmppReconnect(); return null; }
 
-afterEach(() => { vi.clearAllMocks(); });
+afterEach(() => { vi.clearAllMocks(); mocks.coldStart = false; });
 
 describe("restored browser session", () => {
+  it("restores a sealed password after a browser cold start", async () => {
+    mocks.coldStart = true;
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+    const root = createRoot(element);
+    await act(async () => { root.render(<Harness />); await Promise.resolve(); });
+    expect(mocks.createClient).toHaveBeenCalledWith(expect.objectContaining({ accountId: "restored", password: "runtime-password" }));
+    await act(async () => root.unmount());
+    element.remove();
+  });
   it("reconnects an account with session credentials and leaves other accounts alone", async () => {
     const element = document.createElement("div");
     document.body.appendChild(element);

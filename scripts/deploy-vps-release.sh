@@ -7,6 +7,8 @@ src=/opt/lyaotalk-src
 releases=/opt/lyaotalk-releases
 current=/opt/lyaotalk-current
 push_module=/usr/lib/prosody-modules/mod_lyaotalk_push.lua
+device_api_module=/usr/lib/prosody-modules/mod_lyaotalk_device_api.lua
+device_sessions_module=/usr/lib/prosody-modules/mod_lyaotalk_device_sessions.lua
 push_id_module=/usr/lib/prosody-modules/mod_lyaotalk_push_id.lua
 service_override=/etc/systemd/system/lyaotalk-api.service.d/30-release-venv.conf
 default_venv=/opt/lyaotalk-venv
@@ -36,12 +38,17 @@ rsync -a --exclude=.git --exclude=node_modules --exclude=dist --exclude=.env \
 bash -n "$target/install.sh" "$target/manage.sh" "$target/scripts/deploy-vps-release.sh"
 python3 -m compileall -q "$target/apps/api/app" "$target/configs/prosody"
 luac -p "$target/configs/prosody/mod_lyaotalk_push.lua"
+luac -p "$target/configs/prosody/mod_lyaotalk_device_api.lua"
+luac -p "$target/configs/prosody/mod_lyaotalk_device_sessions.lua"
 luac -p "$target/configs/prosody/mod_lyaotalk_push_id.lua"
 [[ -f "$push_module" ]] || { echo "Prosody push module missing" >&2; exit 1; }
 cp -p "$push_module" "$target/.previous-push-module.lua"
 if [[ -f "$push_id_module" ]]; then
   cp -p "$push_id_module" "$target/.previous-push-id-module.lua"
 fi
+for module_file in "$device_api_module" "$device_sessions_module"; do
+  if [[ -f "$module_file" ]]; then cp -p "$module_file" "$target/.previous-$(basename "$module_file")"; fi
+done
 
 # A shared venv can serve either release only when package requirements match.
 release_venv="$active_venv"
@@ -89,6 +96,14 @@ rollback() {
   ln -s "$previous" "$current.rollback"
   mv -Tf "$current.rollback" "$current"
   install -m 644 "$target/.previous-push-module.lua" "$push_module"
+  for module_file in "$device_api_module" "$device_sessions_module"; do
+    previous_module="$target/.previous-$(basename "$module_file")"
+    if [[ -f "$previous_module" ]]; then
+      install -m 644 "$previous_module" "$module_file"
+    else
+      rm -f "$module_file"
+    fi
+  done
   if [[ -f "$target/.previous-push-id-module.lua" ]]; then
     install -m 644 "$target/.previous-push-id-module.lua" "$push_id_module"
   else
@@ -106,6 +121,8 @@ fi
 ln -s "$target" "$current.next"
 mv -Tf "$current.next" "$current"
 install -m 644 "$target/configs/prosody/mod_lyaotalk_push.lua" "$push_module"
+install -m 644 "$target/configs/prosody/mod_lyaotalk_device_api.lua" "$device_api_module"
+install -m 644 "$target/configs/prosody/mod_lyaotalk_device_sessions.lua" "$device_sessions_module"
 install -m 644 "$target/configs/prosody/mod_lyaotalk_push_id.lua" "$push_id_module"
 systemctl restart lyaotalk-api
 systemctl restart prosody
@@ -114,7 +131,7 @@ nginx -t
 systemctl reload nginx
 healthy=false
 for attempt in {1..15}; do
-  if curl --fail --silent --max-time 5 https://lyaot.example.org/api/health >/dev/null; then
+  if curl --fail --silent --max-time 5 --resolve example.org:443:127.0.0.1 https://example.org/api/health >/dev/null; then
     healthy=true
     break
   fi

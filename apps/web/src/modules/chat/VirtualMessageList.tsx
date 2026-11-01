@@ -110,4 +110,3 @@ function dateLabel(timestamp: number, todayLabel: string, yesterdayLabel: string
   if (isSameDay(date, yesterday)) return yesterdayLabel;
   return format(date, "yyyy-MM-dd");
 }
-

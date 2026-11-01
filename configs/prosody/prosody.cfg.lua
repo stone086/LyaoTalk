@@ -30,6 +30,8 @@ modules_enabled = {
   "bosh";
   "http";
   "cloud_notify";   -- XEP-0357 push relay (community module)
+  "lyaotalk_device_api";
+  "lyaotalk_device_sessions";
   "lyaotalk_push_id"; -- stable original message key for ntfy de-duplication
   -- XEP-0215 external_services is unavailable in Ubuntu 22.04's Prosody
   -- modules package. Install a compatible module before enabling it.
@@ -49,6 +51,13 @@ modules_disabled = {
   "register";       -- in-band registration (XEP-0077): we use API instead
   "saslauth_legacy"; -- legacy SASL mechanisms (PLAIN over plaintext)
 }
+
+-- The secret is provisioned by install.sh before Prosody starts.
+local device_secret_file = Lua.io.open("/etc/lyaotalk/device-auth-secret", "r")
+if device_secret_file then
+  lyaotalk_device_api_secret = device_secret_file:read("*l")
+  device_secret_file:close()
+end
 
 allow_registration = false
 c2s_require_encryption = true

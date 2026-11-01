@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getAccountPassword, useAccountStore } from "@/stores/accountStore";
+import { getAccountPassword, setAccountPassword, useAccountStore } from "@/stores/accountStore";
 import { trustedFileObjectKey } from "./trustedFilesUrl";
 export interface TransferDetails { loaded: number; total: number; speed: number }
 export type TransferProgress = (percent: number, details?: TransferDetails) => void;
@@ -179,10 +179,16 @@ async function reauthenticateUserToken(accountId: string): Promise<string> {
   const account = useAccountStore.getState().accounts.find((item) => item.id === accountId);
   const password = getAccountPassword(accountId);
   if (!account || !password) throw new Error("Account sign-in required");
-  const promise = axios.post(`${API_URL}/auth/user-token`, { jid: account.jid, password })
-    .then((response) => {
+  const promise = axios.post(
+    `${API_URL}${password.startsWith("secret-token:") ? "/devices/login" : "/auth/user-token"}`,
+    password.startsWith("secret-token:") ? { token: password } : { jid: account.jid, password }
+  )
+    .then(async (response) => {
       const accessToken = response.data.access_token as string;
       if (!accessToken) throw new Error("Account token unavailable");
+      if (response.data.new_device_token) {
+        await setAccountPassword(accountId, response.data.new_device_token, true);
+      }
       setUserToken(accountId, accessToken);
       if (response.data.refresh_token) setUserRefreshToken(accountId, response.data.refresh_token);
       return accessToken;
@@ -445,7 +451,35 @@ export const adminApi = {
 };
 
 // Auth
+export interface RememberedDevice {
+  id: string;
+  name: string;
+  created: number;
+  accessed: number;
+  expires: number;
+}
+
+export const devicesApi = {
+  issue: (accountId: string, name: string, password: string) =>
+    api.post("/devices/issue", { name, password }, { headers: { "X-LyaoTalk-Account-Id": accountId } })
+      .then((r) => r.data as { id: string; token: string; expires: number }),
+  list: (accountId: string) =>
+    api.post("/devices/list", {}, { headers: { "X-LyaoTalk-Account-Id": accountId } })
+      .then((r) => r.data as { devices: RememberedDevice[] }),
+  revoke: (accountId: string, id: string) =>
+    api.post("/devices/revoke", { id }, { headers: { "X-LyaoTalk-Account-Id": accountId } })
+      .then((r) => r.data as { revoked: boolean }),
+  revokeAll: (accountId: string) =>
+    api.post("/devices/revoke-all", {}, { headers: { "X-LyaoTalk-Account-Id": accountId } })
+      .then((r) => r.data as { revoked: number }),
+};
+
 export const authApi = {
+  deviceLogin: (token: string) =>
+    axios.post(`${API_URL}/devices/login`, { token }).then((r) => r.data as {
+      access_token: string; refresh_token: string; account_id: string; jid: string; device_id: string;
+      new_device_token?: string | null;
+    }),
   changePassword: (old_password: string, new_password: string) =>
     api.post('/auth/change-password', { old_password, new_password }).then((r) => r.data as { ok: boolean }),
   config: () =>

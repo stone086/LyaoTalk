@@ -114,6 +114,11 @@ async def change_password(request: Request, data: ChangePasswordRequest, current
         raise HTTPException(status_code=400, detail="Password contains invalid characters")
     if not await asyncio.to_thread(_verify_xmpp_sasl_plain, username, domain, data.old_password):
         raise HTTPException(status_code=401, detail="Current password is incorrect")
+    if settings.DEVICE_AUTH_SECRET:
+        # Password rotation signs out remembered Web devices, including the
+        # current one, before changing the account's master credential.
+        from app.api.routers.devices import revoke_all_for_user
+        await revoke_all_for_user(current_user)
     try:
         result = await asyncio.to_thread(_change_password_with_prosody, username, domain, data.new_password)
     except (OSError, ValueError, json.JSONDecodeError):
@@ -455,8 +460,9 @@ async def refresh_access_token(
             raise HTTPException(status_code=503, detail="Token revocation unavailable")
 
     credential_revision = payload.get("cv") if role == "user" else None
-    new_access = create_access_token(subject, role=role, account_id=account_id, credential_revision=credential_revision)
-    new_refresh = create_refresh_token(subject, role=role, account_id=account_id, credential_revision=credential_revision)
+    device_id = payload.get("device_id") if role == "user" else None
+    new_access = create_access_token(subject, role=role, account_id=account_id, credential_revision=credential_revision, device_id=device_id)
+    new_refresh = create_refresh_token(subject, role=role, account_id=account_id, credential_revision=credential_revision, device_id=device_id)
     return {
         "access_token": new_access,
         "refresh_token": new_refresh,

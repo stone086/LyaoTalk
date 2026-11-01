@@ -4,7 +4,7 @@ import { normalizeAccountJid, setAccountPassword, useAccountStore } from "@/stor
 import { createClient } from "@/services/xmppAdapter";
 import { initXmppBridge } from "@/services/xmppBridge";
 import { markIntentionalDisconnect } from "@/services/connectionSupervisor";
-import { accountsApi, authApi, setUserToken, setUserRefreshToken, clearUserToken } from "@/services/api";
+import { accountsApi, authApi, devicesApi, setUserToken, setUserRefreshToken, clearUserToken } from "@/services/api";
 import { apiSocket } from "@/services/apiSocket";
 import toast from "react-hot-toast";
 import { Wifi, Eye, EyeOff, UserPlus } from "lucide-react";
@@ -42,6 +42,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [xmppDomain, setXmppDomain] = useState(envXmppDomain);
+  const [rememberDevice, setRememberDevice] = useState(false);
   const [publicDomain, setPublicDomain] = useState(currentHost);
   const isLocalDomain = (value: string) => {
     const v = (value || "").trim().toLowerCase();
@@ -106,7 +107,7 @@ export default function LoginPage() {
       void client.fetchPepAvatar(jid).then((avatarUrl) => {
         if (avatarUrl) useAccountStore.getState().updateAvatar(id, avatarUrl);
       }).catch(() => {});
-      setAccountPassword(id, form.password);
+      await setAccountPassword(id, form.password, false);
       clearUserToken(id);
       if (tokenRes?.access_token) {
         setUserToken(id, tokenRes.access_token);
@@ -116,6 +117,37 @@ export default function LoginPage() {
         await restoreLocalAccountHistory(id, form.password);
       } catch {
         toast.error(t("login.localHistoryRestoreFailed"));
+      }
+      if (rememberDevice && tokenRes?.access_token) {
+        let issuedDevice: { id: string; token: string } | null = null;
+        let switchedToDevice = false;
+        try {
+          const deviceName = /iPhone|iPad/i.test(navigator.userAgent)
+            ? "LyaoTalk iPhone/iPad" : "LyaoTalk Web";
+          issuedDevice = await devicesApi.issue(id, deviceName, form.password);
+          switchedToDevice = true;
+          const deviceClient = createClient({ jid, password: issuedDevice.token, wsUrl, accountId: id });
+          initXmppBridge(deviceClient);
+          await withTimeout(deviceClient.connect(), 20000, t("login.connectionFailed"));
+          const deviceSession = await authApi.deviceLogin(issuedDevice.token);
+          await authApi.logout(tokenRes.refresh_token, id);
+          setUserToken(id, deviceSession.access_token);
+          setUserRefreshToken(id, deviceSession.refresh_token);
+          await setAccountPassword(id, issuedDevice.token, true);
+          localStorage.setItem(`lyaotalk:device-id:${id}`, issuedDevice.id);
+        } catch {
+          if (issuedDevice) void devicesApi.revoke(id, issuedDevice.id).catch(() => {});
+          if (switchedToDevice) {
+            const passwordClient = createClient({ jid, password: form.password, wsUrl, accountId: id });
+            initXmppBridge(passwordClient);
+            await withTimeout(passwordClient.connect(), 20000, t("login.connectionFailed"));
+            const restoredSession = await authApi.getUserToken(jid, form.password);
+            setUserToken(id, restoredSession.access_token);
+            if (restoredSession.refresh_token) setUserRefreshToken(id, restoredSession.refresh_token);
+          }
+          await setAccountPassword(id, form.password, false);
+          toast.error(t("login.rememberDeviceFailed"));
+        }
       }
       toast.success(`${t("login.connectedAs")}: ${jid}`);
       // apiSocket.connect(id);
@@ -316,6 +348,10 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+            <label className="mt-3 flex items-center gap-2 text-sm text-surface-100">
+              <input type="checkbox" checked={rememberDevice} onChange={(e) => setRememberDevice(e.target.checked)} />
+              {t("login.rememberDevice")}
+            </label>
             <div className="mt-2 grid grid-cols-2 gap-3 sm:mt-1">
               <button type="submit" disabled={loading || registering} className="btn-primary h-12 rounded-xl flex items-center justify-center gap-2 sm:h-11">
                 {loading ? (<><span className="w-4 h-4 border-2 border-default border-t-white rounded-full animate-spin" />{t("login.connecting")}</>) : (<><Wifi size={16} />{t("login.connect")}</>)}

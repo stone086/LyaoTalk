@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import "fake-indexeddb/auto";
 import axios, { AxiosError, type AxiosAdapter, type AxiosResponse } from "axios";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, attachmentsApi, getUserRefreshToken, getUserToken, setUserRefreshToken, setUserToken } from "./api";

@@ -661,12 +661,14 @@ export function initXmppBridge(client: XmppClient) {
 
     useChatStore.getState().addMessage(chatMsg);
     client.sendReceipt(message.from, message.id, "received");
-    if (useChatStore.getState().activeConversationId === convId) {
+    const displayedNow = useChatStore.getState().activeConversationId === convId && document.visibilityState === "visible";
+    if (displayedNow) {
       client.sendReceipt(message.from, message.id, "displayed");
+      useChatStore.getState().updateMessage(convId, message.id, { status: "read" });
     }
 
     // Cache to IndexedDB
-    cacheMessages([chatMsg]).catch(() => {});
+    cacheMessages([displayedNow ? { ...chatMsg, status: "read" } : chatMsg]).catch(() => {});
 
     // A retraction may have arrived before this message during MAM replay.
     const storedMessage = useChatStore.getState().messages[convId]?.find((m) => m.id === message.id);
@@ -882,8 +884,10 @@ export function initXmppBridge(client: XmppClient) {
       .map((c) => c.id);
     relevantConvIds.forEach((conversationId) => {
       const list = store.messages[conversationId] ?? [];
-      if (list.some((m) => m.id === messageId && m.direction === "out")) {
+      const message = list.find((m) => m.id === messageId && m.direction === "out");
+      if (message && message.status !== "read") {
         store.updateMessage(conversationId, messageId, { status: "delivered" });
+        cacheMessages([{ ...message, status: "delivered" }]).catch(() => {});
       }
     });
   });
@@ -897,8 +901,10 @@ export function initXmppBridge(client: XmppClient) {
       .map((c) => c.id);
     relevantConvIds.forEach((conversationId) => {
       const list = store.messages[conversationId] ?? [];
-      if (list.some((m) => m.id === messageId && m.direction === "out")) {
+      const message = list.find((m) => m.id === messageId && m.direction === "out");
+      if (message) {
         store.updateMessage(conversationId, messageId, { status: "read" });
+        cacheMessages([{ ...message, status: "read" }]).catch(() => {});
       }
     });
   });

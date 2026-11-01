@@ -606,6 +606,30 @@ export default function MessageView({ conversationId }: { conversationId: string
   const messageMap = new Map<string, ChatMessage>(messages.map((m) => [m.id, m]));
   const { peerIsTyping, onInputChange, onBlur } = useTypingIndicator(conversation?.peerJid ?? "");
   const { fetchHistory, loading: mamLoading, hasMore } = useMAM(conversation?.peerJid ?? "", conversationId);
+  const [visibilityTick, setVisibilityTick] = useState(0);
+
+  useEffect(() => {
+    const onVisibilityChange = () => setVisibilityTick((value) => value + 1);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
+
+  useEffect(() => {
+    if (!accountConnected || !activeAccountId || conversation?.type !== "private" ||
+        document.visibilityState !== "visible") return;
+    const client = getClient(activeAccountId);
+    if (!client?.connected) return;
+    const newlyDisplayed = messages.filter((message) =>
+      message.direction === "in" && message.status !== "read" &&
+      !message.deletedAt && Boolean(message.id) && Boolean(message.senderJid)
+    );
+    if (!newlyDisplayed.length) return;
+    for (const message of newlyDisplayed) {
+      client.sendReceipt(message.senderJid, message.id, "displayed");
+      updateMessage(conversationId, message.id, { status: "read" });
+    }
+    cacheMessages(newlyDisplayed.map((message) => ({ ...message, status: "read" }))).catch(() => {});
+  }, [accountConnected, activeAccountId, conversation?.type, conversationId, messages, updateMessage, visibilityTick]);
   const recentMamQueryRef = useRef("");
 
   useEffect(() => {
@@ -1837,4 +1861,3 @@ export default function MessageView({ conversationId }: { conversationId: string
     </div>
   );
 }
-

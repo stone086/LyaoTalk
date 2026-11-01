@@ -19,6 +19,7 @@ from app.api.routers import (
     contacts,
     config,
     discovery,
+    devices,
     conversations,
     messages,
     map_search,
@@ -198,6 +199,7 @@ async def request_logging_middleware(request: Request, call_next):
 admin_dep = [Depends(get_current_admin)]
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(devices.router)
 app.include_router(accounts.router, prefix="/accounts", tags=["accounts"])
 app.include_router(conversations.router, prefix="/conversations", tags=["conversations"])
 app.include_router(contacts.router, prefix="/contacts", tags=["contacts"])

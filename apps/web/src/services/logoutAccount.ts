@@ -1,7 +1,7 @@
-import { getAccountPassword, useAccountStore } from "@/stores/accountStore";
+import { clearAccountPassword, getAccountPassword, useAccountStore } from "@/stores/accountStore";
 import { useChatStore } from "@/stores/chatStore";
 import { useRosterStore } from "@/stores/rosterStore";
-import { authApi, clearUserToken, getUserRefreshToken } from "./api";
+import { authApi, clearUserToken, devicesApi, getUserRefreshToken } from "./api";
 import { destroyClient } from "./xmppAdapter";
 import { markIntentionalDisconnect, unsuperviseConnection } from "./connectionSupervisor";
 import { apiSocket } from "./apiSocket";
@@ -20,9 +20,11 @@ export async function logoutAccount(accountId: string): Promise<{ remoteRevoked:
   }
   await unsubscribeFromPush(accountId).catch(() => {});
   const refresh = getUserRefreshToken(accountId);
+  const deviceId = localStorage.getItem(`lyaotalk:device-id:${accountId}`);
   let remoteRevoked = false;
   try {
-    await authApi.logout(refresh ?? undefined, accountId);
+    if (deviceId) await devicesApi.revoke(accountId, deviceId);
+    else await authApi.logout(refresh ?? undefined, accountId);
     remoteRevoked = true;
   } catch {
     // Local sign-out must still work when the API is unavailable.
@@ -39,6 +41,8 @@ export async function logoutAccount(accountId: string): Promise<{ remoteRevoked:
   // The local search index holds plaintext message bodies; leaving it behind
   // keeps them readable after sign-out and on the next account's machine.
   await clearSearchIndex(accountId).catch(() => {});
+  await clearAccountPassword(accountId);
+  localStorage.removeItem(`lyaotalk:device-id:${accountId}`);
   useAccountStore.getState().removeAccount(accountId);
   return { remoteRevoked };
 }

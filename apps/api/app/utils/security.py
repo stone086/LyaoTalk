@@ -68,6 +68,31 @@ def _get_redis():
 REVOCATION_KEY_PREFIX = "jwt:revoked:"
 DISABLED_ACCOUNT_KEY_PREFIX = "jwt:disabled-account:"
 SESSION_VERSION_KEY_PREFIX = "jwt:session-version:"
+DEVICE_ACTIVE_KEY_PREFIX = "jwt:device-active:"
+
+
+def set_device_active(account_id: str, device_id: str, active: bool) -> None:
+    r = _get_redis()
+    if r is None:
+        raise HTTPException(status_code=503, detail="Session store unavailable")
+    key = f"{DEVICE_ACTIVE_KEY_PREFIX}{account_id}:{device_id}"
+    try:
+        if active:
+            r.set(key, "1", ex=90 * 24 * 60 * 60)
+        else:
+            r.delete(key)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Session store unavailable") from exc
+
+
+def is_device_active(account_id: str, device_id: str) -> bool:
+    r = _get_redis()
+    if r is None:
+        raise HTTPException(status_code=503, detail="Session store unavailable")
+    try:
+        return r.get(f"{DEVICE_ACTIVE_KEY_PREFIX}{account_id}:{device_id}") == "1"
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Session store unavailable") from exc
 
 
 def current_session_version(account_id: str, *, create: bool = False) -> str:
@@ -176,6 +201,7 @@ def _build_payload(
     expires_minutes: int,
     account_id: str | None = None,
     credential_revision: str | None = None,
+    device_id: str | None = None,
 ) -> dict[str, Any]:
     now = datetime.now(UTC)
     payload: dict[str, Any] = {
@@ -188,6 +214,8 @@ def _build_payload(
     }
     if account_id:
         payload["account_id"] = account_id
+    if device_id:
+        payload["device_id"] = device_id
     if role == "user":
         if not account_id:
             raise ValueError("User tokens require an account ID")
@@ -203,10 +231,11 @@ def create_access_token(
     role: str = "admin",
     account_id: str | None = None,
     credential_revision: str | None = None,
+    device_id: str | None = None,
 ) -> str:
     """Issue a short-lived access token (30 min default)."""
     minutes = expires_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES_ACCESS
-    payload = _build_payload(subject, role, "access", minutes, account_id, credential_revision)
+    payload = _build_payload(subject, role, "access", minutes, account_id, credential_revision, device_id)
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
@@ -215,6 +244,7 @@ def create_refresh_token(
     role: str = "admin",
     account_id: str | None = None,
     credential_revision: str | None = None,
+    device_id: str | None = None,
 ) -> str:
     """Issue a refresh token (14 days default).
 
@@ -223,7 +253,7 @@ def create_refresh_token(
     the validators check ``type == "access"``.
     """
     minutes = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60
-    payload = _build_payload(subject, role, "refresh", minutes, account_id, credential_revision)
+    payload = _build_payload(subject, role, "refresh", minutes, account_id, credential_revision, device_id)
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
@@ -256,6 +286,8 @@ def decode_token(token: str, expected_type: str = "access") -> dict[str, Any]:
             from app.services.prosody_revision import get_credential_revision
             if payload["cv"] != get_credential_revision(payload["sub"]):
                 raise HTTPException(status_code=401, detail="Account credentials changed")
+        if payload.get("device_id") and not is_device_active(account_id, payload["device_id"]):
+            raise HTTPException(status_code=401, detail="Device authorization revoked")
 
     # Revocation check — denies tokens that have been explicitly invalidated
     jti = payload.get("jti")

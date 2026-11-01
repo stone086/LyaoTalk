@@ -98,6 +98,7 @@ export const useAccountStore = create<AccountState>()(
 
       removeAccount: (id) =>
         set((s) => {
+          void clearAccountPassword(id).catch(() => undefined);
           sessionStorage.removeItem(`${PASSWORD_KEY_PREFIX}${id}`);
           sessionStorage.removeItem(`${USER_TOKEN_KEY_PREFIX}${id}`);
           sessionStorage.removeItem(`${USER_REFRESH_KEY_PREFIX}${id}`);
@@ -190,11 +191,11 @@ function takeLegacyPassword(accountId: string): string | null {
   return legacy;
 }
 
-export function setAccountPassword(accountId: string, password: string) {
-  if (!password) return;
+export function setAccountPassword(accountId: string, password: string, remember = false): Promise<void> {
+  if (!password) return Promise.resolve();
   runtimePasswords.set(accountId, password);
   sessionStorage.removeItem(`${PASSWORD_KEY_PREFIX}${accountId}`);
-  void sealCredential(accountId, password).catch(() => undefined);
+  return remember ? sealCredential(accountId, password) : clearCredential(accountId);
 }
 
 export function getAccountPassword(accountId: string): string | null {
@@ -213,8 +214,8 @@ export async function restoreAccountPassword(accountId: string): Promise<string 
   return stored;
 }
 
-export function clearAccountPassword(accountId: string) {
+export function clearAccountPassword(accountId: string): Promise<void> {
   runtimePasswords.delete(accountId);
   sessionStorage.removeItem(`${PASSWORD_KEY_PREFIX}${accountId}`);
-  void clearCredential(accountId).catch(() => undefined);
+  return clearCredential(accountId);
 }

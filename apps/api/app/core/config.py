@@ -101,6 +101,8 @@ class Settings(BaseSettings):
 
     # Push shared secret (for server-to-server push triggers)
     PUSH_SHARED_SECRET: str = ""
+    DEVICE_AUTH_SECRET: str = ""
+    DEVICE_AUTH_URL: str = "http://127.0.0.1:5280/internal/lyaotalk-devices"
 
     # Self-hosted ntfy relay. The token belongs to a write-only service user.
     NTFY_INTERNAL_URL: str = ""
