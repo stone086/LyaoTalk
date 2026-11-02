@@ -101,6 +101,10 @@ export function initXmppBridge(client: XmppClient) {
       Object.values(store.conversations)
         .filter((c) => c.accountId === accountId)
         .forEach((c) => store.setTypingPeer(c.id, null, false));
+      const groups = useGroupStore.getState();
+      Object.values(groups.rooms)
+        .filter((room) => room.accountId === accountId)
+        .forEach((room) => groups.setMembers(accountId, room.jid, []));
     }
     if (data.status === "connected" || data.status === "online" || data.status === "authenticated") {
       if (data.status === "connected") {
@@ -1059,6 +1063,7 @@ export function initXmppBridge(client: XmppClient) {
     useGroupStore.getState().setJoinState(accountId, roomJid, "kicked", {
       lastRemovalReason: reason,
     });
+    useGroupStore.getState().setMembers(accountId, roomJid, []);
     const reasonText = data.reasonText ? `: ${data.reasonText}` : "";
     const actor = data.actor ? ` by ${data.actor}` : "";
     useNotificationStore.getState().addNotification({

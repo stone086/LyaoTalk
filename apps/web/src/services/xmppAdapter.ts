@@ -606,9 +606,13 @@ export class XmppClient {
       const fromParts = from.split("/");
       const roomJid = fromParts[0] ?? "";
       const nickname = fromParts[1] ?? "";
-      const mucUser = stanza.querySelector('x[xmlns="http://jabber.org/protocol/muc#user"]');
+      const mucUser = Array.from(stanza.getElementsByTagName("*")).find((element) =>
+        element.localName === "x" && (element.namespaceURI === "http://jabber.org/protocol/muc#user"
+        || element.getAttribute("xmlns") === "http://jabber.org/protocol/muc#user"
+        )
+      );
       if (mucUser && roomJid && nickname) {
-        const item = mucUser.querySelector("item");
+        const item = Array.from(mucUser.getElementsByTagName("*")).find((element) => element.localName === "item");
 
         // Detect kick / ban / room destroy via status codes (XEP-0045 §15.6)
         //   110: this is your own presence
@@ -618,7 +622,8 @@ export class XmppClient {
         //   322: removed because room is now members-only
         //   332: removed because of system shutdown
         //   333: removed because of error
-        const statusCodes = Array.from(mucUser.querySelectorAll("status"))
+        const statusCodes = Array.from(mucUser.getElementsByTagName("*"))
+          .filter((element) => element.localName === "status")
           .map((s) => s.getAttribute("code"))
           .filter((c): c is string => c !== null);
         const isOwn = statusCodes.includes("110");
@@ -1265,6 +1270,27 @@ export class XmppClient {
           resolve(rooms);
         },
         () => reject(new Error("Room discovery failed"))
+      );
+    });
+  }
+
+  discoverRoomOccupants(roomJid: string): Promise<MucDiscoveryItem[]> {
+    if (!this._connection || !this._connected) return Promise.reject(new Error("Not connected"));
+    const room = normalizeValidBareJid(roomJid);
+    if (!room) return Promise.reject(new Error("Invalid group address"));
+    const iq = this._$iq({ type: "get", to: room })
+      .c("query", { xmlns: "http://jabber.org/protocol/disco#items" });
+    return new Promise((resolve, reject) => {
+      this._connection.sendIQ(
+        iq.tree(),
+        (result: Element) => resolve(Array.from(result.getElementsByTagName("item"))
+          .map((item) => ({
+            jid: item.getAttribute("jid")?.trim() ?? "",
+            name: item.getAttribute("name")?.trim() || undefined,
+          }))
+          .filter((item) => item.jid.toLowerCase().startsWith(`${room}/`))),
+        () => reject(new Error("Room occupants unavailable")),
+        10000,
       );
     });
   }

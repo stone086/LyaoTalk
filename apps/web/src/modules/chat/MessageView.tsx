@@ -37,6 +37,7 @@ import { encryptOmemoEnvelopeForPeer } from "@/services/e2ee";
 import { encryptGroupOmemoMessage, tryLibsignalEncrypt } from "@/services/xmppBridge";
 import { getGroupOmemoEnabled, getOmemoEnabled } from "@/services/omemoSettings";
 import { applyMessageRetraction } from "@/services/messageRetraction";
+import { toggleAndCacheMessageStar } from "@/services/messageStar";
 import { removeFromIndex } from "@/services/searchIndex";
 import { parseSharedLocation } from "@/utils/geoUri";
 
@@ -599,7 +600,6 @@ export default function MessageView({ conversationId }: { conversationId: string
   const addMessage = useChatStore((s) => s.addMessage);
   const updateMessage = useChatStore((s) => s.updateMessage);
   const removeLocalMessage = useChatStore((s) => s.removeLocalMessage);
-  const toggleMessageStar = useChatStore((s) => s.toggleMessageStar);
   const toggleMessageReaction = useChatStore((s) => s.toggleMessageReaction);
   const setComposerDraft = useChatStore((s) => s.setComposerDraft);
   const clearComposerDraft = useChatStore((s) => s.clearComposerDraft);
@@ -1300,8 +1300,8 @@ export default function MessageView({ conversationId }: { conversationId: string
   }, [activeAccountId, conversation, conversationId, pendingDelete, t]);
 
   const handleToggleStar = useCallback((message: ChatMessage) => {
-    toggleMessageStar(conversationId, message.id);
-  }, [conversationId, toggleMessageStar]);
+    void toggleAndCacheMessageStar(conversationId, message.id).catch(() => {});
+  }, [conversationId]);
 
   const handleReact = useCallback((message: ChatMessage, emoji: string) => {
     // Update local store immediately for responsiveness
