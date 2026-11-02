@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     PUBLIC_DOMAIN: str = "localhost"
     FILES_PUBLIC_DOMAIN: str = ""
     FRONTEND_URL: str = ""
+    REMOTE_ENCRYPTED_MEDIA_HOST: str = ""
+    MAP_USER_AGENT: str = "LyaoTalk/2.3.7"
     AI_API_KEY: str = ""
     AI_BASE_URL: str = ""
     AI_MODEL: str = ""

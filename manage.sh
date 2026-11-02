@@ -5,15 +5,16 @@ set -euo pipefail
 # Never run the monolithic installer commands against that host.
 if [[ -f /etc/lyaotalk/api.env && -L /opt/lyaotalk-current ]]; then
   live_command="${1:-status}"
+  health_url="${LYAOTALK_HEALTH_URL:-http://127.0.0.1:8000/health}"
   case "$live_command" in
     status|check)
       for unit in lyaotalk-api lyaotalk-minio lyaotalk-redis lyaotalk-prosody.socket prosody coturn nginx postgresql@14-main; do
         printf '%-28s %s\n' "$unit" "$(systemctl is-active "$unit" 2>/dev/null || true)"
       done
-      curl -fsS https://lyaot.example.org/api/health
+      curl -fsS "$health_url"
       echo
       ;;
-    api-health) curl -fsS https://lyaot.example.org/api/health; echo ;;
+    api-health) curl -fsS "$health_url"; echo ;;
     restart-api) systemctl restart lyaotalk-api ;;
     restart-nginx) nginx -t && systemctl reload nginx ;;
     logs-api) exec journalctl -u lyaotalk-api -f ;;

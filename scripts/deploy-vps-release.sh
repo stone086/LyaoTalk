@@ -130,8 +130,9 @@ systemctl restart lyaotalk-prosody.socket
 nginx -t
 systemctl reload nginx
 healthy=false
+health_url="${LYAOTALK_HEALTH_URL:-http://127.0.0.1:8000/health}"
 for attempt in {1..15}; do
-  if curl --fail --silent --max-time 5 --resolve example.org:443:127.0.0.1 https://example.org/api/health >/dev/null; then
+  if curl --fail --silent --max-time 5 "$health_url" >/dev/null; then
     healthy=true
     break
   fi

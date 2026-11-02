@@ -240,10 +240,11 @@ async def remote_encrypted_media(
     payload: RemoteMediaRequest,
     actor: dict[str, str] = Depends(get_current_user),
 ):
-    # Limit proxying to the known federation partner. PublicIPTransport also
+    # Limit proxying to the operator-configured federation partner. PublicIPTransport also
     # pins DNS to a public IP, and redirects are disabled to prevent SSRF.
     parsed = urlparse(payload.url)
-    if parsed.scheme != "https" or parsed.hostname != "upload.chat.example.net" or parsed.port not in (None, 443) or parsed.username or parsed.password or parsed.fragment:
+    allowed_host = settings.REMOTE_ENCRYPTED_MEDIA_HOST.strip().lower()
+    if not allowed_host or parsed.scheme != "https" or parsed.hostname != allowed_host or parsed.port not in (None, 443) or parsed.username or parsed.password or parsed.fragment:
         raise HTTPException(status_code=400, detail="Remote media host not allowed")
     try:
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=False, trust_env=False,

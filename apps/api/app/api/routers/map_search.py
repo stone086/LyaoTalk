@@ -6,12 +6,13 @@ import json
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from app.core.config import settings
 from app.core.rate_limit import limiter
 from app.utils.cache import get_redis
 
 router = APIRouter()
 _SEARCH_URL = "https://nominatim.openstreetmap.org/search"
-_USER_AGENT = "LyaoTalk/2.3.7 (+https://example.org)"
+_USER_AGENT = settings.MAP_USER_AGENT
 
 
 @router.get("/map/search")

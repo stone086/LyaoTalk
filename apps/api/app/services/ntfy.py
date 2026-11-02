@@ -37,7 +37,7 @@ async def publish_ntfy(topic: str, *, message_id: str | None = None) -> bool:
         except Exception as exc:
             logger.warning("ntfy_dedup_unavailable error=%s", type(exc).__name__)
             cache = None
-    click = (settings.FRONTEND_URL or "https://example.org").rstrip("/") + "/"
+    click = (settings.FRONTEND_URL or f"https://{settings.PUBLIC_DOMAIN}").rstrip("/") + "/"
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(

@@ -145,16 +145,23 @@ export async function fetchAndDecryptAesgcm(
     // 1. Download ciphertext. Private LyaoTalk files use the authenticated API;
     // no bearer token is placed in an image URL, link, or request query string.
     const { isTrustedFilesUrl } = await import("./trustedFilesUrl");
-    let ciphertext: ArrayBuffer;
+    let ciphertext: ArrayBuffer = new ArrayBuffer(0);
     if (isTrustedFilesUrl(parts.ciphertextUrl, window.location.origin)) {
       const { privateFileBlob } = await import("./api");
       ciphertext = await (await privateFileBlob(parts.ciphertextUrl, opts?.accountId, opts?.signal, opts?.onProgress)).arrayBuffer();
     } else {
       const remote = new URL(parts.ciphertextUrl);
-      if (remote.hostname === "upload.chat.example.net" || remote.hostname === "upload.lyaot.example.org") {
-        const { remoteEncryptedBlob } = await import("./api");
-        ciphertext = await (await remoteEncryptedBlob(parts.ciphertextUrl, opts?.accountId, opts?.signal, opts?.onProgress)).arrayBuffer();
-      } else {
+      let proxied = false;
+      if (remote.hostname.startsWith("upload.")) {
+        try {
+          const { remoteEncryptedBlob } = await import("./api");
+          ciphertext = await (await remoteEncryptedBlob(parts.ciphertextUrl, opts?.accountId, opts?.signal, opts?.onProgress)).arrayBuffer();
+          proxied = true;
+        } catch (error) {
+          if (opts?.signal?.aborted) throw error;
+        }
+      }
+      if (!proxied) {
         const resp = await fetch(parts.ciphertextUrl, {
           signal: opts?.signal,
           credentials: "omit",
