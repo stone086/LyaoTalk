@@ -63,6 +63,6 @@
   "overrides": {
     "@xmldom/xmldom": "0.9.12",
     "dompurify": "3.4.2",
-    "follow-redirects": "1.16.1"
+    "follow-redirects": "1.16.2"
   }
 }
