@@ -23,6 +23,4 @@ Run `npm --prefix apps/web ci`, `npm --prefix apps/web run build`, and `npm --pr
 
 ## Deployment
 
-The public Web app is at [example.org](https://example.org/). Production updates are manual, so the deployed commit may differ from `main`. See [VPS deployment and rollback instructions](docs/DEPLOYMENT.md) and the [production-host operations runbook](docs/runbook/live-vps.md).
-
-The [October 2026 security update](docs/security/2026-10-21-update.md) describes the current credential, OMEMO, webhook, and deployment safeguards and their remaining limits.
+For a fresh installation on your own infrastructure, see the [deployment guide](docs/DEPLOYMENT.md). Production infrastructure details are maintained privately.

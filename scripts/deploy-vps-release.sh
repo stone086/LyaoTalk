@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Release layout used by production-host. Run as root after /opt/lyaotalk-src has
+# Release layout for an operator-managed VPS. Run as root after /opt/lyaotalk-src has
 # fast-forwarded to the requested commit. Matrix services are never touched.
 src=/opt/lyaotalk-src
 releases=/opt/lyaotalk-releases
