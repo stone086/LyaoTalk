@@ -11,7 +11,7 @@ from app.utils.cache import get_redis
 
 router = APIRouter()
 _SEARCH_URL = "https://nominatim.openstreetmap.org/search"
-_USER_AGENT = "LyaoTalk/2.3.6 (+https://lyaot.example.org)"
+_USER_AGENT = "LyaoTalk/2.3.7 (+https://example.org)"
 
 
 @router.get("/map/search")
