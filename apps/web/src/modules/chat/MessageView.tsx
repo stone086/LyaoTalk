@@ -56,11 +56,14 @@ function parseAesgcmMediaLink(raw?: string): { href: string; fileName: string; i
   return { href, fileName, isAudio };
 }
 
-async function publishFederatedMedia(file: Blob, name: string, accountId: string, onProgress?: TransferProgress): Promise<string> {
+async function publishFederatedMedia(file: Blob, name: string, accountId: string, onProgress?: TransferProgress, signal?: AbortSignal): Promise<string> {
   const { ciphertext, fragment } = await encryptForAesgcm(file);
+  if (signal?.aborted) throw new DOMException("Upload cancelled", "AbortError");
   const encrypted = new File([ciphertext], name, { type: "application/octet-stream" });
-  const upload = await attachmentsApi.upload(encrypted, undefined, accountId, onProgress);
+  const upload = await attachmentsApi.upload(encrypted, undefined, accountId, onProgress, signal);
+  if (signal?.aborted) throw new DOMException("Upload cancelled", "AbortError");
   const { url } = await attachmentsApi.publishEncrypted(upload.id, accountId);
+  if (signal?.aborted) throw new DOMException("Upload cancelled", "AbortError");
   return toAesgcmUrl(url, fragment);
 }
 
@@ -506,7 +509,7 @@ export default function MessageView({ conversationId }: { conversationId: string
   const { t } = useLanguage();
   const [input, setInput] = useState("");
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
-  const [uploadingCount, setUploadingCount] = useState(0);
+  const sendAbortRef = useRef<AbortController | null>(null);
   const [uploadProgress, setUploadProgress] = useState<Record<number, { name: string; percent: number; details?: TransferDetails }>>({});
   const uploadProgressSerial = useRef(0);
   const withProgress = useCallback(async <T,>(name: string, task: (report: TransferProgress) => Promise<T>): Promise<T> => {
@@ -561,7 +564,7 @@ export default function MessageView({ conversationId }: { conversationId: string
   const [pluginToolbarActions, setPluginToolbarActions] = useState<ChatToolbarAction[]>([]);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [pendingFiles, setPendingFiles] = useState<UploadedFile[]>([]);
+  const [pendingFiles, setPendingFiles] = useState<(UploadedFile & { localFile?: File })[]>([]);
   const [sendPending, setSendPending] = useState(false);
   const sendInFlightRef = useRef(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -692,27 +695,11 @@ export default function MessageView({ conversationId }: { conversationId: string
       toast.error(`${file.name}: ${t("upload.maxPerFile")}`);
       return false;
     });
-    setUploadingCount((count) => count + accepted.length);
-    try {
-      await Promise.all(accepted.map(async (file) => {
-        try {
-          const result = await withProgress(file.name, (report) => attachmentsApi.upload(file, undefined, activeAccountId, report));
-          setPendingFiles((pending) => [...pending, {
-            id: result.id,
-            name: result.file_name,
-            mimeType: result.mime_type,
-            sizeBytes: result.size_bytes,
-            downloadUrl: result.download_url,
-          }]);
-        } catch (error: any) {
-          const detail = error?.response?.data?.detail ?? error?.message ?? t("upload.error");
-          toast.error(typeof detail === "string" ? detail : t("upload.error"));
-        }
-      }));
-    } finally {
-      setUploadingCount((count) => count - accepted.length);
-    }
-  }, [activeAccountId, editingMessageId, t, withProgress]);
+    setPendingFiles((pending) => [...pending, ...accepted.map((file) => ({
+      id: crypto.randomUUID(), name: file.name, mimeType: file.type,
+      sizeBytes: file.size, downloadUrl: "", localFile: file,
+    }))]);
+  }, [activeAccountId, editingMessageId, t]);
 
   const shareLocation = () => {
     setAttachmentMenuOpen(false);
@@ -972,13 +959,14 @@ export default function MessageView({ conversationId }: { conversationId: string
       body = `geo:${pastedLocation.latitude.toFixed(6)},${pastedLocation.longitude.toFixed(6)}`;
     }
     if (!body && !pendingFiles.length) return;
-    if (uploadingCount > 0) return;
     if (!activeAccountId) return;
     if (needsContactApproval) {
       toast.error(t("chat.addContactBeforeReply"));
       return;
     }
     sendInFlightRef.current = true;
+    const sendController = new AbortController();
+    sendAbortRef.current = sendController;
     setSendPending(true);
     try {
 
@@ -1141,9 +1129,11 @@ export default function MessageView({ conversationId }: { conversationId: string
     }
     try {
       for (const file of pendingFiles) {
+        if (sendController.signal.aborted) throw new DOMException("Upload cancelled", "AbortError");
         const { mediaUrl, fileEncrypted, fileId } = await withProgress(file.name, async (report) => {
-          const original = await privateFileBlob(file.downloadUrl, activeAccountId);
-          const mediaUrl = await publishFederatedMedia(original, file.name, activeAccountId, (percent, details) => report(Math.floor(percent * 0.9), details));
+          const original = file.localFile ?? await privateFileBlob(file.downloadUrl, activeAccountId, sendController.signal);
+          const mediaUrl = await publishFederatedMedia(original, file.name, activeAccountId, report, sendController.signal);
+          if (sendController.signal.aborted) throw new DOMException("Upload cancelled", "AbortError");
           let fileEncrypted = false;
           let fileId: string;
           if (isMucPeer && getGroupOmemoEnabled(activeAccountId, peerJid)) {
@@ -1181,7 +1171,7 @@ export default function MessageView({ conversationId }: { conversationId: string
         setPendingFiles((files) => files.filter((item) => item.id !== file.id));
       }
     } catch (error: any) {
-      toast.error(error?.message ?? t("chat.sendFailed"));
+      if (error?.name !== "AbortError") toast.error(error?.message ?? t("chat.sendFailed"));
       return;
     }
     setInput("");
@@ -1194,10 +1184,11 @@ export default function MessageView({ conversationId }: { conversationId: string
     setShowEmojiPicker(false);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
     } finally {
+      sendAbortRef.current = null;
       sendInFlightRef.current = false;
       setSendPending(false);
     }
-  }, [input, pendingFiles, uploadingCount, activeAccountId, needsContactApproval, conversationId, conversation, isMucPeer, addMessage, updateMessage, replyTo, editingMessageId, t, clearComposerDraft, withProgress]);
+  }, [input, pendingFiles, activeAccountId, needsContactApproval, conversationId, conversation, isMucPeer, addMessage, updateMessage, replyTo, editingMessageId, t, clearComposerDraft, withProgress]);
 
   const handleAcceptContact = useCallback(() => {
     if (!activeAccountId || !conversation?.peerJid) return;
@@ -1397,15 +1388,11 @@ export default function MessageView({ conversationId }: { conversationId: string
       const file = item.getAsFile();
       if (!file) continue;
       try {
-        const result = await withProgress(file.name, (report) => attachmentsApi.upload(file, undefined, activeAccountId ?? undefined, report));
         setPendingFiles((prev) => [
           ...prev,
           {
-            id: result.id,
-            name: result.file_name,
-            mimeType: result.mime_type,
-            sizeBytes: result.size_bytes,
-            downloadUrl: result.download_url,
+            id: crypto.randomUUID(), name: file.name, mimeType: file.type,
+            sizeBytes: file.size, downloadUrl: "", localFile: file,
           },
         ]);
       } catch {
@@ -1540,7 +1527,7 @@ export default function MessageView({ conversationId }: { conversationId: string
           {pendingFiles.map((f) => (
             <div key={f.id} className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-surface-800 text-xs text-surface-200/70 border-default">
               <span className="truncate max-w-[100px]">{f.name}</span>
-              <button onClick={() => setPendingFiles((p) => p.filter((x) => x.id !== f.id))} className="text-surface-200/30 hover:text-danger">
+              <button onClick={() => { if (sendPending) sendAbortRef.current?.abort(); setPendingFiles((p) => p.filter((x) => x.id !== f.id)); }} className="text-surface-200/30 hover:text-danger">
                 <X size={10} />
               </button>
             </div>
@@ -1733,16 +1720,15 @@ export default function MessageView({ conversationId }: { conversationId: string
             />
           )}
           </div>
-          <button onClick={() => void sendMessage()} disabled={sendPending || needsContactApproval || uploadingCount > 0 || (!input.trim() && !pendingFiles.length)} className="btn-primary flex-shrink-0 rounded-xl p-2.5" title={t("chat.send")}>
+          <button onClick={() => void sendMessage()} disabled={sendPending || needsContactApproval || (!input.trim() && !pendingFiles.length)} className="btn-primary flex-shrink-0 rounded-xl p-2.5" title={t("chat.send")}>
             <Send size={16} />
           </button>
         </div>
         <input ref={galleryInputRef} type="file" accept="image/*" multiple className="hidden" aria-hidden="true" onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; setAttachmentMenuOpen(false); void uploadSelectedFiles(files); }} />
         <input ref={fileInputRef} type="file" multiple className="hidden" aria-hidden="true" onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ""; setAttachmentMenuOpen(false); void uploadSelectedFiles(files); }} />
-        {uploadingCount > 0 && <p className="mt-2 text-xs text-surface-200/70" role="status">{t("chat.uploadingAttachments")}</p>}
         {Object.entries(uploadProgress).map(([id, item]) => (
           <div key={id} className="mt-2 px-2 text-xs text-surface-200/80" role="progressbar" aria-label={item.name} aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.percent}>
-            <div className="flex justify-between gap-2"><span className="truncate">{item.name}</span><span>{item.percent}%</span></div>
+            <div className="flex justify-between gap-2"><span className="truncate">{item.name}</span><span>{item.percent}%</span>{sendPending && <button type="button" onClick={() => sendAbortRef.current?.abort()} aria-label={t("common.cancel")}><X size={14} /></button>}</div>
             {item.details && <div className="flex justify-between gap-2 text-surface-200/60"><span>{formatFileSize(item.details.loaded)} / {item.details.total ? formatFileSize(item.details.total) : "?"}</span><span>{formatFileSize(item.details.speed)}/s</span></div>}
             <div className="mt-1 h-1.5 rounded-full bg-surface-800 overflow-hidden">
               <div className="h-full bg-accent transition-[width] duration-150" style={{ width: `${item.percent}%` }} />

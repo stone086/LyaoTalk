@@ -82,6 +82,26 @@ describe("API account session isolation", () => {
     expect(sizes).toEqual([[0, file.size], [Math.floor(file.size / 2), file.size], [file.size, file.size], [file.size, file.size]]);
   });
 
+  it("aborts an in-flight attachment upload when cancelled", async () => {
+    setupAccounts();
+    let request: UploadRequest | undefined;
+    class UploadRequest {
+      upload = {};
+      onabort?: () => void;
+      withCredentials = false;
+      open() {}
+      setRequestHeader() {}
+      send() { request = this; }
+      abort() { this.onabort?.(); }
+    }
+    vi.stubGlobal("XMLHttpRequest", UploadRequest);
+    const controller = new AbortController();
+    const upload = attachmentsApi.upload(new File(["bytes"], "photo.jpg"), undefined, "alice", () => {}, controller.signal);
+    expect(request).toBeDefined();
+    controller.abort();
+    await expect(upload).rejects.toMatchObject({ name: "AbortError" });
+  });
+
   it("does not attach or revoke another account token on login 401", async () => {
     setupAccounts();
     sessionStorage.setItem("admin_token", "admin-access");

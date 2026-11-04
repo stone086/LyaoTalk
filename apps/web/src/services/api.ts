@@ -359,7 +359,7 @@ export const attachmentsApi = {
     api.post(`/attachments/${encodeURIComponent(attachmentId)}/share`,
       { recipient_jid: recipientJid },
       { headers: { "X-LyaoTalk-Account-Id": accountId } }).then((r) => r.data),
-  upload: async (file: File, messageId?: string, accountId?: string, onProgress?: TransferProgress) => {
+  upload: async (file: File, messageId?: string, accountId?: string, onProgress?: TransferProgress, signal?: AbortSignal) => {
     const selectedAccountId = accountId ?? useAccountStore.getState().activeAccountId;
     if (!selectedAccountId) throw new Error("Account sign-in required");
     const send = async (token: string | null) => {
@@ -371,6 +371,10 @@ export const attachmentsApi = {
       if (onProgress) {
         return new Promise<Response>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
+          if (signal?.aborted) { reject(new DOMException("Upload cancelled", "AbortError")); return; }
+          const abort = () => xhr.abort();
+          signal?.addEventListener("abort", abort, { once: true });
+          const cleanup = () => signal?.removeEventListener("abort", abort);
           const started = performance.now();
           xhr.open("POST", `${API_URL}/attachments/upload`);
           xhr.withCredentials = true;
@@ -384,12 +388,14 @@ export const attachmentsApi = {
             }
           };
           xhr.onload = () => {
+            cleanup();
             if (xhr.status >= 200 && xhr.status < 300) onProgress(100,
               { loaded: file.size, total: file.size, speed: file.size * 1000 / Math.max(performance.now() - started, 1) });
             resolve(new Response(xhr.responseText, { status: xhr.status }));
           };
-          xhr.onerror = () => reject(new Error("Upload network error"));
-          xhr.onabort = () => reject(new Error("Upload cancelled"));
+          xhr.onerror = () => { cleanup(); reject(new Error("Upload network error")); };
+          xhr.onabort = () => { cleanup(); reject(new DOMException("Upload cancelled", "AbortError")); };
+          if (signal?.aborted) { cleanup(); reject(new DOMException("Upload cancelled", "AbortError")); return; }
           xhr.send(form);
         });
       }
@@ -398,16 +404,19 @@ export const attachmentsApi = {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: form,
         credentials: "same-origin",
+        signal,
       });
     };
     let response = await send(getUserToken(selectedAccountId));
     if (response.status === 401) {
+      if (signal?.aborted) throw new DOMException("Upload cancelled", "AbortError");
       let token: string;
       try {
         token = await refreshUserToken(selectedAccountId);
       } catch {
         token = await reauthenticateUserToken(selectedAccountId);
       }
+      if (signal?.aborted) throw new DOMException("Upload cancelled", "AbortError");
       response = await send(token);
     }
     const data = await response.json();
