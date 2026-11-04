@@ -10,6 +10,7 @@ push_module=/usr/lib/prosody-modules/mod_lyaotalk_push.lua
 device_api_module=/usr/lib/prosody-modules/mod_lyaotalk_device_api.lua
 device_sessions_module=/usr/lib/prosody-modules/mod_lyaotalk_device_sessions.lua
 push_id_module=/usr/lib/prosody-modules/mod_lyaotalk_push_id.lua
+muc_requests_module=/usr/lib/prosody-modules/mod_lyaotalk_muc_requests.lua
 service_override=/etc/systemd/system/lyaotalk-api.service.d/30-release-venv.conf
 default_venv=/opt/lyaotalk-venv
 active_venv="$default_venv"
@@ -41,10 +42,14 @@ luac -p "$target/configs/prosody/mod_lyaotalk_push.lua"
 luac -p "$target/configs/prosody/mod_lyaotalk_device_api.lua"
 luac -p "$target/configs/prosody/mod_lyaotalk_device_sessions.lua"
 luac -p "$target/configs/prosody/mod_lyaotalk_push_id.lua"
+luac -p "$target/configs/prosody/mod_lyaotalk_muc_requests.lua"
 [[ -f "$push_module" ]] || { echo "Prosody push module missing" >&2; exit 1; }
 cp -p "$push_module" "$target/.previous-push-module.lua"
 if [[ -f "$push_id_module" ]]; then
   cp -p "$push_id_module" "$target/.previous-push-id-module.lua"
+fi
+if [[ -f "$muc_requests_module" ]]; then
+  cp -p "$muc_requests_module" "$target/.previous-muc-requests-module.lua"
 fi
 for module_file in "$device_api_module" "$device_sessions_module"; do
   if [[ -f "$module_file" ]]; then cp -p "$module_file" "$target/.previous-$(basename "$module_file")"; fi
@@ -109,6 +114,11 @@ rollback() {
   else
     rm -f "$push_id_module"
   fi
+  if [[ -f "$target/.previous-muc-requests-module.lua" ]]; then
+    install -m 644 "$target/.previous-muc-requests-module.lua" "$muc_requests_module"
+  else
+    rm -f "$muc_requests_module"
+  fi
   systemctl restart prosody
   systemctl restart lyaotalk-api
   echo "Release rollback restored $previous; inspect database migration compatibility" >&2
@@ -124,6 +134,7 @@ install -m 644 "$target/configs/prosody/mod_lyaotalk_push.lua" "$push_module"
 install -m 644 "$target/configs/prosody/mod_lyaotalk_device_api.lua" "$device_api_module"
 install -m 644 "$target/configs/prosody/mod_lyaotalk_device_sessions.lua" "$device_sessions_module"
 install -m 644 "$target/configs/prosody/mod_lyaotalk_push_id.lua" "$push_id_module"
+install -m 644 "$target/configs/prosody/mod_lyaotalk_muc_requests.lua" "$muc_requests_module"
 systemctl restart lyaotalk-api
 systemctl restart prosody
 systemctl restart lyaotalk-prosody.socket

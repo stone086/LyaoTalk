@@ -2,15 +2,18 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { discoverRoomOccupants, decrypt, translate } = vi.hoisted(() => ({
+const { discoverRoomOccupants, setRoomAffiliation, kickRoomOccupant, inviteToRoom, decrypt, translate } = vi.hoisted(() => ({
   discoverRoomOccupants: vi.fn(),
+  setRoomAffiliation: vi.fn(),
+  kickRoomOccupant: vi.fn(),
+  inviteToRoom: vi.fn(),
   decrypt: vi.fn(),
   translate: (key: string) => key,
 }));
 
 vi.mock("@/utils/i18n", () => ({ useLanguage: () => ({ t: translate }) }));
 vi.mock("@/services/xmppAdapter", () => ({
-  getClient: () => ({ connected: true, discoverRoomOccupants }),
+  getClient: () => ({ connected: true, config: { jid: "alice@example.org" }, discoverRoomOccupants, setRoomAffiliation, kickRoomOccupant, inviteToRoom }),
 }));
 vi.mock("@/hooks/usePrivateFileUrl", () => ({
   usePrivateFileUrl: (rawUrl: string) => ({ url: rawUrl, progress: null }),
@@ -19,7 +22,7 @@ vi.mock("@/services/aesgcmMedia", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/services/aesgcmMedia")>(),
   fetchAndDecryptAesgcm: decrypt,
 }));
-vi.mock("react-hot-toast", () => ({ default: { error: vi.fn() } }));
+vi.mock("react-hot-toast", () => ({ default: { error: vi.fn(), success: vi.fn() } }));
 
 import RightPanel from "./RightPanel";
 import { useAccountStore } from "@/stores/accountStore";
@@ -31,10 +34,42 @@ import { useGroupStore } from "@/stores/groupStore";
 afterEach(() => {
   vi.restoreAllMocks();
   useChatStore.setState({ conversations: {}, messages: {} });
-  useGroupStore.setState({ rooms: {}, members: {} });
+  useGroupStore.setState({ rooms: {}, members: {}, joinRequests: {} });
 });
 
 describe("conversation details panel", () => {
+  it("lets a private-room owner approve an applicant and remove a member", async () => {
+    const accountId = "account-1";
+    const roomJid = "private-room@conference.example.org";
+    const conversationId = `${accountId}:${roomJid}`;
+    useAccountStore.setState({ activeAccountId: accountId, accounts: [{ id: accountId, jid: "alice@example.org", domain: "example.org", presence: "available", connected: true }] });
+    useGroupStore.getState().upsertRoom({ accountId, jid: roomJid, name: "private-room", nickname: "alice", isPublic: false, joinState: "joined" });
+    useGroupStore.getState().setMembers(accountId, roomJid, [
+      { jid: "alice@example.org", nickname: "alice", role: "moderator", affiliation: "owner", presence: "available" },
+      { jid: "bob@example.org", nickname: "bob", role: "participant", affiliation: "member", presence: "available" },
+    ]);
+    useGroupStore.getState().addJoinRequest(accountId, roomJid, "guest@example.org");
+    useChatStore.getState().upsertConversation({ id: conversationId, accountId, peerJid: roomJid, title: "private-room", type: "group", unreadCount: 0, pinned: false });
+    setRoomAffiliation.mockResolvedValue(undefined);
+    inviteToRoom.mockReturnValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+    const root = createRoot(element);
+    await act(async () => root.render(<RightPanel conversationId={conversationId} onClose={vi.fn()} />));
+    await act(async () => element.querySelector<HTMLButtonElement>("button[title='right.members']")!.click());
+    expect(element.textContent).toContain("待审批入群申请");
+    await act(async () => Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "批准")!.click());
+    expect(setRoomAffiliation).toHaveBeenCalledWith(roomJid, "guest@example.org", "member");
+    expect(inviteToRoom).toHaveBeenCalledWith(roomJid, "guest@example.org");
+    expect(useGroupStore.getState().joinRequests[`${accountId}::${roomJid}`]).toEqual([]);
+    await act(async () => Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "踢出")!.click());
+    expect(setRoomAffiliation).toHaveBeenCalledWith(roomJid, "bob@example.org", "none");
+    expect(kickRoomOccupant).not.toHaveBeenCalled();
+    await act(async () => root.unmount());
+    element.remove();
+  });
+
   it("shows info, live members, regular and encrypted files, and saved messages without the AI tab", async () => {
     const accountId = "account-1";
     const roomJid = "public-room@conference.example.org";

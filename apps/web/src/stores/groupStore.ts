@@ -59,6 +59,7 @@ export interface MucMember {
 interface GroupState {
   rooms: Record<string, MucRoom>;          // keyed by `${accountId}::${jid}`
   members: Record<string, MucMember[]>;    // keyed by `${accountId}::${jid}`
+  joinRequests: Record<string, string[]>;
 
   upsertRoom: (room: Omit<MucRoom, "key"> & { key?: string }) => void;
   removeRoom: (accountId: string, jid: string) => void;
@@ -69,6 +70,8 @@ interface GroupState {
     extras?: { lastError?: string; lastRemovalReason?: string },
   ) => void;
   setMembers: (accountId: string, roomJid: string, members: MucMember[]) => void;
+  addJoinRequest: (accountId: string, roomJid: string, applicantJid: string) => void;
+  removeJoinRequest: (accountId: string, roomJid: string, applicantJid: string) => void;
   updateRoomSubject: (accountId: string, roomJid: string, subject: string) => void;
 
   /** Get all rooms the user has actually joined (server-confirmed). */
@@ -86,6 +89,7 @@ export const useGroupStore = create<GroupState>()(
     (set, get) => ({
       rooms: {},
       members: {},
+      joinRequests: {},
 
       upsertRoom: (room) =>
         set((s) => {
@@ -98,9 +102,11 @@ export const useGroupStore = create<GroupState>()(
           const key = k(accountId, jid);
           const nextRooms = { ...s.rooms };
           const nextMembers = { ...s.members };
+          const nextJoinRequests = { ...s.joinRequests };
           delete nextRooms[key];
           delete nextMembers[key];
-          return { rooms: nextRooms, members: nextMembers };
+          delete nextJoinRequests[key];
+          return { rooms: nextRooms, members: nextMembers, joinRequests: nextJoinRequests };
         }),
 
       setJoinState: (accountId, jid, joinState, extras) =>
@@ -126,6 +132,16 @@ export const useGroupStore = create<GroupState>()(
           members: { ...s.members, [k(accountId, roomJid)]: members },
         })),
 
+      addJoinRequest: (accountId, roomJid, applicantJid) => set((s) => {
+        const key = k(accountId, roomJid);
+        const existing = s.joinRequests[key] ?? [];
+        return { joinRequests: { ...s.joinRequests, [key]: existing.includes(applicantJid) ? existing : [...existing, applicantJid] } };
+      }),
+      removeJoinRequest: (accountId, roomJid, applicantJid) => set((s) => {
+        const key = k(accountId, roomJid);
+        return { joinRequests: { ...s.joinRequests, [key]: (s.joinRequests[key] ?? []).filter((jid) => jid !== applicantJid) } };
+      }),
+
       updateRoomSubject: (accountId, roomJid, subject) =>
         set((s) => {
           const key = k(accountId, roomJid);
@@ -147,6 +163,7 @@ export const useGroupStore = create<GroupState>()(
         set((s) => {
           const nextRooms: Record<string, MucRoom> = {};
           const nextMembers: Record<string, MucMember[]> = {};
+          const nextJoinRequests: Record<string, string[]> = {};
           for (const [key, room] of Object.entries(s.rooms) as [string, MucRoom][]) {
             if (room.accountId !== accountId) {
               nextRooms[key] = room;
@@ -157,7 +174,10 @@ export const useGroupStore = create<GroupState>()(
               nextMembers[key] = members;
             }
           }
-          return { rooms: nextRooms, members: nextMembers };
+          for (const [key, requests] of Object.entries(s.joinRequests)) {
+            if (!key.startsWith(`${accountId}::`)) nextJoinRequests[key] = requests;
+          }
+          return { rooms: nextRooms, members: nextMembers, joinRequests: nextJoinRequests };
         }),
     }),
     { name: "liaot-groups" },

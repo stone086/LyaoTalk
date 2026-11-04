@@ -32,9 +32,14 @@ function MembersTab({ roomJid }: { roomJid: string }) {
   const members = useGroupStore((s) =>
     activeAccountId ? (s.members[`${activeAccountId}::${roomJid}`] ?? []) : [],
   );
+  const joinRequests = useGroupStore((s) =>
+    activeAccountId ? (s.joinRequests[`${activeAccountId}::${roomJid}`] ?? []) : [],
+  );
   const [occupants, setOccupants] = useState<MucMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [applicantJid, setApplicantJid] = useState("");
 
   useEffect(() => {
     setOccupants([]);
@@ -60,6 +65,24 @@ function MembersTab({ roomJid }: { roomJid: string }) {
   }, [activeAccountId, connected, roomJid, members.length]);
 
   const shownMembers = connected ? (members.length ? members : occupants) : [];
+  const client = activeAccountId ? getClient(activeAccountId) : undefined;
+  const selfJid = client?.config?.jid?.split("/")[0]?.toLowerCase();
+  const self = members.find((member) => member.jid.split("/")[0].toLowerCase() === selfJid || member.nickname === room?.nickname);
+  const canManage = self?.affiliation === "owner" || self?.affiliation === "admin";
+  const isOwner = self?.affiliation === "owner";
+  const approve = async (jid: string) => {
+    await client!.setRoomAffiliation(roomJid, jid, "member");
+    client!.inviteToRoom(roomJid, jid);
+    useGroupStore.getState().removeJoinRequest(activeAccountId!, roomJid, jid);
+    setApplicantJid("");
+  };
+  const manage = async (action: () => Promise<void>, success: string) => {
+    if (!client?.connected || busy) return;
+    setBusy(true);
+    try { await action(); toast.success(success); }
+    catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
+    finally { setBusy(false); }
+  };
 
   const roleLabel: Record<MucMember["affiliation"], string> = {
     owner: t("right.owner"),
@@ -81,6 +104,18 @@ function MembersTab({ roomJid }: { roomJid: string }) {
 
   return (
     <div className="flex flex-col gap-1 p-2">
+      {canManage && joinRequests.length > 0 && <div className="p-2 text-xs text-surface-50">
+        <p className="mb-2">待审批入群申请</p>
+        {joinRequests.map((jid) => <div key={jid} className="flex items-center gap-2 py-1">
+          <span className="min-w-0 flex-1 truncate">{jid}</span>
+          <button type="button" disabled={busy} className="text-accent-soft" onClick={() => void manage(() => approve(jid), "已批准入群并发送邀请")}>批准</button>
+          <button type="button" disabled={busy} className="text-danger" onClick={() => useGroupStore.getState().removeJoinRequest(activeAccountId!, roomJid, jid)}>拒绝</button>
+        </div>)}
+      </div>}
+      {canManage && room?.isPublic === false && <div className="flex gap-1 p-2">
+        <input className="input min-w-0 flex-1 text-xs" value={applicantJid} onChange={(event) => setApplicantJid(event.target.value)} placeholder="申请人账号（完整 JID）" aria-label="申请人账号" />
+        <button type="button" disabled={busy || !applicantJid.trim()} className="btn-primary text-xs" onClick={() => void manage(() => approve(applicantJid.trim()), "已批准入群并发送邀请")}>批准入群</button>
+      </div>}
       {shownMembers.map((m) => (
         <div key={m.jid} className="flex items-center gap-3 px-2 py-2 rounded-lg hover-surface">
           <Avatar name={m.nickname} size="xs" />
@@ -90,6 +125,16 @@ function MembersTab({ roomJid }: { roomJid: string }) {
           </div>
           {m.affiliation === "owner" && <Crown size={12} className="text-yellow-400 flex-shrink-0" />}
           {m.affiliation === "admin" && <Shield size={12} className="text-accent-soft flex-shrink-0" />}
+          {canManage && m.jid.split("/")[0].toLowerCase() !== selfJid && <div className="flex gap-1">
+            {isOwner && m.affiliation !== "owner" && m.affiliation !== "admin" && !m.jid.endsWith(`@${roomJid}`) && <button type="button" disabled={busy} className="text-xs text-accent-soft" onClick={() => void manage(() => client!.setRoomAffiliation(roomJid, m.jid, "admin"), "已任命管理员")}>设为管理员</button>}
+            {m.affiliation !== "owner" && (isOwner || m.affiliation !== "admin") && <button type="button" disabled={busy} className="text-xs text-danger" onClick={() => { if (window.confirm(`将 ${m.nickname} 移出群组？`)) void manage(async () => {
+              if (room?.isPublic === false && m.affiliation !== "none") {
+                await client!.setRoomAffiliation(roomJid, m.jid, "none");
+              } else {
+                await client!.kickRoomOccupant(roomJid, m.nickname);
+              }
+            }, "已移出群组"); }}>踢出</button>}
+          </div>}
         </div>
       ))}
     </div>

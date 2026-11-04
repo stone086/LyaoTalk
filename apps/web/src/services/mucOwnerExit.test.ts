@@ -61,4 +61,27 @@ describe("owner room exit protocol", () => {
     });
     await client.destroyRoom("family@conference.lyaot.example.org");
   });
+
+  it("grants room membership and administrator affiliation", async () => {
+    const affiliations: string[] = [];
+    const client = connectedClient((stanza) => {
+      const item = stanza.getElementsByTagName("item")[0];
+      affiliations.push(item.getAttribute("affiliation") ?? "");
+      expect(item.getAttribute("jid")).toBe("member@lyaot.example.org");
+      return xml("<iq type='result' />");
+    });
+    await client.setRoomAffiliation("family@conference.lyaot.example.org", "member@lyaot.example.org", "member");
+    await client.setRoomAffiliation("family@conference.lyaot.example.org", "member@lyaot.example.org", "admin");
+    expect(affiliations).toEqual(["member", "admin"]);
+  });
+
+  it("kicks an occupant by room nickname", async () => {
+    const client = connectedClient((stanza) => {
+      const item = stanza.getElementsByTagName("item")[0];
+      expect(item.getAttribute("nick")).toBe("guest");
+      expect(item.getAttribute("role")).toBe("none");
+      return xml("<iq type='result' />");
+    });
+    await client.kickRoomOccupant("family@conference.lyaot.example.org", "guest");
+  });
 });

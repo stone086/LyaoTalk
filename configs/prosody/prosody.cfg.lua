@@ -149,6 +149,7 @@ Component "conference.XMPP_DOMAIN" "muc"
   name = "LyaoTalk Conference"
   modules_enabled = {
     "muc_mam";
+    "lyaotalk_muc_requests";
   }
   -- Restrict room creation to local users only. Without this any federated
   -- account on the public XMPP network can create rooms on our MUC service,

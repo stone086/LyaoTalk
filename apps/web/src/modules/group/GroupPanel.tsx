@@ -270,6 +270,7 @@ export default function GroupPanel() {
     roomJid: string,
     roomName: string,
     nickname: string,
+    isPublic = true,
   ): Promise<boolean> => {
     if (!activeAccountId) {
       toast.error(t("account.noActive"));
@@ -286,7 +287,7 @@ export default function GroupPanel() {
       jid: roomJid,
       name: roomName,
       nickname,
-      isPublic: true,
+      isPublic,
       joinState: "joining",
     });
     const convId = generateConversationId(activeAccountId, roomJid);
@@ -311,7 +312,7 @@ export default function GroupPanel() {
       const reason = err?.message ?? t("group.joinFailed");
       // Bridge sets joinState=error on room.join.failed event;
       // here we just toast + return failure status.
-      toast.error(reason);
+      toast.error(reason.includes("registration-required") ? "这是私密群，入群申请已发送给管理员" : reason);
       return false;
     }
   };
@@ -332,9 +333,9 @@ export default function GroupPanel() {
     const slug = createForm.name.toLowerCase().replace(/\s+/g, "-");
     const roomJid = `${slug}@${createForm.server}`;
     const roomName = createForm.name.trim();
-    if (!(await joinRoomNow(roomJid, roomName, defaultNickname))) return;
-    const client = activeAccountId ? getClient(activeAccountId) : undefined;
     const isPrivate = createForm.visibility === "private";
+    if (!(await joinRoomNow(roomJid, roomName, defaultNickname, !isPrivate))) return;
+    const client = activeAccountId ? getClient(activeAccountId) : undefined;
     client?.configureRoom(roomJid, {
       isPublic: !isPrivate,
       membersOnly: isPrivate,

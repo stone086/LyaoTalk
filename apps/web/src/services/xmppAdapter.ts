@@ -54,6 +54,7 @@ export type XmppEvent =
   | "room.subject"
   | "room.member"
   | "room.invite"
+  | "room.join.request"
   | "jingle"
   | "jingle.error"
   | "sm.failed"
@@ -460,6 +461,17 @@ export class XmppClient {
           && child.getAttribute("by") === roomBareJid)?.getAttribute("id") ?? undefined
         : undefined;
       const subject = realStanza.querySelector("subject")?.textContent ?? "";
+      const joinRequest = Array.from(realStanza.children).find((child) =>
+        child.localName === "join-request" && (child.namespaceURI === "urn:lyaotalk:muc-join-request:1"
+          || child.getAttribute("xmlns") === "urn:lyaotalk:muc-join-request:1"));
+      if (joinRequest) {
+        const requestedRoom = normalizeValidBareJid(joinRequest.getAttribute("room") ?? "");
+        const applicantJid = normalizeValidBareJid(joinRequest.getAttribute("jid") ?? "");
+        if (requestedRoom && applicantJid && from.split("/")[0] === requestedRoom) {
+          this.emit("room.join.request", { accountId: this.config.accountId, roomJid: requestedRoom, applicantJid });
+        }
+        return true;
+      }
       if (type === "groupchat" && subject) {
         this.emit("room.subject", { accountId: this.config.accountId, roomJid: from.split("/")[0], subject });
         return true;
@@ -1342,7 +1354,7 @@ export class XmppClient {
     }, () => reject(new Error("Cannot inspect group ownership")), 10000));
   }
 
-  setRoomAffiliation(roomJid: string, jid: string, affiliation: "owner" | "none"): Promise<void> {
+  setRoomAffiliation(roomJid: string, jid: string, affiliation: "owner" | "admin" | "member" | "none"): Promise<void> {
     if (!this._connection || !this._connected) return Promise.reject(new Error("Not connected"));
     const room = normalizeValidBareJid(roomJid);
     const member = normalizeValidBareJid(jid);
@@ -1351,7 +1363,19 @@ export class XmppClient {
       .c("query", { xmlns: "http://jabber.org/protocol/muc#admin" })
       .c("item", { jid: member, affiliation }).tree();
     return new Promise((resolve, reject) => this._connection!.sendIQ(iq, () => resolve(),
-      () => reject(new Error("Changing group owner failed")), 10000));
+      () => reject(new Error("Changing group affiliation failed")), 10000));
+  }
+
+  kickRoomOccupant(roomJid: string, nickname: string): Promise<void> {
+    if (!this._connection || !this._connected) return Promise.reject(new Error("Not connected"));
+    const room = normalizeValidBareJid(roomJid);
+    const nick = nickname.trim();
+    if (!room || !nick || nick.includes("/")) return Promise.reject(new Error("Invalid group occupant"));
+    const iq = this._$iq({ type: "set", to: room })
+      .c("query", { xmlns: "http://jabber.org/protocol/muc#admin" })
+      .c("item", { nick, role: "none" }).tree();
+    return new Promise((resolve, reject) => this._connection!.sendIQ(iq, () => resolve(),
+      () => reject(new Error("Removing group occupant failed")), 10000));
   }
 
   destroyRoom(roomJid: string): Promise<void> {

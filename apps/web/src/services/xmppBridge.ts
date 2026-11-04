@@ -1020,6 +1020,12 @@ export function initXmppBridge(client: XmppClient) {
     });
   });
 
+  client.on("room.join.request", (data: any) => {
+    const roomJid = normalizeBareJid(String(data.roomJid ?? ""));
+    const applicantJid = normalizeBareJid(String(data.applicantJid ?? ""));
+    if (roomJid && applicantJid) useGroupStore.getState().addJoinRequest(accountId, roomJid, applicantJid);
+  });
+
   // Server-confirmed join — flip joinState to "joined"
   client.on("room.joined", (data: any) => {
     const roomJid = normalizeBareJid(data.roomJid as string);

@@ -668,6 +668,7 @@ install_prosody() {
   cp configs/prosody/mod_lyaotalk_push.lua /usr/lib/prosody-modules/mod_lyaotalk_push/mod_lyaotalk_push.lua
   install -m 644 configs/prosody/mod_lyaotalk_device_api.lua /usr/lib/prosody-modules/mod_lyaotalk_device_api.lua
   install -m 644 configs/prosody/mod_lyaotalk_device_sessions.lua /usr/lib/prosody-modules/mod_lyaotalk_device_sessions.lua
+  install -m 644 configs/prosody/mod_lyaotalk_muc_requests.lua /usr/lib/prosody-modules/mod_lyaotalk_muc_requests.lua
   install -d -m 750 /etc/lyaotalk
   chown root:prosody /etc/lyaotalk
   printf '%s\n' "$DEVICE_AUTH_SECRET" > /etc/lyaotalk/device-auth-secret
