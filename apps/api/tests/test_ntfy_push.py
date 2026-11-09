@@ -40,19 +40,10 @@ class FakeDB:
         return FakeResult(self.row if self.row and "ntfy_subscriptions" in str(query) else None)
 
 
-def test_ntfy_enable_is_per_account_and_idempotent(monkeypatch):
-    monkeypatch.setattr(push, "ntfy_ready", lambda: True)
-    monkeypatch.setattr(push.settings, "NTFY_PUBLIC_URL", "https://ntfy.example.com")
-    db = FakeDB()
-    user = {"account_id": "alice"}
-    first = asyncio.run(push.ntfy_enable.__wrapped__(request=None, db=db, current_user=user))
-    second = asyncio.run(push.ntfy_enable.__wrapped__(request=None, db=db, current_user=user))
-    assert db.committed
-    assert first == second
-    assert first["topic"].startswith("lt_") and len(first["topic"]) == 35
-    assert first["node"].startswith("ntfy_")
-    assert first["topic"] != first["node"]
-    assert asyncio.run(push.ntfy_status(db=db, current_user={"account_id": "bob"})) == {"enabled": False}
+def test_ntfy_enable_is_retired():
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(push.ntfy_enable.__wrapped__(request=None, db=FakeDB(), current_user={"account_id": "alice"}))
+    assert error.value.status_code == 410
 
 
 def test_ntfy_test_requires_own_subscription(monkeypatch):

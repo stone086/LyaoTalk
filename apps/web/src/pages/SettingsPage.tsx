@@ -891,6 +891,7 @@ export default function SettingsPage() {
             {t("settings.notifications")}
           </h2>
           <div className="glass rounded-xl p-4 flex flex-col gap-3">
+            <div className="hidden">
             <label className="flex items-center justify-between gap-3 cursor-pointer">
               <span className="flex flex-col">
                 <span className="text-sm text-surface-200"><PlatformTitle title={t("settings.ntfyTitle")} platform={t("settings.ntfyPlatform")} color="text-success" /></span>
@@ -921,6 +922,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-surface-200/50">{t("settings.ntfyAndroidHint")}</p>
               </div>
             )}
+            </div>
             {(pushSupported || pushBrowser.isIOS) && (
               <label className="flex items-center justify-between cursor-pointer">
                 <div className="flex flex-col">

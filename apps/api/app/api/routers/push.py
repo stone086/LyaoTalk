@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, or_
+from sqlalchemy import select, delete
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
 import json
@@ -25,9 +25,10 @@ import asyncio
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import limiter
-from app.models import PushSubscription, NtfySubscription
+from app.models import Account, PushSubscription, NtfySubscription
 from app.services.ntfy import ntfy_ready, publish_ntfy
 from app.utils.security import get_current_user
+from app.utils.cache import get_redis
 
 logger = logging.getLogger("lyaotalk.push")
 
@@ -82,12 +83,20 @@ def _validate_push_endpoint(endpoint: str) -> None:
     raise HTTPException(status_code=400, detail="Endpoint host is not a recognized push provider")
 
 
+def _device_platform(user_agent: str) -> str:
+    agent = user_agent.lower()
+    if any(name in agent for name in ("iphone", "ipad", "ipod")):
+        return "ios"
+    return "android" if "android" in agent else "other"
+
+
 class PushSubscriptionRequest(BaseModel):
     endpoint: str = Field(..., min_length=10, max_length=2048)
     node: str = Field(..., pattern=r"^[A-Za-z0-9_-]{1,128}$")
     p256dh: str = Field(..., min_length=1, max_length=256)
     auth: str = Field(..., min_length=1, max_length=64)
     user_agent: Optional[str] = Field(None, max_length=512)
+    restore_only: bool = False
 
 
 class PushNotifyRequest(BaseModel):
@@ -125,25 +134,7 @@ async def ntfy_enable(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    if not ntfy_ready():
-        raise HTTPException(status_code=503, detail="ntfy is not configured")
-    account_id = current_user["account_id"]
-    row = await db.get(NtfySubscription, account_id)
-    if row is None:
-        row = NtfySubscription(
-            account_id=account_id,
-            topic=f"lt_{_secrets.token_hex(16)}",
-            node=f"ntfy_{_secrets.token_hex(16)}",
-        )
-        db.add(row)
-        try:
-            await db.commit()
-        except IntegrityError:
-            await db.rollback()
-            row = await db.get(NtfySubscription, account_id)
-            if row is None:
-                raise HTTPException(status_code=409, detail="Please retry ntfy setup")
-    return _ntfy_info(row)
+    raise HTTPException(status_code=410, detail="Use PWA Web Push for device-specific notifications")
 
 
 @router.delete("/push/ntfy")
@@ -184,6 +175,21 @@ async def subscribe(
     if not account_id:
         raise HTTPException(status_code=403, detail="User token required")
     _validate_push_endpoint(payload.endpoint)
+    endpoint_host = (urlparse(payload.endpoint).hostname or "").lower()
+    platform = _device_platform(request.headers.get("user-agent", ""))
+    apple_endpoint = endpoint_host == "web.push.apple.com" or endpoint_host.endswith(".web.push.apple.com")
+    if platform == "ios" and not apple_endpoint:
+        raise HTTPException(status_code=400, detail="iPhone requires Apple Web Push")
+    if platform == "android" and apple_endpoint:
+        raise HTTPException(status_code=400, detail="Android cannot use Apple Web Push")
+
+    await db.execute(select(Account.id).where(Account.id == account_id).with_for_update())
+    if payload.restore_only:
+        current = (await db.execute(
+            select(PushSubscription).where(PushSubscription.account_id == account_id)
+        )).scalars().first()
+        if current is None or current.node != payload.node or current.endpoint != payload.endpoint:
+            return {"status": "inactive"}
 
     # A node identifies exactly one registered account/device. A different
     # account may not claim an existing node even if it guesses its value.
@@ -193,13 +199,12 @@ async def subscribe(
     owner = existing.scalar_one_or_none()
     if owner and owner.account_id != account_id:
         raise HTTPException(status_code=409, detail="Push node already registered")
-    # Replace stale endpoint or node for this account only.
+    # One account has exactly one active notification channel. Explicit setup
+    # replaces old installations; background restore cannot take over.
     await db.execute(
-        delete(PushSubscription).where(
-            PushSubscription.account_id == account_id,
-            or_(PushSubscription.endpoint == payload.endpoint, PushSubscription.node == payload.node),
-        )
+        delete(PushSubscription).where(PushSubscription.account_id == account_id)
     )
+    await db.execute(delete(NtfySubscription).where(NtfySubscription.account_id == account_id))
     sub = PushSubscription(
         account_id=account_id,
         endpoint=payload.endpoint,
@@ -273,6 +278,22 @@ async def notify(
     if not subs:
         return {"status": "ok" if ntfy_sent else "no_subscriptions", "ntfy_sent": ntfy_sent}
 
+    # Prosody may publish the same stanza more than once. Claim its stable
+    # message ID across API workers before sending to any Web Push endpoint.
+    dedup_cache = None
+    dedup_key = None
+    if payload.message_id:
+        dedup_key = "webpush:message:" + hashlib.sha256(
+            (payload.node + ":" + payload.message_id).encode()
+        ).hexdigest()
+        try:
+            dedup_cache = await get_redis()
+            if not await dedup_cache.set(dedup_key, "1", ex=86400, nx=True):
+                return {"status": "duplicate", "sent": 0}
+        except Exception as exc:
+            logger.warning("webpush_dedup_unavailable error=%s", type(exc).__name__)
+            dedup_cache = None
+
     # Send Web Push to each subscription
     try:
         from pywebpush import webpush, WebPushException
@@ -321,6 +342,11 @@ async def notify(
     # provider cannot stall the API event loop or other device deliveries.
     outcomes = await asyncio.gather(*(send_one(sub) for sub in subs))
     sent = sum(status == "sent" for status, _ in outcomes)
+    if sent == 0 and dedup_cache is not None and dedup_key is not None:
+        try:
+            await dedup_cache.delete(dedup_key)
+        except Exception:
+            pass
     failed_endpoints = [endpoint for status, endpoint in outcomes if status == "expired"]
 
     # Clean up dead subscriptions

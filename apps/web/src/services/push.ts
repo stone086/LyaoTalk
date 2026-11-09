@@ -42,21 +42,24 @@ export async function restoreXmppPush(accountId: string): Promise<void> {
   const subscription = await registration.pushManager.getSubscription();
   const client = getClient(accountId);
   if (!subscription || !client?.connected) return;
-  await client.setPushEnabled(true, pushNode(accountId));
-  await registerBackendSubscription(accountId, subscription);
+  if (await registerBackendSubscription(accountId, subscription, true)) {
+    await client.setPushEnabled(true, pushNode(accountId));
+  }
 }
 
-async function registerBackendSubscription(accountId: string, subscription: PushSubscription): Promise<void> {
+async function registerBackendSubscription(accountId: string, subscription: PushSubscription, restoreOnly = false): Promise<boolean> {
   const p256dhBuf = subscription.getKey("p256dh");
   const authBuf = subscription.getKey("auth");
   if (!p256dhBuf || !authBuf) throw new Error("Push subscription keys unavailable");
-  await api.post("/push/subscribe", {
+  const { data } = await api.post<{ status: string }>("/push/subscribe", {
     endpoint: subscription.endpoint,
     node: pushNode(accountId),
     p256dh: arrayBufferToBase64(p256dhBuf),
     auth: arrayBufferToBase64(authBuf),
     user_agent: navigator.userAgent,
+    restore_only: restoreOnly,
   }, { headers: { "X-LyaoTalk-Account-Id": accountId } });
+  return data.status === "ok";
 }
 
 function urlBase64ToArrayBuffer(base64String: string): ArrayBuffer {

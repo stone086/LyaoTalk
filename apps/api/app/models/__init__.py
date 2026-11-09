@@ -165,7 +165,10 @@ class AuditLog(Base):
 class PushSubscription(Base):
     """Web Push subscription for PWA push notifications."""
     __tablename__ = "push_subscriptions"
-    __table_args__ = (UniqueConstraint("account_id", "endpoint", name="uq_push_subscriptions_account_endpoint"),)
+    __table_args__ = (
+        UniqueConstraint("account_id", "endpoint", name="uq_push_subscriptions_account_endpoint"),
+        UniqueConstraint("account_id", name="uq_push_subscriptions_one_per_account"),
+    )
 
     id = Column(String, primary_key=True, default=gen_uuid)
     account_id = Column(String, ForeignKey("accounts.id", ondelete="CASCADE"), nullable=False, index=True)
