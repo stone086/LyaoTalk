@@ -515,7 +515,9 @@ export default function MessageView({ conversationId }: { conversationId: string
   const withProgress = useCallback(async <T,>(name: string, task: (report: TransferProgress) => Promise<T>): Promise<T> => {
     const id = ++uploadProgressSerial.current;
     let latestDetails: TransferDetails | undefined;
+    let finished = false;
     const report: TransferProgress = (percent, details) => {
+      if (finished) return;
       latestDetails = details ?? latestDetails;
       setUploadProgress((items) => ({ ...items, [id]: { name, percent, details: latestDetails } }));
     };
@@ -523,6 +525,7 @@ export default function MessageView({ conversationId }: { conversationId: string
     try {
       const result = await task(report);
       report(100);
+      finished = true;
       window.setTimeout(() => setUploadProgress((items) => {
         const next = { ...items };
         delete next[id];
@@ -530,6 +533,7 @@ export default function MessageView({ conversationId }: { conversationId: string
       }), 800);
       return result;
     } catch (error) {
+      finished = true;
       setUploadProgress((items) => {
         const next = { ...items };
         delete next[id];
