@@ -407,6 +407,7 @@ export const useChatStore = create<ChatState>()(
             return { ...msg, ...patch };
           });
           if (!touched) return s;
+          if (patch.timestamp !== undefined) updated.sort((a, b) => a.timestamp - b.timestamp);
           const conv = s.conversations[conversationId];
           const isLatest = updated[updated.length - 1]?.id === messageId;
           return {
@@ -414,9 +415,15 @@ export const useChatStore = create<ChatState>()(
               ...s.messages,
               [conversationId]: updated,
             },
-            conversations: conv && isLatest && patch.body !== undefined
-              ? { ...s.conversations, [conversationId]: { ...conv, lastMessage: patch.body } }
-              : s.conversations,
+            conversations: conv && patch.timestamp !== undefined
+              ? { ...s.conversations, [conversationId]: {
+                  ...conv,
+                  lastMessage: updated[updated.length - 1]?.body ?? conv.lastMessage,
+                  lastMessageAt: updated[updated.length - 1]?.timestamp ?? conv.lastMessageAt,
+                } }
+              : conv && isLatest && patch.body !== undefined
+                ? { ...s.conversations, [conversationId]: { ...conv, lastMessage: patch.body } }
+                : s.conversations,
           };
         }),
 

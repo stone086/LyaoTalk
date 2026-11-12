@@ -473,8 +473,18 @@ export function initXmppBridge(client: XmppClient) {
 
     // Find or create conversation
     const convId = generateConversationId(accountId, from);
-    if (isGroupContext && useChatStore.getState().messages[convId]?.some((m) => m.id === message.id)) {
-      if (message.stanzaId) useChatStore.getState().updateMessage(convId, message.id, { stanzaId: message.stanzaId, occupantJid: message.from });
+    const existingGroupMessage = isGroupContext
+      ? useChatStore.getState().messages[convId]?.find((m) => m.id === message.id)
+      : undefined;
+    if (existingGroupMessage) {
+      const patch = {
+        ...(message.stanzaId ? { stanzaId: message.stanzaId, occupantJid: message.from } : {}),
+        ...(message.delayed && message.timestamp !== existingGroupMessage.timestamp ? { timestamp: message.timestamp } : {}),
+      };
+      if (Object.keys(patch).length) {
+        useChatStore.getState().updateMessage(convId, message.id, patch);
+        if ("timestamp" in patch) cacheMessages([{ ...existingGroupMessage, ...patch }]).catch(() => {});
+      }
       return;
     }
     const existingConv = useChatStore.getState().conversations[convId];
@@ -773,7 +783,14 @@ export function initXmppBridge(client: XmppClient) {
     const peerJid = isGroup ? from : isOwn ? normalizeBareJid(message.to) : from;
     if (!isValidBareJid(peerJid) || peerJid === ownJid) return;
     const convId = generateConversationId(accountId, peerJid);
-    if (useChatStore.getState().messages[convId]?.some((m) => m.id === message.id)) return;
+    const existingArchivedMessage = useChatStore.getState().messages[convId]?.find((m) => m.id === message.id);
+    if (existingArchivedMessage) {
+      if (existingArchivedMessage.timestamp !== message.timestamp) {
+        useChatStore.getState().updateMessage(convId, message.id, { timestamp: message.timestamp });
+        cacheMessages([{ ...existingArchivedMessage, timestamp: message.timestamp }]).catch(() => {});
+      }
+      return;
+    }
     if (!isMessageWithinRetention(message.timestamp)) return;
     // Deleting a conversation must not be undone by an old server archive page.
     if (message.timestamp <= (useChatStore.getState().clearedBefore?.[convId] ?? 0)) return;

@@ -14,6 +14,7 @@ export function useMAM(peerJid: string, conversationId: string) {
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const messages = useChatStore((s) => s.messages[conversationId] ?? []);
   const clearedBefore = useChatStore((s) => s.clearedBefore[conversationId] ?? 0);
+  const isGroup = useChatStore((s) => s.conversations[conversationId]?.type === "group");
 
   const fetchHistory = useCallback(async () => {
     if (!activeAccountId || loading || !hasMore) return;
@@ -49,9 +50,9 @@ export function useMAM(peerJid: string, conversationId: string) {
         resolve();
       });
 
-      client.fetchMAM(peerJid, { before, limit: 30, start: clearedBefore || undefined });
+      client.fetchMAM(peerJid, { before, limit: 30, start: clearedBefore || undefined, type: isGroup ? "groupchat" : "chat" });
     });
-  }, [activeAccountId, peerJid, conversationId, loading, hasMore, oldestStanzaId, messages, clearedBefore]);
+  }, [activeAccountId, peerJid, conversationId, loading, hasMore, oldestStanzaId, messages, clearedBefore, isGroup]);
 
   return { fetchHistory, loading, hasMore };
 }

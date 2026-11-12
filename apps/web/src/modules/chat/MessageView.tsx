@@ -597,6 +597,9 @@ export default function MessageView({ conversationId }: { conversationId: string
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const accountConnected = useAccountStore((s) => s.accounts.find((account) => account.id === s.activeAccountId)?.connected ?? false);
   const conversation = useChatStore((s) => s.conversations[conversationId]);
+  const roomJoinState = useGroupStore((s) => activeAccountId && conversation?.peerJid
+    ? s.rooms[`${activeAccountId}::${conversation.peerJid}`]?.joinState
+    : undefined);
   const upsertRoom = useGroupStore((s) => s.upsertRoom);
   const peerContact = useRosterStore((s) =>
     activeAccountId && conversation?.peerJid ? s.getContact(activeAccountId, conversation.peerJid) : undefined
@@ -642,10 +645,12 @@ export default function MessageView({ conversationId }: { conversationId: string
   const recentMamQueryRef = useRef("");
 
   useEffect(() => {
-    if (!accountConnected || !activeAccountId || !conversation?.peerJid || conversation.type !== "private") {
+    if (!accountConnected || !activeAccountId || !conversation?.peerJid) {
       recentMamQueryRef.current = "";
       return;
     }
+    if (conversation.type === "group" && roomJoinState !== "joined") return;
+    if (conversation.type !== "private" && conversation.type !== "group") return;
     const key = `${activeAccountId}:${conversationId}`;
     if (recentMamQueryRef.current === key) return;
     const client = getClient(activeAccountId);
@@ -653,8 +658,8 @@ export default function MessageView({ conversationId }: { conversationId: string
     recentMamQueryRef.current = key;
     // Offline delivery and local cache can each miss a stanza. Reconcile the
     // newest archive page even when this conversation already has messages.
-    client.fetchMAM(conversation.peerJid, { latest: true, limit: 100 });
-  }, [accountConnected, activeAccountId, conversation?.peerJid, conversation?.type, conversationId]);
+    client.fetchMAM(conversation.peerJid, { latest: true, limit: 100, type: conversation.type === "group" ? "groupchat" : "chat" });
+  }, [accountConnected, activeAccountId, conversation?.peerJid, conversation?.type, conversationId, roomJoinState]);
   const forwardCandidates = allConversations
     .filter((c) => c.accountId === activeAccountId && c.id !== conversationId)
     .sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0));

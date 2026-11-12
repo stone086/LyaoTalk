@@ -66,6 +66,8 @@ export interface XmppMessage {
   to: string;
   body: string;
   timestamp: number;
+  /** The server supplied an original timestamp for a replayed message. */
+  delayed?: boolean;
   type: "chat" | "groupchat";
   stanzaId?: string;
   replyTo?: string;
@@ -569,6 +571,7 @@ export class XmppClient {
       }
 
       if (body || omemo) {
+        const delayedTimestamp = parseXmppDelayTimestamp(realStanza) ?? (realStanza === stanza ? null : parseXmppDelayTimestamp(stanza));
         const replyNode = realStanza.querySelector('reply[xmlns="urn:xmpp:reply:0"]');
         const replaceNode = realStanza.querySelector('replace[xmlns="urn:xmpp:message-correct:0"]');
         const msg: XmppMessage = {
@@ -576,7 +579,8 @@ export class XmppClient {
           from,
           to: realStanza.getAttribute("to") ?? this.config.jid,
           body: body || "[OMEMO message]",
-          timestamp: Date.now(),
+          timestamp: delayedTimestamp ?? Date.now(),
+          delayed: delayedTimestamp !== null,
           type: type as "chat" | "groupchat",
           stanzaId,
           replyTo: replyNode?.getAttribute("id") ?? undefined,
@@ -1608,8 +1612,8 @@ export class XmppClient {
     const iq = this._$iq({ type: "set", to: isGroupchat ? targetJid : undefined })
       .c("query", { xmlns: "urn:xmpp:mam:2", queryid: queryId })
       .c("x", { xmlns: "jabber:x:data", type: "submit" })
-      .c("field", { var: "FORM_TYPE", type: "hidden" }).c("value").t("urn:xmpp:mam:2").up().up()
-      .c("field", { var: "with" }).c("value").t(targetJid).up().up();
+      .c("field", { var: "FORM_TYPE", type: "hidden" }).c("value").t("urn:xmpp:mam:2").up().up();
+    if (!isGroupchat) iq.c("field", { var: "with" }).c("value").t(targetJid).up().up();
     if (options.start) {
       iq.c("field", { var: "start" }).c("value").t(new Date(options.start).toISOString()).up().up();
     }
