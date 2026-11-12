@@ -40,26 +40,14 @@ class FakeDB:
         return FakeResult(self.row if self.row and "ntfy_subscriptions" in str(query) else None)
 
 
-def test_ntfy_enable_is_retired():
-    with pytest.raises(HTTPException) as error:
-        asyncio.run(push.ntfy_enable.__wrapped__(request=None, db=FakeDB(), current_user={"account_id": "alice"}))
-    assert error.value.status_code == 410
-
-
-def test_ntfy_test_requires_own_subscription(monkeypatch):
-    called = []
-
-    async def publish(topic):
-        called.append(topic)
-        return True
-
-    monkeypatch.setattr(push, "publish_ntfy", publish)
-    db = FakeDB(NtfySubscription(account_id="alice", topic="lt_" + "a" * 32, node="ntfy_" + "b" * 32))
-    with pytest.raises(HTTPException) as error:
-        asyncio.run(push.ntfy_test.__wrapped__(request=None, db=db, current_user={"account_id": "bob"}))
-    assert error.value.status_code == 404 and called == []
-    asyncio.run(push.ntfy_test.__wrapped__(request=None, db=db, current_user={"account_id": "alice"}))
-    assert called == ["lt_" + "a" * 32]
+def test_ntfy_enable_creates_subscription_and_reuses_it(monkeypatch):
+    monkeypatch.setattr(push, "ntfy_ready", lambda: True)
+    db = FakeDB()
+    first = asyncio.run(push.ntfy_enable.__wrapped__(request=None, db=db, current_user={"account_id": "alice"}))
+    second = asyncio.run(push.ntfy_enable.__wrapped__(request=None, db=db, current_user={"account_id": "alice"}))
+    assert first == second
+    assert first["enabled"] and first["topic"].startswith("lt_")
+    assert db.committed
 
 
 def test_notify_dispatches_ntfy_without_web_subscription(monkeypatch):

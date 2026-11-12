@@ -439,6 +439,33 @@ export const pluginsApi = {
   disable: (id: string) => api.post(`/plugins/${id}/disable`).then((r) => r.data),
 };
 
+export interface DailyNewsItem {
+  rank: number;
+  title: string;
+  summary: string;
+  source: string;
+  url: string;
+  image: string | null;
+  published_at: string;
+  coverage: number;
+  also_reported_by: string[];
+}
+
+export interface DailyNewsPayload {
+  date: string;
+  timezone: string;
+  generated_at: string;
+  next_update: string;
+  stale: boolean;
+  items: DailyNewsItem[];
+  sources: Array<{ name: string; url: string }>;
+  candidate_count: number;
+}
+
+export const newsApi = {
+  top10: () => api.get<DailyNewsPayload>("/news/top10").then((response) => response.data),
+};
+
 // AI
 export const aiApi = {
   summarize: (messages: string[], conversationId?: string) =>

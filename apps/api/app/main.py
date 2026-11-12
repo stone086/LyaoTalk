@@ -24,6 +24,7 @@ from app.api.routers import (
     messages,
     map_search,
     metrics,
+    news,
     plugins,
     preview,
     push,
@@ -75,6 +76,7 @@ app = FastAPI(
         {"name": "calls", "description": "Call history APIs. User token required."},
         {"name": "messages", "description": "Message search and indexing APIs. Admin token required."},
         {"name": "plugins", "description": "Plugin lifecycle APIs. Admin token required."},
+        {"name": "news", "description": "Members-only daily global news Top 10. User token required."},
         {"name": "ai", "description": "AI utility APIs. Admin token required."},
         {"name": "admin", "description": "System status and audit APIs. Admin token required."},
         {"name": "realtime", "description": "WebSocket realtime bridge endpoints."},
@@ -208,6 +210,7 @@ app.include_router(calls.router, tags=["calls"])
 app.include_router(messages.router, prefix="/messages", tags=["messages"])
 app.include_router(map_search.router, tags=["map"])
 app.include_router(plugins.router, prefix="/plugins", tags=["plugins"])
+app.include_router(news.router, prefix="/news", tags=["news"])
 app.include_router(ai.router, prefix="/ai", tags=["ai"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"], dependencies=admin_dep)
 app.include_router(push.router, tags=["push"])

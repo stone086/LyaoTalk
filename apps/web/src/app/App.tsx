@@ -10,7 +10,7 @@ import LoginPage from "@/pages/LoginPage";
 import ChatPage from "@/pages/ChatPage";
 import SettingsPage from "@/pages/SettingsPage";
 import AdminPage from "@/pages/AdminPage";
-import PluginsPage from "@/pages/PluginsPage";
+import NewsPage from "@/pages/NewsPage";
 import StarredPage from "@/pages/StarredPage";
 import CallHistoryPage from "@/pages/CallHistoryPage";
 import DiscoveryPage from "@/pages/DiscoveryPage";
@@ -67,7 +67,8 @@ function AppInner() {
             }
           />
           <Route path="settings" element={<SettingsPage />} />
-          <Route path="plugins" element={<PluginsPage />} />
+          <Route path="news" element={<NewsPage />} />
+          <Route path="plugins" element={<Navigate to="/news" replace />} />
           <Route path="starred" element={<StarredPage />} />
           <Route path="calls" element={<CallHistoryPage />} />
           <Route path="discovery" element={<DiscoveryPage />} />

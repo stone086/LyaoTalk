@@ -21,6 +21,7 @@ export default function MainLayout() {
   const [searchParams] = useSearchParams();
   const hasActiveConversation = !!conversationId;
   const isChatSurfaceRoute = location.pathname === "/" || location.pathname.startsWith("/chat");
+  const isNewsRoute = location.pathname === "/news" || location.pathname.startsWith("/news/");
   const shouldHideLeftPanelOnMobile = hasActiveConversation || !isChatSurfaceRoute;
   const shouldHideContentOnMobile = isChatSurfaceRoute && !hasActiveConversation;
 
@@ -45,7 +46,7 @@ export default function MainLayout() {
         className={clsx(
           "conversation-sidebar relative min-w-0 flex-col border-r border-subtle bg-surface-900/50 md:w-64 md:flex-shrink-0",
           !shouldHideLeftPanelOnMobile && "flex-1 md:flex-none",
-          shouldHideLeftPanelOnMobile ? "hidden md:flex" : "flex"
+          isNewsRoute ? "hidden" : shouldHideLeftPanelOnMobile ? "hidden md:flex" : "flex"
         )}
       >
         <TopBar compact />

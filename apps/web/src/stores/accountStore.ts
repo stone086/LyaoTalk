@@ -36,7 +36,8 @@ export function normalizeAccountJid(jid: string): string {
 
 function dedupeAccounts(accounts: XmppAccount[]): XmppAccount[] {
   const byJid = new Map<string, XmppAccount>();
-  for (const account of accounts) {
+  for (const account of Array.isArray(accounts) ? accounts : []) {
+    if (!account || typeof account.jid !== "string") continue;
     const key = normalizeAccountJid(account.jid);
     if (!key) continue;
     const existing = byJid.get(key);
@@ -141,7 +142,7 @@ export const useAccountStore = create<AccountState>()(
         const persisted = persistedState as Partial<AccountState> | undefined;
         // A socket cannot survive a page reload. Never restore its old
         // connected flag from localStorage while reconnect is still pending.
-        const accounts = dedupeAccounts(persisted?.accounts ?? []).map((account) => ({
+        const accounts = dedupeAccounts(Array.isArray(persisted?.accounts) ? persisted.accounts : []).map((account) => ({
           ...account,
           connected: false,
         }));

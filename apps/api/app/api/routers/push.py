@@ -134,7 +134,22 @@ async def ntfy_enable(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    raise HTTPException(status_code=410, detail="Use PWA Web Push for device-specific notifications")
+    if not ntfy_ready():
+        raise HTTPException(status_code=503, detail="ntfy is not configured")
+    account_id = current_user["account_id"]
+    await db.execute(select(Account.id).where(Account.id == account_id).with_for_update())
+    row = await db.get(NtfySubscription, account_id)
+    if row is None:
+        row = NtfySubscription(
+            account_id=account_id,
+            topic=f"lt_{_secrets.token_hex(16)}",
+            node=f"ntfy_{_secrets.token_hex(16)}",
+        )
+        db.add(row)
+    # Keep one active background notification channel per account.
+    await db.execute(delete(PushSubscription).where(PushSubscription.account_id == account_id))
+    await db.commit()
+    return _ntfy_info(row)
 
 
 @router.delete("/push/ntfy")
@@ -145,21 +160,6 @@ async def ntfy_disable(
     await db.execute(delete(NtfySubscription).where(NtfySubscription.account_id == current_user["account_id"]))
     await db.commit()
     return {"enabled": False}
-
-
-@router.post("/push/ntfy/test")
-@limiter.limit("5/minute")
-async def ntfy_test(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
-):
-    row = await db.get(NtfySubscription, current_user["account_id"])
-    if row is None:
-        raise HTTPException(status_code=404, detail="ntfy is not enabled")
-    if not await publish_ntfy(row.topic):
-        raise HTTPException(status_code=502, detail="ntfy delivery failed")
-    return {"status": "sent"}
 
 
 @router.post("/push/subscribe")

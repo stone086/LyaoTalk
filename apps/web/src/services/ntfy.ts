@@ -35,10 +35,6 @@ export async function disableNtfy(accountId: string, node: string): Promise<void
   localStorage.removeItem(localNodeKey(accountId));
 }
 
-export async function testNtfy(accountId: string): Promise<void> {
-  await api.post("/push/ntfy/test", {}, accountHeader(accountId));
-}
-
 export async function restoreNtfyPush(accountId: string): Promise<void> {
   const client = getClient(accountId);
   if (!client?.connected) return;

@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
-  MessageSquare, Settings, Puzzle, Plus, Wifi, WifiOff, Star, Phone, Globe, LogOut,
+  MessageSquare, Settings, Newspaper, Plus, Wifi, WifiOff, Star, Phone, Globe, LogOut,
 } from "lucide-react";
 import { getAccountPassword, useAccountStore } from "@/stores/accountStore";
 import { clsx } from "clsx";
@@ -21,7 +21,7 @@ const navItems = [
   { to: "/calls", icon: Phone, key: "nav.calls" },
   { to: "/discovery", icon: Globe, key: "nav.discovery" },
   { to: "/settings", icon: Settings, key: "nav.settings" },
-  { to: "/plugins", icon: Puzzle, key: "nav.plugins" },
+  { to: "/news", icon: Newspaper, key: "nav.news" },
 ];
 
 function PresenceBadge({ presence }: { presence: string }) {

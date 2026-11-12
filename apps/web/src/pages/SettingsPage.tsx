@@ -18,7 +18,7 @@ import { accountsApi, authApi, devicesApi, RememberedDevice, setUserToken, setUs
 import Avatar from "@/components/Avatar";
 import { apiSocket } from "@/services/apiSocket";
 import { isPushSubscribed, isPushSupported, subscribeToPush, unsubscribeFromPush } from "@/services/push";
-import { disableNtfy, enableNtfy, getNtfyStatus, testNtfy, type NtfyStatus } from "@/services/ntfy";
+import { disableNtfy, enableNtfy, getNtfyStatus, type NtfyStatus } from "@/services/ntfy";
 import { collectBrowserCapabilities } from "@/services/browserCompatibility";
 import { markIntentionalDisconnect } from "@/services/connectionSupervisor";
 import { logoutAccount } from "@/services/logoutAccount";
@@ -425,7 +425,10 @@ function DeviceManager({ accountId }: { accountId: string }) {
     let cancelled = false;
     setLoading(true);
     devicesApi.list(accountId).then((result) => {
-      if (!cancelled) { setDevices(result.devices); setError(false); }
+      if (!cancelled) {
+        setDevices(Array.isArray(result.devices) ? result.devices : []);
+        setError(false);
+      }
     }).catch(() => { if (!cancelled) setError(true); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
@@ -501,7 +504,6 @@ export default function SettingsPage() {
   const [ntfyInfo, setNtfyInfo] = useState<NtfyStatus>({ enabled: false });
   const [ntfyPending, setNtfyPending] = useState(false);
   const [ntfyError, setNtfyError] = useState<string | null>(null);
-  const [showPushInstallGuide, setShowPushInstallGuide] = useState(false);
   const pushBrowser = collectBrowserCapabilities();
 
   useEffect(() => {
@@ -538,6 +540,7 @@ export default function SettingsPage() {
     try {
       if (checked) {
         setNtfyInfo(await enableNtfy(activeAccountId));
+        setPushEnabled(false);
       } else if (ntfyInfo.enabled) {
         await disableNtfy(activeAccountId, ntfyInfo.node);
         setNtfyInfo({ enabled: false });
@@ -553,7 +556,6 @@ export default function SettingsPage() {
     setPushResult(null);
     setPushError(null);
     if (checked && pushBrowser.isIOS && !pushBrowser.isStandalonePwa) {
-      setShowPushInstallGuide(true);
       return;
     }
     void handleTogglePush(checked);
@@ -565,6 +567,7 @@ export default function SettingsPage() {
       if (checked) {
         const ok = await subscribeToPush();
         setPushEnabled(ok);
+        if (ok) setNtfyInfo({ enabled: false });
         setPushResult(ok ? "enabled" : "failed");
         if (!ok) toast.error(t("toast.pushFailed"));
         else toast.success(t("toast.pushEnabled"));
@@ -891,7 +894,6 @@ export default function SettingsPage() {
             {t("settings.notifications")}
           </h2>
           <div className="glass rounded-xl p-4 flex flex-col gap-3">
-            <div className="hidden">
             <label className="flex items-center justify-between gap-3 cursor-pointer">
               <span className="flex flex-col">
                 <span className="text-sm text-surface-200"><PlatformTitle title={t("settings.ntfyTitle")} platform={t("settings.ntfyPlatform")} color="text-success" /></span>
@@ -913,15 +915,14 @@ export default function SettingsPage() {
                     <Copy size={16} />
                   </button>
                 </div>
-                <button type="button" className="btn-ghost self-start text-xs" disabled={ntfyPending}
-                  onClick={() => {
-                    if (!activeAccountId) return;
-                    void testNtfy(activeAccountId).then(() => toast.success(t("settings.ntfyTestSent")))
-                      .catch(() => toast.error(t("settings.ntfyFailed")));
-                  }}>{t("settings.ntfyTest")}</button>
-                <p className="text-xs text-surface-200/50">{t("settings.ntfyAndroidHint")}</p>
               </div>
             )}
+            <div role="note" className="rounded-lg bg-surface-800/40 p-3 text-xs text-surface-200">
+              <p className="font-medium text-surface-100">{t("settings.androidPushGuideTitle")}</p>
+              <ol className="mt-2 list-decimal space-y-1 pl-4">
+                <li><a href="/downloads/ntfy-1.25.2-fdroid-release.apk" download className="text-accent-soft underline hover:text-accent">{t("settings.androidPushGuideBrowser")}</a></li>
+                <li>{t("settings.androidPushGuideAllow")}</li>
+              </ol>
             </div>
             {(pushSupported || pushBrowser.isIOS) && (
               <label className="flex items-center justify-between cursor-pointer">
@@ -945,16 +946,16 @@ export default function SettingsPage() {
             {pushPending && <p role="status" className="text-xs text-surface-200">{t("settings.pushPending")}</p>}
             {pushResult && <p role={pushResult === "failed" ? "alert" : "status"} className="text-xs text-surface-200">{t(pushResult === "failed" ? "toast.pushFailed" : "toast.pushEnabled")}</p>}
             {pushError && <p role="alert" className="break-words text-xs text-danger">{pushError}</p>}
-            {showPushInstallGuide && pushBrowser.isIOS && !pushBrowser.isStandalonePwa && (
-              <div role="note" className="rounded-lg border border-[#7c6af7]/40 bg-[#7c6af7]/10 p-3 text-xs text-surface-200">
-                <p className="font-medium">{t("settings.iosPushGuideTitle")}</p>
+            <div role="note" className="border-t border-subtle pt-3 text-xs text-surface-200">
+              <div className="rounded-lg bg-surface-800/40 p-3">
+                <p className="font-medium text-surface-100">{t("settings.iosPushGuideTitle")}</p>
                 <ol className="mt-2 list-decimal space-y-1 pl-4">
                   <li>{t("settings.iosPushGuideInstall")}</li>
                   <li>{t("settings.iosPushGuideOpen")}</li>
                   <li>{t("settings.iosPushGuideAllow")}</li>
                 </ol>
               </div>
-            )}
+            </div>
             {[
               { label: t("settings.notifyBrowser"), key: "browser" },
               { label: t("settings.notifySound"), key: "sound" },
