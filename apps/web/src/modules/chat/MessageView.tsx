@@ -265,7 +265,9 @@ function MessageBubble({
             {msg.encrypted && <Lock size={11} className="text-success" aria-label={t("omemo.enabled")} />}
             {msg.encrypted === false && <span className="inline-flex items-center gap-1 text-[10px] text-warn"><LockOpen size={11} />{t("chat.notEncrypted")}</span>}
             {msg.decryptFailed && <span className="text-[10px] text-danger">{t("chat.decryptFailed")}</span>}
-            <span className="text-[10px] text-surface-200/45" title={formatMsgTimeFull(msg.timestamp)}>{formatMsgTime(msg.timestamp)}</span>
+            <span className="text-[10px] text-surface-200/45" title={formatMsgTimeFull(msg.timestamp)}>
+              {parseSharedLocation(msg.body) ? format(msg.timestamp, "yyyy-MM-dd HH:mm") : formatMsgTime(msg.timestamp)}
+            </span>
             {isOwn && msg.status !== "failed" && <span title={msg.status === "read" ? readLabel : msg.status === "pending" ? t("chat.sending") : sentLabel} aria-label={msg.status === "read" ? readLabel : msg.status === "pending" ? t("chat.sending") : sentLabel} className="text-accent-soft">
               {msg.status === "pending" ? <Clock size={13} /> : msg.status === "read" || msg.status === "delivered" ? <CheckCheck size={13} /> : <Check size={13} />}
             </span>}
