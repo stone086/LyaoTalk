@@ -87,6 +87,7 @@ s2s_stanza_size_limit = 524288  -- 512KB per s2s stanza (slightly more headroom 
 c2s_close_timeout = 5  -- close stalled c2s sessions after 5s of no progress
 
 archive_expires_after = "3d"
+muc_log_expires_after = "3d"
 default_archive_policy = true
 max_archive_query_results = 100
 

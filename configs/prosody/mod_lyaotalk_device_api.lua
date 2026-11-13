@@ -5,6 +5,11 @@ local jid = require "prosody.util.jid"
 local tokenauth = module:depends("tokenauth")
 local secret = module:get_option_string("lyaotalk_device_api_secret")
 assert(secret and #secret >= 32, "lyaotalk_device_api_secret must be configured")
+local device_grant_lifetime = 21 * 24 * 60 * 60
+
+local function device_grant_expired(grant)
+  return grant.created and grant.created + device_grant_lifetime <= os.time()
+end
 
 local function respond(event, status, value)
   event.response.status_code = status
@@ -31,7 +36,8 @@ local function handle(event, action)
     end
     local info = tokenauth.get_token_info(data.token)
     if not info or info.purpose ~= "oauth2" or not info.grant or
-       not info.grant.data or not info.grant.data.lyaotalk_device then
+       not info.grant.data or not info.grant.data.lyaotalk_device or
+       device_grant_expired(info.grant) then
       return respond(event, 401, { error = "invalid_token" })
     end
     local username, host = jid.split(info.grant.jid)
@@ -44,7 +50,8 @@ local function handle(event, action)
     end
     local info = tokenauth.get_token_info(data.token)
     if not info or info.purpose ~= "oauth2" or not info.grant or
-       not info.grant.data or not info.grant.data.lyaotalk_device then
+       not info.grant.data or not info.grant.data.lyaotalk_device or
+       device_grant_expired(info.grant) then
       return respond(event, 401, { error = "invalid_token" })
     end
     local username, host = jid.split(info.grant.jid)
@@ -95,7 +102,7 @@ local function handle(event, action)
     if type(name) ~= "string" or #name < 1 or #name > 80 then
       return respond(event, 400, { error = "invalid_name" })
     end
-    local grant_ttl = 365 * 24 * 60 * 60
+    local grant_ttl = device_grant_lifetime
     local token_ttl = 30 * 24 * 60 * 60
     local account_jid = username .. "@" .. module.host
     local grant, err = tokenauth.create_grant(account_jid, account_jid, grant_ttl, {

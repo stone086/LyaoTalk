@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import time
 import uuid
@@ -56,7 +57,14 @@ async def lifespan(app: FastAPI):
     logger.info("api_starting", extra={"version": get_app_version()})
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    from app.services.ntfy_queue import ntfy_queue_worker
+    ntfy_worker = asyncio.create_task(ntfy_queue_worker())
     yield
+    ntfy_worker.cancel()
+    try:
+        await ntfy_worker
+    except asyncio.CancelledError:
+        pass
     logger.info("api_shutting_down")
     await engine.dispose()
 

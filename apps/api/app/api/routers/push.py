@@ -27,6 +27,7 @@ from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.models import Account, PushSubscription, NtfySubscription
 from app.services.ntfy import ntfy_ready, publish_ntfy
+from app.services.ntfy_queue import enqueue_ntfy, cancel_ntfy, enqueue_webpush, cancel_webpush
 from app.utils.security import get_current_user
 from app.utils.cache import get_redis
 
@@ -53,13 +54,9 @@ _ALLOWED_PUSH_HOSTS = {
 }
 
 
-def _notification_tag(node: str, secret: str) -> str:
-    """Group only notifications for the same opaque device node.
-
-    A fixed tag merges notifications from separate logged-in accounts. Never
-    expose the node itself or a JID to the browser notification surface.
-    """
-    digest = hmac.new(secret.encode(), node.encode(), hashlib.sha256).hexdigest()
+def _notification_tag(node: str, secret: str, message_id: str | None = None) -> str:
+    """Keep each message distinct without exposing its ID or account node."""
+    digest = hmac.new(secret.encode(), f"{node}:{message_id or ''}".encode(), hashlib.sha256).hexdigest()
     return f"lyaotalk-{digest[:23]}"
 
 
@@ -107,6 +104,31 @@ class PushNotifyRequest(BaseModel):
     badge: Optional[int] = Field(None, ge=0, le=99999)
     message_id: Optional[str] = Field(None, pattern=r"^[0-9a-f]{64}$")
     secret: str = Field(..., min_length=1, max_length=512)
+    deliver_only: bool = False
+
+
+class PushReadRequest(BaseModel):
+    account_jid: str = Field(..., max_length=256)
+    message_id: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    secret: str = Field(..., min_length=1, max_length=512)
+
+
+@router.post("/push/read", include_in_schema=False)
+async def mark_message_read(payload: PushReadRequest, db: AsyncSession = Depends(get_db)):
+    expected = settings.PUSH_SHARED_SECRET or None
+    if not expected or not _secrets.compare_digest(payload.secret, expected):
+        raise HTTPException(status_code=403, detail="Invalid push secret")
+    row = (await db.execute(
+        select(NtfySubscription).join(Account).where(Account.jid == payload.account_jid)
+    )).scalar_one_or_none()
+    if row:
+        await cancel_ntfy(row.topic, payload.message_id)
+    web_row = (await db.execute(
+        select(PushSubscription).join(Account).where(Account.jid == payload.account_jid)
+    )).scalar_one_or_none()
+    if web_row and web_row.node:
+        await cancel_webpush(web_row.node, payload.message_id)
+    return {"status": "ok"}
 
 
 def _ntfy_info(row: NtfySubscription) -> dict[str, str | bool]:
@@ -265,9 +287,15 @@ async def notify(
         select(NtfySubscription).where(NtfySubscription.node == payload.node)
     )).scalar_one_or_none()
     ntfy_sent = False
-    if ntfy_row:
+    if ntfy_row and not payload.deliver_only:
         # ntfy failures must not prevent existing Web Push delivery.
-        ntfy_sent = await publish_ntfy(ntfy_row.topic, message_id=payload.message_id)
+        if payload.message_id:
+            try:
+                ntfy_sent = await enqueue_ntfy(ntfy_row.topic, payload.message_id)
+            except Exception as exc:
+                logger.warning("ntfy_enqueue_failed error=%s", type(exc).__name__)
+        else:
+            ntfy_sent = await publish_ntfy(ntfy_row.topic)
 
     # Route using the opaque per-account node from the XEP-0357 publish IQ.
     # The publishing server's stanza `from` is its domain, not the recipient.
@@ -277,6 +305,14 @@ async def notify(
     subs = result.scalars().all()
     if not subs:
         return {"status": "ok" if ntfy_sent else "no_subscriptions", "ntfy_sent": ntfy_sent}
+
+    if payload.message_id and not payload.deliver_only:
+        try:
+            await enqueue_webpush(payload.model_dump(exclude={"secret", "deliver_only"}))
+        except Exception as exc:
+            logger.warning("webpush_enqueue_failed error=%s", type(exc).__name__)
+            return {"status": "queue_unavailable", "ntfy_sent": ntfy_sent}
+        return {"status": "queued", "ntfy_sent": ntfy_sent}
 
     # Prosody may publish the same stanza more than once. Claim its stable
     # message ID across API workers before sending to any Web Push endpoint.
@@ -310,7 +346,7 @@ async def notify(
         "title": payload.title,
         "body": payload.body,
         "badge": payload.badge,
-        "tag": _notification_tag(payload.node, expected),
+        "tag": _notification_tag(payload.node, expected, payload.message_id),
     })
 
     async def send_one(sub: PushSubscription) -> tuple[str, str]:

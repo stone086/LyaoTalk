@@ -6,6 +6,11 @@ module:hook("authentication-success", function (event)
   local info = handler and handler.token_info
   local grant = info and info.grant
   if grant and grant.id then
+    if grant.data and grant.data.lyaotalk_device and grant.created and
+       grant.created + 21 * 24 * 60 * 60 <= os.time() then
+      session:close({ condition = "not-authorized", text = "Device authorization expired" })
+      return
+    end
     session.lyaotalk_device_grant_id = grant.id
   end
 end)
