@@ -16,7 +16,7 @@ DATA_ROOT = os.environ.get("LYAOTALK_PROSODY_DATA_ROOT", "/var/lib/prosody")
 
 def _shell(*args: str) -> dict:
     result = subprocess.run(
-        ["/usr/bin/prosodyctl", "shell", *args],
+        [b"/usr/bin/prosodyctl", b"shell", *(arg.encode("utf-8") for arg in args)],
         capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15, check=False,
     )
     ok = result.returncode == 0 and "Error:" not in result.stdout and "console:" not in result.stdout
@@ -71,6 +71,15 @@ def handle(conn: socket.socket) -> None:
                 users = [line.strip() for line in result["stdout"].splitlines()
                          if line.strip().endswith(f"@{domain}")]
                 response = {"returncode": 0, "users": users[:1000]}
+        elif action == "online_sessions":
+            result = _shell("c2s", "show")
+            response = {"returncode": result["returncode"], "output": result["stdout"][:12000]}
+        elif action == "room_members":
+            room = request["room"]
+            if not isinstance(room, str) or not re.fullmatch(r"[\w.-]{1,64}", room):
+                raise ValueError("invalid room")
+            result = _shell("muc", "affiliations", f"{room}@conference.{domain}")
+            response = {"returncode": result["returncode"], "output": result["stdout"][:12000]}
         elif action == "destroy_room":
             room = request["room"]
             if not isinstance(room, str) or not re.fullmatch(r"[\w.-]{1,64}", room):
@@ -90,8 +99,8 @@ def handle(conn: socket.socket) -> None:
                 if not isinstance(password, str) or not 6 <= len(password) <= 256 or any(ord(c) < 32 or ord(c) == 127 for c in password):
                     raise ValueError("invalid password")
                 result = subprocess.run(
-                    ["/usr/bin/prosodyctl", "register", username, domain, password],
-                    capture_output=True, text=True, timeout=15, check=False,
+                    [b"/usr/bin/prosodyctl", b"register", username.encode("utf-8"), domain.encode("utf-8"), password.encode("utf-8")],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15, check=False,
                 )
                 response = {"returncode": result.returncode, "stdout": result.stdout[:2048], "stderr": result.stderr[:2048]}
             elif action == "change_password":
@@ -99,8 +108,8 @@ def handle(conn: socket.socket) -> None:
                 if not isinstance(password, str) or not 6 <= len(password) <= 256 or any(ord(c) < 32 or ord(c) == 127 for c in password):
                     raise ValueError("invalid password")
                 result = subprocess.run(
-                    ["/usr/bin/prosodyctl", "passwd", f"{username}@{domain}"],
-                    input=f"{password}\n{password}\n", capture_output=True, text=True, timeout=15, check=False,
+                    [b"/usr/bin/prosodyctl", b"passwd", f"{username}@{domain}".encode("utf-8")],
+                    input=f"{password}\n{password}\n", capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15, check=False,
                 )
                 response = {"returncode": result.returncode, "stderr": "password update failed" if result.returncode else ""}
             elif action in ("disable_user", "enable_user", "delete_user"):
@@ -108,6 +117,9 @@ def handle(conn: socket.socket) -> None:
                 result = _shell("user", command, f"{username}@{domain}")
                 response = {"returncode": 0 if result["returncode"] == 0 and "OK:" in result["stdout"] else 1,
                             "stderr": "user action failed" if result["returncode"] else ""}
+            elif action == "end_sessions":
+                result = _shell("c2s", "close", f"{username}@{domain}")
+                response = {"returncode": 0 if result["returncode"] == 0 and "Error:" not in result["stdout"] else 1}
             else:
                 raise ValueError("invalid action")
     except FileNotFoundError:

@@ -44,6 +44,7 @@ class HelperAdminActionsTest(unittest.TestCase):
             run.return_value.stderr = ""
             helper._shell("muc", "list", "conference.2-yc.com")
             self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+            self.assertTrue(all(isinstance(arg, bytes) for arg in run.call_args.args[0]))
 
     def test_rejects_invalid_user_before_shell(self):
         with patch.object(helper, "_shell") as shell:

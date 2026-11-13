@@ -142,6 +142,29 @@ async def admin_reset_user_password(
     return {"ok": True}
 
 
+@router.get("/online-sessions")
+async def admin_online_sessions():
+    response = await _prosody_request({"action": "online_sessions"})
+    rows = []
+    for line in response["output"].splitlines()[1:]:
+        columns = [column.strip() for column in line.split("|")]
+        if len(columns) >= 6 and "@" in columns[1]:
+            rows.append({"jid": columns[1], "status": columns[4], "security": columns[5]})
+    return rows
+
+
+@router.post("/users/{username}/end-sessions")
+async def admin_end_user_sessions(
+    username: str, request: Request, actor: str = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    username = _validated_username(username)
+    await _prosody_request({"action": "end_sessions", "username": username})
+    await write_audit(db, actor=actor, action="prosody_sessions_ended", target_type="account",
+                      target_id=f"{username}@{settings.XMPP_DOMAIN}", client_ip=get_client_ip(request))
+    return {"ok": True}
+
+
 @router.get("/groups")
 async def admin_groups(db: AsyncSession = Depends(get_db)):
     """List rooms from Prosody's persistent MUC storage, with app linkage counts."""
@@ -167,6 +190,18 @@ async def admin_destroy_group(
     await write_audit(db, actor=actor, action="prosody_room_destroyed", target_type="group",
                       target_id=jid, client_ip=get_client_ip(request))
     return {"ok": True}
+
+
+@router.get("/groups/{room}/members")
+async def admin_group_members(room: str):
+    room = _validated_username(room)
+    response = await _prosody_request({"action": "room_members", "room": room})
+    rows = []
+    for line in response["output"].splitlines()[1:]:
+        columns = [column.strip() for column in line.split("|")]
+        if len(columns) >= 2 and columns[0] in ("owner", "admin", "member", "outcast") and "@" in columns[1]:
+            rows.append({"jid": columns[1], "affiliation": columns[0]})
+    return rows
 
 
 @router.get("/push-status")

@@ -493,7 +493,11 @@ export const adminApi = {
     api.post(`/admin/user-actions/${action}/${encodeURIComponent(username)}`).then((r) => r.data),
   resetUserPassword: (username: string, password: string) =>
     api.post(`/admin/users/${encodeURIComponent(username)}/password`, { password }).then((r) => r.data),
+  onlineSessions: () => api.get("/admin/online-sessions").then((r) => r.data),
+  endUserSessions: (username: string) =>
+    api.post(`/admin/users/${encodeURIComponent(username)}/end-sessions`).then((r) => r.data),
   groups: () => api.get("/admin/groups").then((r) => r.data),
+  groupMembers: (room: string) => api.get(`/admin/groups/${encodeURIComponent(room)}/members`).then((r) => r.data),
   destroyGroup: (room: string) => api.post(`/admin/groups/${encodeURIComponent(room)}/destroy`).then((r) => r.data),
   pushStatus: () => api.get("/admin/push-status").then((r) => r.data),
   pushSubscriptions: () => api.get("/admin/push-subscriptions").then((r) => r.data),

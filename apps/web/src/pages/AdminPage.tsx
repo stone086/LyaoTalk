@@ -34,6 +34,7 @@ export default function AdminPage() {
   const [resetTarget, setResetTarget] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [groupBusy, setGroupBusy] = useState<string | null>(null);
+  const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
 
   const { data: status } = useQuery({
     queryKey: ["admin-status"],
@@ -60,6 +61,15 @@ export default function AdminPage() {
   });
   const { data: groups = [], isLoading: groupsLoading, isError: groupsError } = useQuery({
     queryKey: ["admin-groups"], queryFn: adminApi.groups, enabled: authed && tab === "groups",
+  });
+  const { data: onlineSessions = [] } = useQuery({
+    queryKey: ["admin-online-sessions"], queryFn: adminApi.onlineSessions,
+    enabled: authed && tab === "accounts", refetchInterval: 15000,
+  });
+  const { data: groupMembers = [] } = useQuery({
+    queryKey: ["admin-group-members", selectedRoom],
+    queryFn: () => adminApi.groupMembers(selectedRoom!.split("@")[0]),
+    enabled: authed && tab === "groups" && !!selectedRoom,
   });
   const { data: pushStatus } = useQuery({
     queryKey: ["admin-push-status"], queryFn: adminApi.pushStatus, enabled: authed && tab === "push",
@@ -141,6 +151,20 @@ export default function AdminPage() {
       toast.error(error instanceof Error ? error.message : "解散失败");
     } finally {
       setGroupBusy(null);
+    }
+  };
+
+  const endUserSessions = async (account: { jid: string; username: string }) => {
+    if (window.prompt(`输入 ${account.jid} 确认强制下线：`) !== account.jid) return;
+    setAccountBusy(account.jid);
+    try {
+      await adminApi.endUserSessions(account.username);
+      await queryClient.invalidateQueries({ queryKey: ["admin-online-sessions"] });
+      toast.success("在线会话已断开");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "断开失败");
+    } finally {
+      setAccountBusy(null);
     }
   };
 
@@ -295,6 +319,12 @@ export default function AdminPage() {
             <input className="input-field text-sm" placeholder="按 JID 搜索" value={accountQuery} onChange={(event) => setAccountQuery(event.target.value)} />
           </div>
           <p className="text-xs text-surface-200/50">停用会阻止 Prosody 登录，并同步停用对应的网站账号。删除会永久移除 Prosody 账号；网站历史数据仍保留。</p>
+          <div className="glass rounded-xl p-4 text-sm text-surface-200/70">
+            当前在线会话：{onlineSessions.length}
+            <div className="mt-2 flex flex-wrap gap-2 text-xs">{(onlineSessions as { jid: string }[]).map((session, index) => (
+              <span key={`${session.jid}:${index}`} className="rounded-lg bg-surface-800 px-2 py-1 break-all">{session.jid}</span>
+            ))}</div>
+          </div>
           <form onSubmit={(event) => void createUser(event)} className="glass rounded-xl p-4 flex flex-wrap gap-2 items-end">
             <label className="text-xs">新账号名<input className="input-field mt-1 text-sm" value={newUser.username} onChange={(event) => setNewUser({ ...newUser, username: event.target.value })} required minLength={1} maxLength={64} /></label>
             <label className="text-xs">初始密码<input className="input-field mt-1 text-sm" type="password" autoComplete="new-password" value={newUser.password} onChange={(event) => setNewUser({ ...newUser, password: event.target.value })} required minLength={6} /></label>
@@ -310,6 +340,7 @@ export default function AdminPage() {
                 <button type="button" disabled={accountBusy !== null} onClick={() => void manageUser(account, "enable")} className="btn-ghost text-xs text-success">启用</button>
                 <button type="button" disabled={accountBusy !== null} onClick={() => void manageUser(account, "disable")} className="btn-ghost text-xs text-warn">停用</button>
                 <button type="button" disabled={accountBusy !== null} onClick={() => { setResetTarget(account.jid); setResetPassword(""); }} className="btn-ghost text-xs">重设密码</button>
+                <button type="button" disabled={accountBusy !== null} onClick={() => void endUserSessions(account)} className="btn-ghost text-xs">强制下线</button>
                 <button type="button" disabled={accountBusy !== null} onClick={() => void manageUser(account, "delete")} className="btn-ghost text-xs text-danger">删除</button>
               </div>
             </div>
@@ -330,9 +361,17 @@ export default function AdminPage() {
           {(groups as { jid: string; account_count: number }[]).map((group) => (
             <div key={group.jid} className="glass rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
               <span className="text-sm break-all">{group.jid}</span><span className="text-xs text-surface-200/50 whitespace-nowrap">关联账号 {group.account_count}</span>
+              <button type="button" className="btn-ghost text-xs" onClick={() => setSelectedRoom(selectedRoom === group.jid ? null : group.jid)}>查看成员</button>
               <button type="button" className="btn-ghost text-xs text-danger" disabled={groupBusy !== null} onClick={() => void destroyGroup(group.jid)}>解散群组</button>
             </div>
           ))}
+          {selectedRoom && <div className="glass rounded-xl p-4 space-y-2">
+            <h3 className="text-sm font-semibold break-all">{selectedRoom} · 成员身份</h3>
+            {(groupMembers as { jid: string; affiliation: string }[]).map((member) => (
+              <div key={member.jid} className="flex justify-between gap-2 text-sm"><span className="break-all">{member.jid}</span><span className="text-surface-200/50">{member.affiliation}</span></div>
+            ))}
+            {!groupMembers.length && <p className="text-xs text-surface-200/50">暂无持久成员记录</p>}
+          </div>}
           {!groupsLoading && !groupsError && !groups.length && <p className="text-sm text-surface-200/50">暂无群组记录</p>}
         </section>}
 
