@@ -486,6 +486,14 @@ export const adminApi = {
     api.get("/admin/audit-logs", { params: { limit, offset } }).then((r) => r.data),
   login: (username: string, password: string) =>
     api.post("/auth/admin/login", { username, password }).then((r) => r.data),
+  accounts: (query = "") => api.get("/admin/accounts", { params: { query } }).then((r) => r.data),
+  setAccountEnabled: (id: string, enabled: boolean) =>
+    api.post(`/admin/accounts/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`).then((r) => r.data),
+  groups: () => api.get("/admin/groups").then((r) => r.data),
+  pushStatus: () => api.get("/admin/push-status").then((r) => r.data),
+  activity: () => api.get("/admin/dashboard/activity").then((r) => r.data),
+  storageUsage: () => api.get("/admin/dashboard/storage-usage").then((r) => r.data),
+  userStats: () => api.get("/admin/dashboard/user-stats").then((r) => r.data),
 };
 
 // Auth

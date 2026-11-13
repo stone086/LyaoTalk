@@ -183,6 +183,19 @@ def mark_account_disabled(account_id: str) -> bool:
         return False
 
 
+def clear_account_disabled(account_id: str) -> bool:
+    """Remove the session fence when an administrator re-enables an account."""
+    r = _get_redis()
+    if r is None:
+        return False
+    try:
+        r.delete(f"{DISABLED_ACCOUNT_KEY_PREFIX}{account_id}")
+        return True
+    except Exception as exc:
+        logger.warning("account_enable_fence_failed: %s", type(exc).__name__)
+        return False
+
+
 def _is_account_disabled(account_id: str) -> bool:
     r = _get_redis()
     if r is None:

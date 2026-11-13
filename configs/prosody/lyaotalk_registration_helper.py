@@ -7,6 +7,7 @@ import socket
 import stat
 import subprocess
 import hashlib
+from urllib.parse import unquote
 
 
 DOMAIN = os.environ.get("LYAOTALK_XMPP_DOMAIN", "")
@@ -41,35 +42,43 @@ def handle(conn: socket.socket) -> None:
         data += chunk
     try:
         request = json.loads(data.split(b"\n", 1)[0])
-        username = request["username"]
         domain = request["domain"]
         action = request.get("action", "register")
-        if not isinstance(username, str) or (not re.fullmatch(r"[\w.-]{1,64}", username) or len(username.encode("utf-8")) > 64):
-            raise ValueError("invalid username")
         if domain != DOMAIN:
             raise ValueError("invalid domain")
-        if action == "credential_revision":
-            response = {"returncode": 0, "revision": credential_revision(username, domain)}
-        elif action == "register":
-            password = request["password"]
-            if not isinstance(password, str) or not 6 <= len(password) <= 256 or any(ord(c) < 32 or ord(c) == 127 for c in password):
-                raise ValueError("invalid password")
-            result = subprocess.run(
-                ["/usr/bin/prosodyctl", "register", username, domain, password],
-                capture_output=True, text=True, timeout=15, check=False,
-            )
-            response = {"returncode": result.returncode, "stdout": result.stdout[:2048], "stderr": result.stderr[:2048]}
-        elif action == "change_password":
-            password = request["password"]
-            if not isinstance(password, str) or not 6 <= len(password) <= 256 or any(ord(c) < 32 or ord(c) == 127 for c in password):
-                raise ValueError("invalid password")
-            result = subprocess.run(
-                ["/usr/bin/prosodyctl", "passwd", f"{username}@{domain}"],
-                input=f"{password}\n{password}\n", capture_output=True, text=True, timeout=15, check=False,
-            )
-            response = {"returncode": result.returncode, "stderr": "password update failed" if result.returncode else ""}
+        if action == "list_rooms":
+            path = os.path.join(DATA_ROOT, _encoded_name(f"conference.{domain}"), "config")
+            rooms = []
+            for entry in os.scandir(path):
+                if entry.name.endswith(".dat") and entry.is_file(follow_symlinks=False):
+                    rooms.append(f"{unquote(entry.name[:-4])}@conference.{domain}")
+            response = {"returncode": 0, "rooms": sorted(rooms)[:500]}
         else:
-            raise ValueError("invalid action")
+            username = request["username"]
+            if not isinstance(username, str) or (not re.fullmatch(r"[\w.-]{1,64}", username) or len(username.encode("utf-8")) > 64):
+                raise ValueError("invalid username")
+            if action == "credential_revision":
+                response = {"returncode": 0, "revision": credential_revision(username, domain)}
+            elif action == "register":
+                password = request["password"]
+                if not isinstance(password, str) or not 6 <= len(password) <= 256 or any(ord(c) < 32 or ord(c) == 127 for c in password):
+                    raise ValueError("invalid password")
+                result = subprocess.run(
+                    ["/usr/bin/prosodyctl", "register", username, domain, password],
+                    capture_output=True, text=True, timeout=15, check=False,
+                )
+                response = {"returncode": result.returncode, "stdout": result.stdout[:2048], "stderr": result.stderr[:2048]}
+            elif action == "change_password":
+                password = request["password"]
+                if not isinstance(password, str) or not 6 <= len(password) <= 256 or any(ord(c) < 32 or ord(c) == 127 for c in password):
+                    raise ValueError("invalid password")
+                result = subprocess.run(
+                    ["/usr/bin/prosodyctl", "passwd", f"{username}@{domain}"],
+                    input=f"{password}\n{password}\n", capture_output=True, text=True, timeout=15, check=False,
+                )
+                response = {"returncode": result.returncode, "stderr": "password update failed" if result.returncode else ""}
+            else:
+                raise ValueError("invalid action")
     except FileNotFoundError:
         response = {"returncode": 1, "stderr": "account unavailable"}
     except (KeyError, ValueError, TypeError, json.JSONDecodeError):

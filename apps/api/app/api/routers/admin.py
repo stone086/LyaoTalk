@@ -1,14 +1,16 @@
 import asyncio
 import socket
+import json
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from app.core.database import get_db
-from app.models import AuditLog, Account, Message, Attachment
+from app.models import AuditLog, Account, Message, Attachment, Conversation, PushSubscription, NtfySubscription
 from app.core.config import settings
 from app.core.version import get_app_version
-from app.utils.security import get_current_admin
+from app.utils.security import get_current_admin, mark_account_disabled, clear_account_disabled
+from app.services.audit import write_audit, get_client_ip
 from app.api.routers.metrics import web_vitals_summary as get_web_vitals_summary
 from minio import Minio
 import redis.asyncio as redis
@@ -18,6 +20,100 @@ import redis.asyncio as redis
 # pull system stats, probe service health, etc.
 router = APIRouter(dependencies=[Depends(get_current_admin)])
 APP_VERSION = get_app_version()
+
+
+@router.get("/accounts")
+async def admin_accounts(
+    query: str = Query("", max_length=128),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(Account).order_by(Account.created_at.desc()).limit(limit).offset(offset)
+    if query.strip():
+        stmt = stmt.where(Account.jid.ilike(f"%{query.strip()}%"))
+    accounts = (await db.execute(stmt)).scalars().all()
+    return [{"id": row.id, "jid": row.jid, "display_name": row.display_name,
+             "is_enabled": row.is_enabled, "created_at": str(row.created_at) if row.created_at else None}
+            for row in accounts]
+
+
+@router.post("/accounts/{account_id}/disable")
+async def admin_disable_account(
+    account_id: str, request: Request, actor: str = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await db.get(Account, account_id)
+    if not account:
+        raise HTTPException(404, "Account not found")
+    if account.is_enabled:
+        account.is_enabled = False
+        await db.commit()
+        if not mark_account_disabled(account_id):
+            raise HTTPException(503, "Account disabled; session fence unavailable")
+        await write_audit(db, actor=actor, action="account_disabled", target_type="account",
+                          target_id=account_id, detail={"jid": account.jid}, client_ip=get_client_ip(request))
+    return {"ok": True}
+
+
+@router.post("/accounts/{account_id}/enable")
+async def admin_enable_account(
+    account_id: str, request: Request, actor: str = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    account = await db.get(Account, account_id)
+    if not account:
+        raise HTTPException(404, "Account not found")
+    if not clear_account_disabled(account_id):
+        raise HTTPException(503, "Session fence unavailable")
+    if not account.is_enabled:
+        account.is_enabled = True
+        await db.commit()
+        await write_audit(db, actor=actor, action="account_enabled", target_type="account",
+                          target_id=account_id, detail={"jid": account.jid}, client_ip=get_client_ip(request))
+    return {"ok": True}
+
+
+@router.get("/groups")
+async def admin_groups(db: AsyncSession = Depends(get_db)):
+    """List rooms from Prosody's persistent MUC storage, with app linkage counts."""
+    def list_prosody_rooms() -> list[str]:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(5)
+            connection.connect("/run/lyaotalk-prosody.sock")
+            connection.sendall((json.dumps({"action": "list_rooms", "domain": settings.XMPP_DOMAIN}) + "\n").encode())
+            response = b""
+            while b"\n" not in response and len(response) < 65536:
+                chunk = connection.recv(4096)
+                if not chunk:
+                    break
+                response += chunk
+        data = json.loads(response.split(b"\n", 1)[0])
+        if data.get("returncode") != 0:
+            raise ValueError("Prosody room list unavailable")
+        return data["rooms"]
+
+    try:
+        room_jids = await asyncio.to_thread(list_prosody_rooms)
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        raise HTTPException(503, "Prosody room list unavailable")
+    result = await db.execute(
+        select(Conversation.peer_jid, func.count(func.distinct(Conversation.account_id)).label("accounts"))
+        .where(Conversation.type == "group")
+        .group_by(Conversation.peer_jid)
+        .order_by(Conversation.peer_jid)
+    )
+    counts = {row.peer_jid: row.accounts for row in result}
+    return [{"jid": jid, "account_count": counts.get(jid, 0)} for jid in room_jids]
+
+
+@router.get("/push-status")
+async def admin_push_status(db: AsyncSession = Depends(get_db)):
+    web_push = await db.scalar(select(func.count()).select_from(PushSubscription)) or 0
+    ntfy = await db.scalar(select(func.count()).select_from(NtfySubscription)) or 0
+    return {"web_push_subscriptions": web_push, "ntfy_subscriptions": ntfy,
+            "ntfy_configured": bool(settings.NTFY_INTERNAL_URL and settings.NTFY_PUBLISH_TOKEN),
+            "web_push_configured": bool(settings.VAPID_PRIVATE_KEY and settings.VAPID_PUBLIC_KEY)}
 
 
 @router.get(
