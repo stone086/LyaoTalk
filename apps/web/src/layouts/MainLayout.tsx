@@ -8,6 +8,8 @@ import GroupPanel from "@/modules/group/GroupPanel";
 import TopBar from "@/components/TopBar";
 import RightPanel from "@/components/RightPanel";
 import { useLanguage } from "@/utils/i18n";
+import { useChatStore } from "@/stores/chatStore";
+import { resolveChatRouteId } from "@/utils/chatRoute";
 
 type LeftTab = "chats" | "contacts" | "groups";
 
@@ -15,11 +17,13 @@ export default function MainLayout() {
   const { t } = useLanguage();
   const [leftTab, setLeftTab] = useState<LeftTab>("chats");
   const [showRight, setShowRight] = useState(false);
-  const conversationId = useMatch("/chat/:conversationId")?.params.conversationId;
+  const routeId = useMatch("/chat/:conversationId")?.params.conversationId;
+  const conversations = useChatStore((s) => s.conversations);
+  const conversationId = resolveChatRouteId(routeId, conversations);
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const hasActiveConversation = !!conversationId;
+  const hasActiveConversation = !!routeId;
   const isChatSurfaceRoute = location.pathname === "/" || location.pathname.startsWith("/chat");
   const isNewsRoute = location.pathname === "/news" || location.pathname.startsWith("/news/");
   const shouldHideLeftPanelOnMobile = hasActiveConversation || !isChatSurfaceRoute;
@@ -74,7 +78,7 @@ export default function MainLayout() {
 
       <div className={clsx("min-w-0 flex-1 flex-col", shouldHideContentOnMobile ? "hidden md:flex" : "flex")}>
         <TopBar
-          conversationId={conversationId}
+          conversationId={conversationId ?? undefined}
           onNewChat={startChat}
           onToggleRight={() => setShowRight((v) => !v)}
           showRightToggle={!!conversationId}

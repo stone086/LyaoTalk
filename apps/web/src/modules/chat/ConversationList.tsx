@@ -13,12 +13,14 @@ import { messagesApi } from "@/services/api";
 import toast from "react-hot-toast";
 import { isValidBareJid, normalizeBareJid } from "@/utils/helpers";
 import { useShallow } from "zustand/react/shallow";
+import { chatPath, resolveChatRouteId } from "@/utils/chatRoute";
 
 export default function ConversationList({ onStartChat }: { onStartChat?: () => void }) {
   const { lang, t } = useLanguage();
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const conversations = useChatStore(useShallow((s) => Object.values(s.conversations)));
+  const activeConversationId = resolveChatRouteId(conversationId, Object.fromEntries(conversations.map((conv) => [conv.id, true])));
   const composerDrafts = useChatStore((s) => s.composerDrafts);
   const setActive = useChatStore((s) => s.setActiveConversation);
   const deleteConversation = useChatStore((s) => s.deleteConversation);
@@ -35,14 +37,14 @@ export default function ConversationList({ onStartChat }: { onStartChat?: () => 
 
   const handleSelect = (id: string) => {
     setActive(id);
-    navigate(`/chat/${id}`);
+    navigate(chatPath(id));
   };
 
   const handleDelete = async (id: string) => {
     const target = conversations.find((c) => c.id === id);
     if (!target || target.accountId !== activeAccountId) return;
     deleteConversation(id);
-    if (conversationId === id) {
+    if (activeConversationId === id) {
       setActive(null);
       navigate("/chat");
     }
@@ -86,7 +88,7 @@ export default function ConversationList({ onStartChat }: { onStartChat?: () => 
               onClick={() => handleSelect(conv.id)}
               className={clsx(
                 "conversation-row group w-full flex items-center gap-3 px-3 py-2 transition-all duration-100 text-left",
-                conversationId === conv.id
+                activeConversationId === conv.id
                   ? "bg-accent/10 border-r-2 border-accent"
                   : "hover-surface"
               )}

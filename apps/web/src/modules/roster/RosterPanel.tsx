@@ -1,3 +1,4 @@
+import { chatPath } from "@/utils/chatRoute";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useRosterStore, RosterContact } from "@/stores/rosterStore";
@@ -284,7 +285,7 @@ export default function RosterPanel() {
       unreadCount: 0,
       pinned: false,
     });
-    navigate(`/chat/${convId}`);
+    navigate(chatPath(convId));
   };
 
   const addContact = (rawJid = newJid) => {

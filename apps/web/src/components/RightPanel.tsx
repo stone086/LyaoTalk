@@ -14,6 +14,7 @@ import Avatar from "@/components/Avatar";
 import { getClient } from "@/services/xmppAdapter";
 import { isTrustedXmppUploadUrl, trustedFileObjectKey } from "@/services/trustedFilesUrl";
 import { fetchAndDecryptAesgcm, parseAesgcmUrl } from "@/services/aesgcmMedia";
+import { useNavigate } from "react-router-dom";
 
 type RightTab = "info" | "members" | "files" | "starred";
 
@@ -143,6 +144,9 @@ function MembersTab({ roomJid }: { roomJid: string }) {
 
 function InfoTab({ conversation }: { conversation: Conversation }) {
   const { t } = useLanguage();
+  const navigate = useNavigate();
+  const [isRoomOwner, setIsRoomOwner] = useState(false);
+  const [destroyingRoom, setDestroyingRoom] = useState(false);
   const activeAccountId = useAccountStore((s) => s.activeAccountId);
   const connected = useAccountStore((s) => s.accounts.find((a) => a.id === s.activeAccountId)?.connected ?? false);
   const contact = useRosterStore((s) =>
@@ -151,6 +155,39 @@ function InfoTab({ conversation }: { conversation: Conversation }) {
   const room = useGroupStore((s) =>
     activeAccountId ? s.getRoom(activeAccountId, conversation.peerJid) : undefined,
   );
+
+  useEffect(() => {
+    setIsRoomOwner(false);
+    if (conversation.type !== "group" || !activeAccountId || !connected) return;
+    const client = getClient(activeAccountId);
+    if (!client?.connected) return;
+    let cancelled = false;
+    const ownJid = client.config.jid.split("/")[0].toLowerCase();
+    void client.fetchRoomAffiliations(conversation.peerJid, "owner")
+      .then((owners) => { if (!cancelled) setIsRoomOwner(owners.some((jid) => jid.toLowerCase() === ownJid)); })
+      .catch(() => { if (!cancelled) setIsRoomOwner(false); });
+    return () => { cancelled = true; };
+  }, [activeAccountId, connected, conversation.peerJid, conversation.type]);
+
+  const destroyRoom = async () => {
+    if (!activeAccountId || destroyingRoom || !window.confirm(t("group.destroyConfirm"))) return;
+    const client = getClient(activeAccountId);
+    if (!client?.connected) { toast.error(t("account.connectFirst")); return; }
+    setDestroyingRoom(true);
+    try {
+      await client.destroyRoom(conversation.peerJid);
+      try { await client.retractMucBookmark(conversation.peerJid); }
+      catch { toast.error(t("group.bookmarkRemovalFailed")); }
+      useGroupStore.getState().removeRoom(activeAccountId, conversation.peerJid);
+      useChatStore.getState().deleteConversation(conversation.id);
+      navigate("/chat");
+      toast.success(t("group.destroyed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("group.exitFailed"));
+    } finally {
+      setDestroyingRoom(false);
+    }
+  };
 
   useEffect(() => {
     if (conversation.type !== "private" || !activeAccountId || !connected) return;
@@ -205,6 +242,11 @@ function InfoTab({ conversation }: { conversation: Conversation }) {
           <p className="text-xs text-surface-200/40 mb-1">{t("right.type")}</p>
           <p className="text-sm text-surface-50">{t(`right.type.${conversation.type}`)}</p>
         </div>
+        {isRoomOwner && (
+          <button type="button" className="btn-ghost border-default text-danger" disabled={destroyingRoom} onClick={() => void destroyRoom()}>
+            {t("group.destroyRoom")}
+          </button>
+        )}
         {conversation.type === "private" && contact && activeAccountId && (
           <>
             <OmemoTrustButton peerJid={contact.jid} />

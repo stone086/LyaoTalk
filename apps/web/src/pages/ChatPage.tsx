@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import MessageView from "@/modules/chat/MessageView";
 import CallView from "@/modules/call/CallView";
 import GroupCallView from "@/modules/call/GroupCallView";
@@ -8,10 +8,14 @@ import { useLanguage } from "@/utils/i18n";
 import { useChatStore } from "@/stores/chatStore";
 import { callManager, JingleSession } from "@/services/jingle";
 import { groupCallManager, GroupCall } from "@/services/jingle/groupCall";
+import { chatPath, chatRouteId, resolveChatRouteId } from "@/utils/chatRoute";
 
 export default function ChatPage() {
   const { t } = useLanguage();
-  const { conversationId } = useParams();
+  const { conversationId: routeId } = useParams();
+  const navigate = useNavigate();
+  const conversations = useChatStore((s) => s.conversations);
+  const conversationId = resolveChatRouteId(routeId, conversations);
   const setActiveConversation = useChatStore((s) => s.setActiveConversation);
   const [activeCall, setActiveCall] = useState<JingleSession | null>(null);
   const [activeGroupCall, setActiveGroupCall] = useState<GroupCall | null>(null);
@@ -19,6 +23,12 @@ export default function ChatPage() {
   useEffect(() => {
     setActiveConversation(conversationId ?? null);
   }, [conversationId, setActiveConversation]);
+
+  useEffect(() => {
+    if (conversationId && routeId !== chatRouteId(conversationId)) {
+      navigate(chatPath(conversationId), { replace: true });
+    }
+  }, [conversationId, routeId, navigate]);
 
   // Listen for 1:1 calls (register once on mount, clean up on unmount)
   useEffect(() => {

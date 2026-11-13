@@ -1,3 +1,4 @@
+import { chatPath } from "@/utils/chatRoute";
 import { Link } from "react-router-dom";
 import { useChatStore } from "@/stores/chatStore";
 import { useAccountStore } from "@/stores/accountStore";
@@ -50,7 +51,7 @@ export default function StarredPage() {
                   key={msg.id}
                   className="glass rounded-xl p-4"
                 >
-                  <Link to={`/chat/${msg.conversationId}${mid}`} className="flex items-start justify-between gap-3 mb-1 hover:text-accent-soft">
+                  <Link to={`${chatPath(msg.conversationId)}${mid}`} className="flex items-start justify-between gap-3 mb-1 hover:text-accent-soft">
                     <span className="text-xs font-medium text-accent-soft truncate">
                       {conv?.title ?? conv?.peerJid ?? msg.conversationId}
                     </span>
@@ -61,7 +62,7 @@ export default function StarredPage() {
                   {encryptedMedia ? (
                     <AesgcmMedia url={msg.body.trim()} fileName={mediaFileName} plainHref={encryptedMedia.ciphertextUrl} />
                   ) : (
-                    <Link to={`/chat/${msg.conversationId}${mid}`} className="block hover-surface rounded">
+                    <Link to={`${chatPath(msg.conversationId)}${mid}`} className="block hover-surface rounded">
                       <p className="text-sm text-surface-50 leading-relaxed line-clamp-3 break-words">
                         {msg.body || (msg.attachments?.length ? `[${msg.attachments[0].fileName}]` : "")}
                       </p>

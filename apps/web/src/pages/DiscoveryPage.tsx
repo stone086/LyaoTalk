@@ -1,3 +1,4 @@
+import { chatPath } from "@/utils/chatRoute";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Globe, Server, Users, ArrowRight, Loader } from "lucide-react";
@@ -103,7 +104,7 @@ export default function DiscoveryPage() {
       await client.joinRoom(group.jid, nickname);
       void client.publishMucBookmark({ jid: group.jid, name: group.name, nickname, autojoin: true })
         .catch(() => toast.error(t("group.bookmarkSyncFailed")));
-      navigate(`/chat/${conversationId}`);
+      navigate(chatPath(conversationId));
       toast.success(t("group.joined"));
     } catch (error: any) {
       toast.error(error?.message ?? t("group.joinFailed"));

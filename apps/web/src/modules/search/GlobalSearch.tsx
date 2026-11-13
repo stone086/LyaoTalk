@@ -1,3 +1,4 @@
+import { chatPath } from "@/utils/chatRoute";
 import { useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { messagesApi } from "@/services/api";
@@ -135,10 +136,10 @@ export default function GlobalSearch({ onClose }: { onClose: () => void }) {
 
     if (result.type === "message" && result.conversationId) {
       const mid = result.messageId ? `?mid=${encodeURIComponent(result.messageId)}` : "";
-      navigate(`/chat/${result.conversationId}${mid}`);
+      navigate(`${chatPath(result.conversationId)}${mid}`);
     } else if (result.type === "contact" || result.type === "room") {
       const conv = conversations.find((c) => c.peerJid === result.id);
-      if (conv) navigate(`/chat/${conv.id}`);
+      if (conv) navigate(chatPath(conv.id));
     }
     onClose();
   };

@@ -1,3 +1,4 @@
+import { chatPath } from "@/utils/chatRoute";
 import { useNotificationStore, AppNotification, requestNotificationPermission } from "@/stores/notificationStore";
 import { formatDistanceToNow } from "date-fns";
 import { Bell, BellOff, Check, Trash2, MessageSquare, AtSign, Settings, File } from "lucide-react";
@@ -22,7 +23,7 @@ export default function NotificationPanel({ onClose }: { onClose: () => void }) 
   const handleClick = (n: AppNotification) => {
     markRead(n.id);
     if (n.conversationId) {
-      navigate(`/chat/${n.conversationId}`);
+      navigate(chatPath(n.conversationId));
       onClose();
     }
   };

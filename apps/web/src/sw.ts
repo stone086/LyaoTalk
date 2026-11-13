@@ -5,6 +5,7 @@ import { precacheAndRoute, cleanupOutdatedCaches } from "workbox-precaching";
 import { registerRoute, NavigationRoute } from "workbox-routing";
 import { NetworkFirst, NetworkOnly, StaleWhileRevalidate, CacheFirst } from "workbox-strategies";
 import { ExpirationPlugin } from "workbox-expiration";
+import { chatPath } from "./utils/chatRoute";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -73,9 +74,7 @@ self.addEventListener("push", (event: PushEvent) => {
     s.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 200);
   const sanitizedTag = data.tag ? stripCtrl(data.tag) : "lyaotalk-msg";
 
-  // conversationId goes into the URL via encodeURIComponent below, but we
-  // also reject obvious junk (slashes, control chars) here so the URL we
-  // construct is sane even before encoding.
+  // Reject junk before using the ID to derive an opaque route token.
   const cleanConvId = (data.conversationId || "")
     .replace(/[\u0000-\u001f\u007f\\/]/g, "")
     .slice(0, 128);
@@ -88,7 +87,7 @@ self.addEventListener("push", (event: PushEvent) => {
     tag: sanitizedTag,
     data: {
       conversationId: cleanConvId,
-      url: cleanConvId ? `/chat/${encodeURIComponent(cleanConvId)}` : "/",
+      url: cleanConvId ? chatPath(cleanConvId) : "/",
     },
   };
 

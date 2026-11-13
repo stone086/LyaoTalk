@@ -1,3 +1,4 @@
+import { chatPath } from "@/utils/chatRoute";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAccountStore } from "@/stores/accountStore";
@@ -59,7 +60,7 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
         unreadCount: 0,
         pinned: false,
       });
-      navigate(`/chat/${convId}`);
+      navigate(chatPath(convId));
     } catch (err: any) {
       // Bridge sets joinState=error on the room.join.failed event;
       // here we just surface a toast.
@@ -121,6 +122,7 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
 
   const destroy = async () => {
     if (!activeAccountId || leaving) return;
+    if (!window.confirm(t("group.destroyConfirm"))) return;
     const client = getClient(activeAccountId);
     if (!client) return;
     setLeaving(true);
@@ -164,7 +166,7 @@ function RoomCard({ room, onInvite }: { room: MucRoom; onInvite: (room: MucRoom)
       isRemoved && "opacity-50",
     )} onClick={isJoined || isJoining ? () => {
       const convId = generateConversationId(activeAccountId ?? "", room.jid);
-      navigate(`/chat/${convId}`);
+      navigate(chatPath(convId));
     } : join}>
       <div className="w-10 h-10 rounded-xl bg-surface-800 flex items-center justify-center flex-shrink-0">
         <Hash size={16} className="text-surface-200/60" />
@@ -306,7 +308,7 @@ export default function GroupPanel() {
       void client.publishMucBookmark({ jid: roomJid, name: roomName, nickname, autojoin: true })
         .catch(() => toast.error(t("group.bookmarkSyncFailed")));
       // Bridge handler also flips state to "joined" on the room.joined event.
-      navigate(`/chat/${convId}`);
+      navigate(chatPath(convId));
       return true;
     } catch (err: any) {
       const reason = err?.message ?? t("group.joinFailed");
