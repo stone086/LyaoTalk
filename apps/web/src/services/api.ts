@@ -122,6 +122,7 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   const store = useAccountStore.getState();
   const publicAuthRequest = /^\/auth\/(?:user-token|admin\/login|register|config)(?:$|[/?])/.test(config.url ?? "");
+  const adminRequest = /^\/admin(?:\/|$)/.test(config.url ?? "");
 
   let accountId =
     (config as typeof config & { __lyaotalkAccountId?: string | null }).__lyaotalkAccountId ??
@@ -137,8 +138,9 @@ api.interceptors.request.use((config) => {
 
   console.debug("[API] using accountId:", accountId);
 
-  const token = publicAuthRequest ? null :
-    getUserToken(accountId) ?? sessionStorage.getItem("admin_token");
+  const token = publicAuthRequest ? null : adminRequest
+    ? sessionStorage.getItem("admin_token")
+    : getUserToken(accountId);
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -147,7 +149,7 @@ api.interceptors.request.use((config) => {
     console.warn("[API] NO TOKEN ❌", accountId);
   }
 
-  (config as typeof config & { __lyaotalkAccountId?: string | null }).__lyaotalkAccountId = publicAuthRequest ? null : accountId;
+  (config as typeof config & { __lyaotalkAccountId?: string | null }).__lyaotalkAccountId = publicAuthRequest || adminRequest ? null : accountId;
 
   if (config.headers && "X-LyaoTalk-Account-Id" in config.headers) {
     delete config.headers["X-LyaoTalk-Account-Id"];
