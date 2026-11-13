@@ -5,18 +5,19 @@ import { getUserToken, messagesApi } from "@/services/api";
 
 const HISTORY_RETENTION_DAYS_KEY = "liaot-history-retention-days";
 const DEFAULT_RETENTION_DAYS = 1;
-const ALLOWED_RETENTION_DAYS = new Set([1, 3, 7]);
+const ALLOWED_RETENTION_DAYS = new Set([1, 3]);
 
 export function getStoredHistoryRetentionDays(): number {
   const raw = localStorage.getItem(HISTORY_RETENTION_DAYS_KEY);
   if (!raw) return DEFAULT_RETENTION_DAYS;
   const parsed = Number(raw);
+  if (parsed > 3) return 3;
   if (!ALLOWED_RETENTION_DAYS.has(parsed)) return DEFAULT_RETENTION_DAYS;
   return parsed;
 }
 
 export function setStoredHistoryRetentionDays(days: number) {
-  const safe = ALLOWED_RETENTION_DAYS.has(days) ? days : DEFAULT_RETENTION_DAYS;
+  const safe = days > 3 ? 3 : ALLOWED_RETENTION_DAYS.has(days) ? days : DEFAULT_RETENTION_DAYS;
   localStorage.setItem(HISTORY_RETENTION_DAYS_KEY, String(safe));
 }
 

@@ -10,14 +10,14 @@ describe("history retention choices", () => {
     localStorage.setItem("liaot-history-retention-days", "0");
     expect(getStoredHistoryRetentionDays()).toBe(1);
     localStorage.setItem("liaot-history-retention-days", "30");
-    expect(getStoredHistoryRetentionDays()).toBe(1);
+    expect(getStoredHistoryRetentionDays()).toBe(3);
   });
 
-  it("keeps only one, three, or seven days", () => {
+  it("caps old seven-day choices at three days", () => {
     setStoredHistoryRetentionDays(7);
-    expect(getStoredHistoryRetentionDays()).toBe(7);
+    expect(getStoredHistoryRetentionDays()).toBe(3);
     setStoredHistoryRetentionDays(30);
-    expect(getStoredHistoryRetentionDays()).toBe(1);
+    expect(getStoredHistoryRetentionDays()).toBe(3);
   });
 
   it("does not restore server archive messages beyond the selected period", () => {

@@ -45,7 +45,7 @@ function deriveSameOriginWsUrl(configured?: string): string {
 
 const MENTION_NOTIFY_KEY = "liaot-notify-mention";
 const DENSITY_KEY = "liaot-message-density";
-const HISTORY_RETENTION_OPTIONS = [0, 1, 3, 7, 30];
+const HISTORY_RETENTION_OPTIONS = [0, 1, 3];
 
 function PlatformTitle({ title, platform, color }: { title: string; platform: string; color: string }) {
   const start = title.indexOf(platform);
@@ -999,7 +999,6 @@ export default function SettingsPage() {
               >
                 <option value={1}>{t("settings.historyRetention1Day")}</option>
                 <option value={3}>{t("settings.historyRetention3Days")}</option>
-                <option value={7}>{t("settings.historyRetention1Week")}</option>
               </select>
             </div>
             <div className="flex items-center justify-between">
