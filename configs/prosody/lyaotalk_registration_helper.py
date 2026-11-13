@@ -17,7 +17,7 @@ DATA_ROOT = os.environ.get("LYAOTALK_PROSODY_DATA_ROOT", "/var/lib/prosody")
 def _shell(*args: str) -> dict:
     result = subprocess.run(
         ["/usr/bin/prosodyctl", "shell", *args],
-        capture_output=True, text=True, timeout=15, check=False,
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15, check=False,
     )
     ok = result.returncode == 0 and "Error:" not in result.stdout and "console:" not in result.stdout
     return {"returncode": 0 if ok else 1, "stdout": result.stdout[:16384],

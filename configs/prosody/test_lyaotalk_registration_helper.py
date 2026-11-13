@@ -37,6 +37,14 @@ class HelperAdminActionsTest(unittest.TestCase):
         with patch.object(helper, "_shell", return_value={"returncode": 0, "stdout": "sdc@2-yc.com\nfoo@other.test\nOK: 1 users\n"}):
             self.assertEqual(self.call({"action": "list_users"})["users"], ["sdc@2-yc.com"])
 
+    def test_shell_decodes_prosody_output_as_utf8(self):
+        with patch.object(helper.subprocess, "run") as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = "资料库@conference.2-yc.com\n"
+            run.return_value.stderr = ""
+            helper._shell("muc", "list", "conference.2-yc.com")
+            self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+
     def test_rejects_invalid_user_before_shell(self):
         with patch.object(helper, "_shell") as shell:
             result = self.call({"action": "delete_user", "username": "../sdc"})

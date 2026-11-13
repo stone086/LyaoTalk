@@ -237,12 +237,12 @@ export default function AdminPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 border-b border-subtle pb-3">
+        <nav className="flex w-fit max-w-full flex-wrap gap-1 rounded-2xl bg-surface-800/50 p-1.5" aria-label="管理后台栏目">
           {([ ["overview", "概览"], ["accounts", "账号"], ["groups", "群组"], ["push", "推送"], ["config", "配置"], ["audit", "审计日志"] ] as const).map(([key, label]) => (
-            <button key={key} type="button" onClick={() => setTab(key)}
-              className={clsx("rounded-lg px-3 py-2 text-sm", tab === key ? "bg-accent text-white" : "hover-surface text-surface-200/70")}>{label}</button>
+            <button key={key} type="button" onClick={() => setTab(key)} aria-current={tab === key ? "page" : undefined}
+              className={clsx("rounded-xl px-4 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-soft", tab === key ? "bg-accent text-white shadow-md shadow-accent/20" : "text-surface-200/60 hover:bg-white/5 hover:text-surface-50")}>{label}</button>
           ))}
-        </div>
+        </nav>
 
         {tab === "overview" && <>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
