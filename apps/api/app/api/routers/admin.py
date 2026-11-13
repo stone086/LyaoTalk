@@ -1,12 +1,14 @@
 import asyncio
 import socket
 import json
+import re
 
 from fastapi import APIRouter, Depends, Query, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from app.core.database import get_db
-from app.models import AuditLog, Account, Message, Attachment, Conversation, PushSubscription, NtfySubscription
+from app.models import AuditLog, Account, AccountPreference, Message, Attachment, Conversation, PushSubscription, NtfySubscription
 from app.core.config import settings
 from app.core.version import get_app_version
 from app.utils.security import get_current_admin, mark_account_disabled, clear_account_disabled
@@ -22,6 +24,45 @@ router = APIRouter(dependencies=[Depends(get_current_admin)])
 APP_VERSION = get_app_version()
 
 
+def _prosody_request_sync(payload: dict) -> dict:
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+        connection.settimeout(20)
+        connection.connect("/run/lyaotalk-prosody.sock")
+        connection.sendall((json.dumps({"domain": settings.XMPP_DOMAIN, **payload}) + "\n").encode())
+        response = b""
+        while b"\n" not in response and len(response) < 65536:
+            chunk = connection.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+    return json.loads(response.split(b"\n", 1)[0])
+
+
+async def _prosody_request(payload: dict) -> dict:
+    try:
+        response = await asyncio.to_thread(_prosody_request_sync, payload)
+        if response.get("returncode") != 0:
+            raise ValueError("Prosody operation failed")
+        return response
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        raise HTTPException(503, "Prosody operation unavailable")
+
+
+class AdminUserCreate(BaseModel):
+    username: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=6, max_length=256)
+
+
+class AdminPasswordReset(BaseModel):
+    password: str = Field(min_length=6, max_length=256)
+
+
+def _validated_username(username: str) -> str:
+    if not re.fullmatch(r"[\w.-]{1,64}", username) or len(username.encode("utf-8")) > 64:
+        raise HTTPException(422, "Invalid username")
+    return username
+
+
 @router.get("/accounts")
 async def admin_accounts(
     query: str = Query("", max_length=128),
@@ -29,74 +70,82 @@ async def admin_accounts(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ):
-    stmt = select(Account).order_by(Account.created_at.desc()).limit(limit).offset(offset)
-    if query.strip():
-        stmt = stmt.where(Account.jid.ilike(f"%{query.strip()}%"))
-    accounts = (await db.execute(stmt)).scalars().all()
-    return [{"id": row.id, "jid": row.jid, "display_name": row.display_name,
-             "is_enabled": row.is_enabled, "created_at": str(row.created_at) if row.created_at else None}
-            for row in accounts]
+    users = (await _prosody_request({"action": "list_users"}))["users"]
+    records = (await db.execute(select(Account).where(Account.domain == settings.XMPP_DOMAIN))).scalars().all()
+    by_jid = {row.jid.lower(): row for row in records}
+    selected = [jid for jid in users if query.strip().lower() in jid.lower()]
+    return [{"id": by_jid[jid.lower()].id if jid.lower() in by_jid else None,
+             "jid": jid, "username": jid.rsplit("@", 1)[0],
+             "display_name": by_jid[jid.lower()].display_name if jid.lower() in by_jid else None,
+             "is_enabled": by_jid[jid.lower()].is_enabled if jid.lower() in by_jid else None,
+             "created_at": str(by_jid[jid.lower()].created_at) if jid.lower() in by_jid and by_jid[jid.lower()].created_at else None}
+            for jid in sorted(selected)[offset:offset + limit]]
 
 
-@router.post("/accounts/{account_id}/disable")
-async def admin_disable_account(
-    account_id: str, request: Request, actor: str = Depends(get_current_admin),
+@router.post("/users")
+async def admin_create_user(
+    data: AdminUserCreate, request: Request, actor: str = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    account = await db.get(Account, account_id)
-    if not account:
-        raise HTTPException(404, "Account not found")
-    if account.is_enabled:
-        account.is_enabled = False
+    username = _validated_username(data.username)
+    jid = f"{username}@{settings.XMPP_DOMAIN}"
+    existing = await db.scalar(select(Account).where(Account.jid == jid))
+    if existing and existing.is_enabled:
+        raise HTTPException(409, "Account already exists")
+    await _prosody_request({"action": "register", "username": username, "password": data.password})
+    if existing:
+        existing.is_enabled = True
+        if not clear_account_disabled(existing.id):
+            raise HTTPException(503, "Account created; session fence unavailable")
+    else:
+        account = Account(jid=jid, domain=settings.XMPP_DOMAIN, is_enabled=True)
+        db.add(account)
+        await db.flush()
+        db.add(AccountPreference(account_id=account.id))
+    await db.commit()
+    await write_audit(db, actor=actor, action="prosody_user_created", target_type="account",
+                      target_id=jid, client_ip=get_client_ip(request))
+    return {"ok": True, "jid": jid}
+
+
+@router.post("/user-actions/{action}/{username}")
+async def admin_manage_user(
+    username: str, action: str, request: Request, actor: str = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    username = _validated_username(username)
+    if action not in ("disable", "enable", "delete"):
+        raise HTTPException(404, "Unknown action")
+    jid = f"{username}@{settings.XMPP_DOMAIN}"
+    await _prosody_request({"action": f"{action}_user", "username": username})
+    account = await db.scalar(select(Account).where(Account.jid == jid))
+    if account:
+        account.is_enabled = action == "enable"
         await db.commit()
-        if not mark_account_disabled(account_id):
-            raise HTTPException(503, "Account disabled; session fence unavailable")
-        await write_audit(db, actor=actor, action="account_disabled", target_type="account",
-                          target_id=account_id, detail={"jid": account.jid}, client_ip=get_client_ip(request))
+        fence_ok = clear_account_disabled(account.id) if action == "enable" else mark_account_disabled(account.id)
+        if not fence_ok:
+            raise HTTPException(503, "Prosody updated; session fence unavailable")
+    await write_audit(db, actor=actor, action=f"prosody_user_{action}", target_type="account",
+                      target_id=jid, client_ip=get_client_ip(request))
     return {"ok": True}
 
 
-@router.post("/accounts/{account_id}/enable")
-async def admin_enable_account(
-    account_id: str, request: Request, actor: str = Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db),
+@router.post("/users/{username}/password")
+async def admin_reset_user_password(
+    username: str, data: AdminPasswordReset, request: Request,
+    actor: str = Depends(get_current_admin), db: AsyncSession = Depends(get_db),
 ):
-    account = await db.get(Account, account_id)
-    if not account:
-        raise HTTPException(404, "Account not found")
-    if not clear_account_disabled(account_id):
-        raise HTTPException(503, "Session fence unavailable")
-    if not account.is_enabled:
-        account.is_enabled = True
-        await db.commit()
-        await write_audit(db, actor=actor, action="account_enabled", target_type="account",
-                          target_id=account_id, detail={"jid": account.jid}, client_ip=get_client_ip(request))
+    username = _validated_username(username)
+    await _prosody_request({"action": "change_password", "username": username, "password": data.password})
+    await write_audit(db, actor=actor, action="prosody_password_reset", target_type="account",
+                      target_id=f"{username}@{settings.XMPP_DOMAIN}", client_ip=get_client_ip(request))
     return {"ok": True}
 
 
 @router.get("/groups")
 async def admin_groups(db: AsyncSession = Depends(get_db)):
     """List rooms from Prosody's persistent MUC storage, with app linkage counts."""
-    def list_prosody_rooms() -> list[str]:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
-            connection.settimeout(5)
-            connection.connect("/run/lyaotalk-prosody.sock")
-            connection.sendall((json.dumps({"action": "list_rooms", "domain": settings.XMPP_DOMAIN}) + "\n").encode())
-            response = b""
-            while b"\n" not in response and len(response) < 65536:
-                chunk = connection.recv(4096)
-                if not chunk:
-                    break
-                response += chunk
-        data = json.loads(response.split(b"\n", 1)[0])
-        if data.get("returncode") != 0:
-            raise ValueError("Prosody room list unavailable")
-        return data["rooms"]
-
-    try:
-        room_jids = await asyncio.to_thread(list_prosody_rooms)
-    except (OSError, ValueError, KeyError, json.JSONDecodeError):
-        raise HTTPException(503, "Prosody room list unavailable")
+    room_jids = (await _prosody_request({"action": "list_rooms"}))["rooms"]
     result = await db.execute(
         select(Conversation.peer_jid, func.count(func.distinct(Conversation.account_id)).label("accounts"))
         .where(Conversation.type == "group")
@@ -107,6 +156,19 @@ async def admin_groups(db: AsyncSession = Depends(get_db)):
     return [{"jid": jid, "account_count": counts.get(jid, 0)} for jid in room_jids]
 
 
+@router.post("/groups/{room}/destroy")
+async def admin_destroy_group(
+    room: str, request: Request, actor: str = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    room = _validated_username(room)
+    jid = f"{room}@conference.{settings.XMPP_DOMAIN}"
+    await _prosody_request({"action": "destroy_room", "room": room})
+    await write_audit(db, actor=actor, action="prosody_room_destroyed", target_type="group",
+                      target_id=jid, client_ip=get_client_ip(request))
+    return {"ok": True}
+
+
 @router.get("/push-status")
 async def admin_push_status(db: AsyncSession = Depends(get_db)):
     web_push = await db.scalar(select(func.count()).select_from(PushSubscription)) or 0
@@ -114,6 +176,50 @@ async def admin_push_status(db: AsyncSession = Depends(get_db)):
     return {"web_push_subscriptions": web_push, "ntfy_subscriptions": ntfy,
             "ntfy_configured": bool(settings.NTFY_INTERNAL_URL and settings.NTFY_PUBLISH_TOKEN),
             "web_push_configured": bool(settings.VAPID_PRIVATE_KEY and settings.VAPID_PUBLIC_KEY)}
+
+
+@router.get("/configuration")
+async def admin_configuration():
+    """Expose operational settings without returning credentials or tokens."""
+    return {"xmpp_domain": settings.XMPP_DOMAIN,
+            "public_domain": settings.PUBLIC_DOMAIN,
+            "registration_enabled": settings.XMPP_REGISTRATION_ENABLED,
+            "ntfy_public_url": settings.NTFY_PUBLIC_URL,
+            "minio_bucket": settings.MINIO_BUCKET,
+            "oidc_enabled": settings.OIDC_ENABLED,
+            "ldap_enabled": settings.LDAP_ENABLED}
+
+
+@router.get("/push-subscriptions")
+async def admin_push_subscriptions(db: AsyncSession = Depends(get_db)):
+    web_rows = (await db.execute(select(PushSubscription, Account.jid).join(
+        Account, Account.id == PushSubscription.account_id))).all()
+    ntfy_rows = (await db.execute(select(NtfySubscription, Account.jid).join(
+        Account, Account.id == NtfySubscription.account_id))).all()
+    return sorted(
+        [{"account_id": row.account_id, "jid": jid, "channel": "web_push",
+          "created_at": str(row.created_at) if row.created_at else None} for row, jid in web_rows] +
+        [{"account_id": row.account_id, "jid": jid, "channel": "ntfy",
+          "created_at": str(row.created_at) if row.created_at else None} for row, jid in ntfy_rows],
+        key=lambda item: (item["jid"], item["channel"]),
+    )
+
+
+@router.delete("/push-subscriptions/{account_id}/{channel}")
+async def admin_revoke_push_subscription(
+    account_id: str, channel: str, request: Request,
+    actor: str = Depends(get_current_admin), db: AsyncSession = Depends(get_db),
+):
+    if channel == "web_push":
+        await db.execute(delete(PushSubscription).where(PushSubscription.account_id == account_id))
+    elif channel == "ntfy":
+        await db.execute(delete(NtfySubscription).where(NtfySubscription.account_id == account_id))
+    else:
+        raise HTTPException(404, "Unknown push channel")
+    await db.commit()
+    await write_audit(db, actor=actor, action="push_subscription_revoked", target_type="account",
+                      target_id=account_id, detail={"channel": channel}, client_ip=get_client_ip(request))
+    return {"ok": True}
 
 
 @router.get(

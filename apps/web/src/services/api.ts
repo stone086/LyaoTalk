@@ -487,10 +487,19 @@ export const adminApi = {
   login: (username: string, password: string) =>
     api.post("/auth/admin/login", { username, password }).then((r) => r.data),
   accounts: (query = "") => api.get("/admin/accounts", { params: { query } }).then((r) => r.data),
-  setAccountEnabled: (id: string, enabled: boolean) =>
-    api.post(`/admin/accounts/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`).then((r) => r.data),
+  createUser: (username: string, password: string) =>
+    api.post("/admin/users", { username, password }).then((r) => r.data),
+  manageUser: (username: string, action: "enable" | "disable" | "delete") =>
+    api.post(`/admin/user-actions/${action}/${encodeURIComponent(username)}`).then((r) => r.data),
+  resetUserPassword: (username: string, password: string) =>
+    api.post(`/admin/users/${encodeURIComponent(username)}/password`, { password }).then((r) => r.data),
   groups: () => api.get("/admin/groups").then((r) => r.data),
+  destroyGroup: (room: string) => api.post(`/admin/groups/${encodeURIComponent(room)}/destroy`).then((r) => r.data),
   pushStatus: () => api.get("/admin/push-status").then((r) => r.data),
+  pushSubscriptions: () => api.get("/admin/push-subscriptions").then((r) => r.data),
+  revokePushSubscription: (accountId: string, channel: "web_push" | "ntfy") =>
+    api.delete(`/admin/push-subscriptions/${encodeURIComponent(accountId)}/${channel}`).then((r) => r.data),
+  configuration: () => api.get("/admin/configuration").then((r) => r.data),
   activity: () => api.get("/admin/dashboard/activity").then((r) => r.data),
   storageUsage: () => api.get("/admin/dashboard/storage-usage").then((r) => r.data),
   userStats: () => api.get("/admin/dashboard/user-stats").then((r) => r.data),

@@ -14,6 +14,16 @@ DOMAIN = os.environ.get("LYAOTALK_XMPP_DOMAIN", "")
 DATA_ROOT = os.environ.get("LYAOTALK_PROSODY_DATA_ROOT", "/var/lib/prosody")
 
 
+def _shell(*args: str) -> dict:
+    result = subprocess.run(
+        ["/usr/bin/prosodyctl", "shell", *args],
+        capture_output=True, text=True, timeout=15, check=False,
+    )
+    ok = result.returncode == 0 and "Error:" not in result.stdout and "console:" not in result.stdout
+    return {"returncode": 0 if ok else 1, "stdout": result.stdout[:16384],
+            "stderr": result.stderr[:2048]}
+
+
 def _encoded_name(value: str) -> str:
     """Match Prosody internal storage's lowercase percent-encoded path names."""
     return "".join(chr(byte) if 0x30 <= byte <= 0x39 or 0x61 <= byte <= 0x7a else f"%{byte:02x}" for byte in value.lower().encode("utf-8"))
@@ -53,6 +63,22 @@ def handle(conn: socket.socket) -> None:
                 if entry.name.endswith(".dat") and entry.is_file(follow_symlinks=False):
                     rooms.append(f"{unquote(entry.name[:-4])}@conference.{domain}")
             response = {"returncode": 0, "rooms": sorted(rooms)[:500]}
+        elif action == "list_users":
+            result = _shell("user", "list", domain)
+            if result["returncode"]:
+                response = result
+            else:
+                users = [line.strip() for line in result["stdout"].splitlines()
+                         if line.strip().endswith(f"@{domain}")]
+                response = {"returncode": 0, "users": users[:1000]}
+        elif action == "destroy_room":
+            room = request["room"]
+            if not isinstance(room, str) or not re.fullmatch(r"[\w.-]{1,64}", room):
+                raise ValueError("invalid room")
+            jid = f"{room}@conference.{domain}"
+            result = _shell(f"muc:room({json.dumps(jid, ensure_ascii=False)}):destroy()")
+            response = {"returncode": 0 if result["returncode"] == 0 and "Result: true" in result["stdout"] else 1,
+                        "stderr": "room destruction failed" if result["returncode"] else ""}
         else:
             username = request["username"]
             if not isinstance(username, str) or (not re.fullmatch(r"[\w.-]{1,64}", username) or len(username.encode("utf-8")) > 64):
@@ -77,6 +103,11 @@ def handle(conn: socket.socket) -> None:
                     input=f"{password}\n{password}\n", capture_output=True, text=True, timeout=15, check=False,
                 )
                 response = {"returncode": result.returncode, "stderr": "password update failed" if result.returncode else ""}
+            elif action in ("disable_user", "enable_user", "delete_user"):
+                command = {"disable_user": "disable", "enable_user": "enable", "delete_user": "delete"}[action]
+                result = _shell("user", command, f"{username}@{domain}")
+                response = {"returncode": 0 if result["returncode"] == 0 and "OK:" in result["stdout"] else 1,
+                            "stderr": "user action failed" if result["returncode"] else ""}
             else:
                 raise ValueError("invalid action")
     except FileNotFoundError:
